@@ -23,7 +23,15 @@
           "rust-src"
         ];
         craneLib = (crane.mkLib pkgs).overrideToolchain toolchain;
-        src = craneLib.cleanCargoSource ./.;
+        bootstrapPolicyFilter = path: _type:
+          builtins.baseNameOf path == "bootstrap-policy.nota";
+        sourceFilter = path: type:
+          (craneLib.filterCargoSources path type) || (bootstrapPolicyFilter path type);
+        src = pkgs.lib.cleanSourceWith {
+          src = ./.;
+          filter = sourceFilter;
+          name = "source";
+        };
         cargoVendorDirectory = craneLib.vendorCargoDeps { inherit src; };
         commonArguments = {
           inherit src cargoVendorDirectory;

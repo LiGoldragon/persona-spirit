@@ -51,6 +51,7 @@ daemon path keeps the same tree alive behind two typed Unix sockets:
 flowchart LR
     root["SpiritRoot"]
     owner["OwnerPlane"]
+    policy["PolicyPlane"]
     ingress["IngressPhase"]
     decoder["NotaDecoder"]
     dispatch["DispatchPhase"]
@@ -63,6 +64,7 @@ flowchart LR
     reader["SemaReader trace"]
 
     root --> owner
+    owner --> policy
     root --> ingress
     ingress --> decoder
     ingress --> dispatch
@@ -75,12 +77,13 @@ flowchart LR
     root --> encoder
 ```
 
-`OwnerPlane` handles the owner-only lifecycle and identity requests carried by
+`OwnerPlane` handles owner-only lifecycle and identity requests carried by
 `owner-signal-persona-spirit`; it is not reachable through the ordinary text
-ingress or dispatch path. `RecordStore` owns `SpiritStore`, which owns the
-sema-engine handle. It runs as the store plane. `StatePlane` owns current
-psyche state and pending clarification questions. `SubscriptionPlane` owns
-subscription tokens and live stream registrations. Request decoding, dispatch,
+ingress or dispatch path. `PolicyPlane` owns bootstrap-policy parsing and
+reload state. `RecordStore` owns `SpiritStore`, which owns the sema-engine
+handle. It runs as the store plane. `StatePlane` owns current psyche state and
+pending clarification questions. `SubscriptionPlane` owns subscription tokens
+and live stream registrations. Request decoding, dispatch,
 unimplemented-reply shaping, and NOTA reply rendering are separate actor
 planes. `ActorTrace` is a runtime witness, not an audit log: tests assert the
 expected actor path for each constraint.
@@ -122,7 +125,7 @@ socket.
 | Shutdown releases the store so a later runtime can reopen the same path. | `persona_spirit_shutdown_releases_store_for_restart` writes, stops, restarts, and reads. |
 | Owner lifecycle requests route through `OwnerPlane`, not the ordinary dispatch path. | `persona_spirit_owner_lifecycle_orders_use_owner_plane` checks `Started` / `DrainedAndStopped` replies and no dispatch/store trace. |
 | Owner identity requests route through `OwnerPlane`. | `persona_spirit_owner_identity_orders_use_owner_plane` checks register/retire replies. |
-| Bootstrap-policy reload remains honestly unimplemented until import policy lands. | `persona_spirit_bootstrap_policy_reload_is_honestly_unimplemented` returns owner `RequestUnimplemented`. |
+| Bootstrap-policy reload uses the policy plane. | `persona_spirit_bootstrap_policy_reload_uses_policy_plane` returns `BootstrapPolicyReloaded` and checks the `OwnerPlane` → `PolicyPlane` route. |
 | The daemon configuration is a single untagged NOTA struct record. | `persona_spirit_daemon_configuration_is_one_nota_record` round-trips the config and rejects a variant wrapper shape. |
 | The daemon serves ordinary length-prefixed Signal frames through the actor root. | `persona_spirit_daemon_serves_signal_frames_through_actor_root` writes and reads through the ordinary Unix socket. |
 | The daemon serves owner length-prefixed Signal frames through `OwnerPlane`. | `persona_spirit_daemon_serves_owner_signal_frames_through_owner_plane` writes and reads through the owner Unix socket. |
@@ -146,6 +149,7 @@ src/store.rs                       — sema-engine backed entry store and record
 src/actors/root.rs                 — Kameo root and blocking one-shot runtime helper
 src/actors/ingress.rs              — text ingress phase
 src/actors/owner.rs                — owner-signal lifecycle and identity actor
+src/actors/policy.rs               — bootstrap-policy parsing and reload actor
 src/actors/decoder.rs              — strict NOTA request decoder actor
 src/actors/dispatch.rs             — request dispatch actor
 src/actors/state.rs                — psyche-state and pending-question working-state actor
@@ -156,7 +160,7 @@ src/actors/trace.rs                — actor-path witness values
 src/actors/pipeline.rs             — typed in-process pipeline carriers
 src/bin/persona-spirit.rs          — thin CLI binary
 src/bin/persona-spirit-daemon.rs   — daemon binary
-bootstrap-policy.nota              — first policy seed placeholder
+bootstrap-policy.nota              — first policy seed
 tests/boundary.rs                  — argument-boundary witnesses
 tests/actor_runtime.rs             — actor-path and architectural-truth witnesses
 tests/daemon.rs                    — socket, signal-frame, and daemon-boundary witnesses
@@ -188,7 +192,8 @@ Implemented now:
 - state and record subscription retractions with typed close acknowledgements;
 - owner-signal start, drain/stop, register identity, and retire identity
   handling inside the actor tree;
-- honest owner-signal unimplemented reply for bootstrap-policy reload;
+- bootstrap-policy parsing and owner-signal reload acknowledgement through
+  `PolicyPlane`;
 - typed `RequestUnimplemented` NOTA replies for behavior not built yet;
 - dependency on the ordinary and owner spirit contracts.
 
@@ -197,9 +202,8 @@ Not implemented:
 - intent classifier;
 - owner-Mutate forwarding to mind;
 - subscription event delivery;
-- bootstrap-policy import;
 - filesystem intent projection.
 
-The next implementation step is bootstrap-policy import, subscription event
-delivery, or spirit-to-mind owner-Mutate forwarding. Spirit-to-mind owner
-variants are not needed for the current raw CLI/storage/socket slice.
+The next implementation step is subscription event delivery or spirit-to-mind
+owner-Mutate forwarding. Spirit-to-mind owner variants are not needed for the
+current raw CLI/storage/socket slice.

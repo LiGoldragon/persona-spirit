@@ -9,6 +9,7 @@ use super::dispatch;
 use super::ingress;
 use super::owner;
 use super::pipeline::PipelineReply;
+use super::policy;
 use super::reply::{self, TextReply};
 use super::state;
 use super::store;
@@ -307,9 +308,18 @@ impl Actor for SpiritRoot {
         )
         .spawn_in_thread()
         .await;
-        let owner = owner::OwnerPlane::supervise(&actor_reference, owner::Arguments::default())
+        let policy = policy::PolicyPlane::supervise(&actor_reference, policy::Arguments::default())
             .spawn()
             .await;
+        let owner = owner::OwnerPlane::supervise(
+            &actor_reference,
+            owner::Arguments {
+                lifecycle: owner::LifecycleState::default(),
+                policy,
+            },
+        )
+        .spawn()
+        .await;
         let shaper =
             reply::ReplyShaper::supervise(&actor_reference, reply::ShaperArguments::default())
                 .spawn()

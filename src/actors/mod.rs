@@ -3,6 +3,7 @@ pub mod dispatch;
 pub mod ingress;
 pub mod owner;
 pub mod pipeline;
+pub mod policy;
 pub mod reply;
 pub mod root;
 pub mod state;

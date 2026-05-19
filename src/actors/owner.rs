@@ -1,16 +1,19 @@
 use kameo::actor::{Actor, ActorRef};
+use kameo::error::{Infallible, SendError};
 use kameo::message::{Context, Message};
 use owner_signal_persona_spirit::{
     DrainAndStopOrder, DrainedAndStopped, Generation, IdentityName, IdentityRegistered,
     IdentityRetired, OperationKind, OwnerSpiritReply, OwnerSpiritRequest, RegisterIdentity,
-    ReloadBootstrapPolicyOrder, RequestUnimplemented, RetireIdentity, Started, UnimplementedReason,
+    RequestUnimplemented, RetireIdentity, Started, UnimplementedReason,
 };
 
+use super::policy;
 use super::trace::{ActorTrace, TraceAction, TraceNode};
 
 pub struct OwnerPlane {
     lifecycle: LifecycleState,
     identities: Vec<IdentityName>,
+    policy: ActorRef<policy::PolicyPlane>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -18,9 +21,10 @@ pub struct LifecycleState {
     generation: Option<Generation>,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Arguments {
     pub lifecycle: LifecycleState,
+    pub policy: ActorRef<policy::PolicyPlane>,
 }
 
 pub struct RouteOwnerRequest {
@@ -35,19 +39,26 @@ pub struct OwnerPipelineReply {
 }
 
 impl OwnerPlane {
-    fn new(lifecycle: LifecycleState) -> Self {
+    fn new(lifecycle: LifecycleState, policy: ActorRef<policy::PolicyPlane>) -> Self {
         Self {
             lifecycle,
             identities: Vec::new(),
+            policy,
         }
     }
 
-    fn route(&mut self, request: OwnerSpiritRequest, mut trace: ActorTrace) -> OwnerPipelineReply {
+    async fn route(
+        &mut self,
+        request: OwnerSpiritRequest,
+        mut trace: ActorTrace,
+    ) -> OwnerPipelineReply {
         trace.record(TraceNode::OWNER_PLANE, TraceAction::MessageReceived);
         let reply = match request {
             OwnerSpiritRequest::StartOrder(order) => self.start(order.generation),
             OwnerSpiritRequest::DrainAndStopOrder(order) => self.drain_and_stop(order),
-            OwnerSpiritRequest::ReloadBootstrapPolicyOrder(order) => self.reload_policy(order),
+            OwnerSpiritRequest::ReloadBootstrapPolicyOrder(_order) => {
+                return self.reload_policy(trace).await;
+            }
             OwnerSpiritRequest::RegisterIdentity(order) => self.register_identity(order),
             OwnerSpiritRequest::RetireIdentity(order) => self.retire_identity(order),
         };
@@ -65,11 +76,23 @@ impl OwnerPlane {
         OwnerSpiritReply::DrainedAndStopped(DrainedAndStopped {})
     }
 
-    fn reload_policy(&self, _order: ReloadBootstrapPolicyOrder) -> OwnerSpiritReply {
-        OwnerSpiritReply::RequestUnimplemented(RequestUnimplemented {
-            operation: OperationKind::ReloadBootstrapPolicyOrder,
-            reason: UnimplementedReason::NotBuiltYet,
-        })
+    async fn reload_policy(&self, trace: ActorTrace) -> OwnerPipelineReply {
+        match self
+            .policy
+            .ask(policy::ReloadBootstrapPolicy { trace })
+            .await
+        {
+            Ok(mut policy) => {
+                policy
+                    .trace
+                    .record(TraceNode::OWNER_PLANE, TraceAction::MessageReplied);
+                OwnerPipelineReply {
+                    reply: policy.reply,
+                    trace: policy.trace,
+                }
+            }
+            Err(error) => Self::policy_send_error(error),
+        }
     }
 
     fn register_identity(&mut self, order: RegisterIdentity) -> OwnerSpiritReply {
@@ -87,13 +110,13 @@ impl OwnerPlane {
 
 impl Actor for OwnerPlane {
     type Args = Arguments;
-    type Error = std::convert::Infallible;
+    type Error = Infallible;
 
     async fn on_start(
         arguments: Self::Args,
         _actor_reference: ActorRef<Self>,
     ) -> std::result::Result<Self, Self::Error> {
-        Ok(Self::new(arguments.lifecycle))
+        Ok(Self::new(arguments.lifecycle, arguments.policy))
     }
 }
 
@@ -105,6 +128,20 @@ impl Message<RouteOwnerRequest> for OwnerPlane {
         message: RouteOwnerRequest,
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        self.route(message.request, message.trace)
+        self.route(message.request, message.trace).await
+    }
+}
+
+impl OwnerPlane {
+    fn policy_send_error<Message>(_error: SendError<Message, Infallible>) -> OwnerPipelineReply {
+        let mut trace = ActorTrace::new();
+        trace.record(TraceNode::OWNER_PLANE, TraceAction::MessageReplied);
+        OwnerPipelineReply {
+            reply: OwnerSpiritReply::RequestUnimplemented(RequestUnimplemented {
+                operation: OperationKind::ReloadBootstrapPolicyOrder,
+                reason: UnimplementedReason::DependencyNotReady,
+            }),
+            trace,
+        }
     }
 }

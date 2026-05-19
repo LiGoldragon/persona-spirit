@@ -1,10 +1,9 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use owner_signal_persona_spirit::{
-    DrainAndStopOrder, DrainedAndStopped, Generation, IdentityName, IdentityRegistered,
-    IdentityRetired, OperationKind, OwnerSpiritReply, OwnerSpiritRequest, RegisterIdentity,
-    ReloadBootstrapPolicyOrder, RequestUnimplemented, RetireIdentity, StartOrder, Started,
-    UnimplementedReason,
+    BootstrapPolicyReloaded, DrainAndStopOrder, DrainedAndStopped, Generation, IdentityName,
+    IdentityRegistered, IdentityRetired, OwnerSpiritReply, OwnerSpiritRequest, RegisterIdentity,
+    ReloadBootstrapPolicyOrder, RetireIdentity, StartOrder, Started,
 };
 use persona_spirit::{Error, SpiritActorRuntime, StoreLocation, TraceAction, TraceNode};
 
@@ -299,7 +298,7 @@ async fn persona_spirit_owner_identity_orders_use_owner_plane() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn persona_spirit_bootstrap_policy_reload_is_honestly_unimplemented() {
+async fn persona_spirit_bootstrap_policy_reload_uses_policy_plane() {
     let fixture = SpiritRuntimeFixture::new("owner-policy");
     let runtime = fixture.runtime().await;
 
@@ -312,12 +311,13 @@ async fn persona_spirit_bootstrap_policy_reload_is_honestly_unimplemented() {
 
     assert_eq!(
         reply.reply(),
-        &OwnerSpiritReply::RequestUnimplemented(RequestUnimplemented {
-            operation: OperationKind::ReloadBootstrapPolicyOrder,
-            reason: UnimplementedReason::NotBuiltYet,
-        })
+        &OwnerSpiritReply::BootstrapPolicyReloaded(BootstrapPolicyReloaded {})
     );
-    assert!(reply.trace().contains(TraceNode::OWNER_PLANE));
+    assert!(reply.trace().contains_ordered(&[
+        TraceNode::OWNER_PLANE,
+        TraceNode::POLICY_PLANE,
+        TraceNode::OWNER_PLANE,
+    ]));
     assert!(!reply.trace().contains(TraceNode::DISPATCH_PHASE));
 
     runtime.stop().await.expect("runtime stops");
@@ -409,6 +409,7 @@ fn persona_spirit_actor_types_are_data_bearing() {
         ("src/actors/dispatch.rs", "pub struct DispatchPhase {"),
         ("src/actors/ingress.rs", "pub struct IngressPhase {"),
         ("src/actors/owner.rs", "pub struct OwnerPlane {"),
+        ("src/actors/policy.rs", "pub struct PolicyPlane {"),
         ("src/actors/reply.rs", "pub struct ReplyShaper {"),
         ("src/actors/reply.rs", "pub struct ReplyTextEncoder {"),
         ("src/actors/root.rs", "pub struct SpiritRoot {"),
