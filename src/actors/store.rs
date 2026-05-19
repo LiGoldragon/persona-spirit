@@ -1,6 +1,8 @@
 use kameo::actor::{Actor, ActorRef};
 use kameo::message::{Context, Message};
-use signal_persona_spirit::{Entry, RecordObservation, SpiritReply};
+use signal_persona_spirit::{
+    Entry, RecordObservation, RecordSubscription, RecordSummary, SpiritReply,
+};
 
 use crate::{Result, SpiritStore, StoreLocation};
 
@@ -23,6 +25,17 @@ pub struct CaptureEntry {
 
 pub struct ObserveRecords {
     pub observation: RecordObservation,
+    pub trace: ActorTrace,
+}
+
+pub struct ReadRecordSnapshot {
+    pub subscription: RecordSubscription,
+    pub trace: ActorTrace,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, kameo::Reply)]
+pub struct RecordSnapshot {
+    pub records: Vec<RecordSummary>,
     pub trace: ActorTrace,
 }
 
@@ -54,6 +67,21 @@ impl RecordStore {
         trace.record(TraceNode::SEMA_READER, TraceAction::RecordsRead);
         trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReplied);
         Ok(PipelineReply::new(reply, trace))
+    }
+
+    fn read_record_snapshot(
+        &self,
+        subscription: RecordSubscription,
+        mut trace: ActorTrace,
+    ) -> Result<RecordSnapshot> {
+        trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReceived);
+        trace.record(TraceNode::SEMA_READER, TraceAction::MessageReceived);
+        let records = self
+            .store
+            .summaries_for_topic(subscription.topic.as_ref())?;
+        trace.record(TraceNode::SEMA_READER, TraceAction::RecordsRead);
+        trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReplied);
+        Ok(RecordSnapshot { records, trace })
     }
 }
 
@@ -87,5 +115,17 @@ impl Message<ObserveRecords> for RecordStore {
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.observe_records(message.observation, message.trace)
+    }
+}
+
+impl Message<ReadRecordSnapshot> for RecordStore {
+    type Reply = Result<RecordSnapshot>;
+
+    async fn handle(
+        &mut self,
+        message: ReadRecordSnapshot,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.read_record_snapshot(message.subscription, message.trace)
     }
 }

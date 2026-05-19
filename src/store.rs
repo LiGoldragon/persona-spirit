@@ -93,6 +93,14 @@ impl SpiritStore {
         }
     }
 
+    pub fn summaries_for_topic(&self, topic: Option<&Topic>) -> Result<Vec<RecordSummary>> {
+        Ok(self
+            .records_for_topic(topic)?
+            .iter()
+            .map(StoredRecord::summary)
+            .collect())
+    }
+
     fn next_identifier(&self) -> Result<RecordIdentifier> {
         Ok(RecordIdentifierMint::from_records(&self.all_records()?).next_identifier())
     }

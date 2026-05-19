@@ -30,6 +30,16 @@ pub struct ObserveQuestions {
     pub trace: ActorTrace,
 }
 
+pub struct ReadStateSnapshot {
+    pub trace: ActorTrace,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, kameo::Reply)]
+pub struct StateSnapshot {
+    pub state: State,
+    pub trace: ActorTrace,
+}
+
 impl Default for WorkingState {
     fn default() -> Self {
         Self {
@@ -70,6 +80,15 @@ impl StatePlane {
             trace,
         )
     }
+
+    fn read_state_snapshot(&self, mut trace: ActorTrace) -> StateSnapshot {
+        trace.record(TraceNode::STATE_PLANE, TraceAction::MessageReceived);
+        trace.record(TraceNode::STATE_PLANE, TraceAction::RecordsRead);
+        StateSnapshot {
+            state: self.working.state.clone(),
+            trace,
+        }
+    }
 }
 
 impl Actor for StatePlane {
@@ -105,5 +124,17 @@ impl Message<ObserveQuestions> for StatePlane {
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.observe_questions(message.trace)
+    }
+}
+
+impl Message<ReadStateSnapshot> for StatePlane {
+    type Reply = StateSnapshot;
+
+    async fn handle(
+        &mut self,
+        message: ReadStateSnapshot,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.read_state_snapshot(message.trace)
     }
 }

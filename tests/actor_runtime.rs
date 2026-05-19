@@ -124,6 +124,102 @@ async fn persona_spirit_question_observation_uses_state_plane() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn persona_spirit_state_subscription_uses_subscription_plane_after_state_snapshot() {
+    let fixture = SpiritRuntimeFixture::new("state-subscription");
+    let runtime = fixture.runtime().await;
+
+    let reply = runtime
+        .submit_text("(SubscribeState ())")
+        .await
+        .expect("state subscription opened");
+
+    assert_eq!(
+        reply.text(),
+        "(StateSubscriptionOpened ((1) (Absent None)))"
+    );
+    assert!(reply.trace().contains_ordered(&[
+        TraceNode::STATE_PLANE,
+        TraceNode::SUBSCRIPTION_PLANE,
+        TraceNode::REPLY_TEXT_ENCODER,
+    ]));
+    assert!(reply.trace().contains_action(
+        TraceNode::SUBSCRIPTION_PLANE,
+        TraceAction::SubscriptionOpened
+    ));
+    assert!(!reply.trace().contains(TraceNode::RECORD_STORE));
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn persona_spirit_record_subscription_uses_read_plane_then_subscription_plane() {
+    let fixture = SpiritRuntimeFixture::new("record-subscription");
+    let runtime = fixture.runtime().await;
+
+    runtime
+        .submit_text("(Entry (workspace Decision \"subscription path\" \"context\" Maximum \"2026-05-19T18:13:52Z\" \"quote\"))")
+        .await
+        .expect("entry accepted");
+    let reply = runtime
+        .submit_text("(SubscribeRecords (None SummaryOnly))")
+        .await
+        .expect("record subscription opened");
+
+    assert_eq!(
+        reply.text(),
+        "(RecordSubscriptionOpened ((1) [(1 workspace Decision \"subscription path\" Maximum)]))"
+    );
+    assert!(reply.trace().contains_ordered(&[
+        TraceNode::RECORD_STORE,
+        TraceNode::SEMA_READER,
+        TraceNode::SUBSCRIPTION_PLANE,
+        TraceNode::REPLY_TEXT_ENCODER,
+    ]));
+    assert!(reply.trace().contains_action(
+        TraceNode::SUBSCRIPTION_PLANE,
+        TraceAction::SubscriptionOpened
+    ));
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn persona_spirit_subscription_retractions_use_subscription_plane() {
+    let fixture = SpiritRuntimeFixture::new("subscription-retract");
+    let runtime = fixture.runtime().await;
+
+    runtime
+        .submit_text("(SubscribeState ())")
+        .await
+        .expect("state subscription opened");
+    runtime
+        .submit_text("(SubscribeRecords (None SummaryOnly))")
+        .await
+        .expect("record subscription opened");
+    let state_reply = runtime
+        .submit_text("(StateSubscriptionRetraction (1))")
+        .await
+        .expect("state subscription retracted");
+    let record_reply = runtime
+        .submit_text("(RecordSubscriptionRetraction (1))")
+        .await
+        .expect("record subscription retracted");
+
+    assert_eq!(state_reply.text(), "(StateSubscriptionRetracted ((1)))");
+    assert_eq!(record_reply.text(), "(RecordSubscriptionRetracted ((1)))");
+    assert!(state_reply.trace().contains_action(
+        TraceNode::SUBSCRIPTION_PLANE,
+        TraceAction::SubscriptionRetracted
+    ));
+    assert!(record_reply.trace().contains_action(
+        TraceNode::SUBSCRIPTION_PLANE,
+        TraceAction::SubscriptionRetracted
+    ));
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn persona_spirit_unimplemented_statement_uses_reply_shaper_not_store() {
     let fixture = SpiritRuntimeFixture::new("reply-shaper");
     let runtime = fixture.runtime().await;
@@ -213,6 +309,10 @@ fn persona_spirit_actor_types_are_data_bearing() {
         ("src/actors/root.rs", "pub struct SpiritRoot {"),
         ("src/actors/state.rs", "pub struct StatePlane {"),
         ("src/actors/store.rs", "pub struct RecordStore {"),
+        (
+            "src/actors/subscription.rs",
+            "pub struct SubscriptionPlane {",
+        ),
     ];
 
     for (file, actor_declaration) in actors {

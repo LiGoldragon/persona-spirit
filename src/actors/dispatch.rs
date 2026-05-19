@@ -9,11 +9,13 @@ use super::pipeline::PipelineReply;
 use super::reply;
 use super::state;
 use super::store;
+use super::subscription;
 use super::trace::{ActorTrace, TraceAction, TraceNode};
 
 pub struct DispatchPhase {
     store: ActorRef<store::RecordStore>,
     state: ActorRef<state::StatePlane>,
+    subscription: ActorRef<subscription::SubscriptionPlane>,
     reply: ActorRef<reply::ReplyShaper>,
 }
 
@@ -21,6 +23,7 @@ pub struct DispatchPhase {
 pub struct Arguments {
     pub store: ActorRef<store::RecordStore>,
     pub state: ActorRef<state::StatePlane>,
+    pub subscription: ActorRef<subscription::SubscriptionPlane>,
     pub reply: ActorRef<reply::ReplyShaper>,
 }
 
@@ -33,11 +36,13 @@ impl DispatchPhase {
     fn new(
         store: ActorRef<store::RecordStore>,
         state: ActorRef<state::StatePlane>,
+        subscription: ActorRef<subscription::SubscriptionPlane>,
         reply: ActorRef<reply::ReplyShaper>,
     ) -> Self {
         Self {
             store,
             state,
+            subscription,
             reply,
         }
     }
@@ -51,6 +56,16 @@ impl DispatchPhase {
             }
             SpiritRequest::StateObservation(_observation) => self.observe_state(trace).await,
             SpiritRequest::QuestionPending(_pending) => self.observe_questions(trace).await,
+            SpiritRequest::SubscribeState(_subscription) => self.subscribe_state(trace).await,
+            SpiritRequest::SubscribeRecords(subscription) => {
+                self.subscribe_records(subscription, trace).await
+            }
+            SpiritRequest::StateSubscriptionRetraction(token) => {
+                self.retract_state_subscription(token, trace).await
+            }
+            SpiritRequest::RecordSubscriptionRetraction(token) => {
+                self.retract_record_subscription(token, trace).await
+            }
             other => self
                 .reply
                 .ask(reply::ShapeUnimplemented {
@@ -98,6 +113,66 @@ impl DispatchPhase {
             .map_err(Self::state_send_error)
     }
 
+    async fn subscribe_state(&self, trace: ActorTrace) -> Result<PipelineReply> {
+        let snapshot = self
+            .state
+            .ask(state::ReadStateSnapshot { trace })
+            .await
+            .map_err(Self::state_send_error)?;
+        self.subscription
+            .ask(subscription::OpenStateSubscription {
+                snapshot: snapshot.state,
+                trace: snapshot.trace,
+            })
+            .await
+            .map_err(Self::subscription_send_error)
+    }
+
+    async fn subscribe_records(
+        &self,
+        subscription: signal_persona_spirit::RecordSubscription,
+        trace: ActorTrace,
+    ) -> Result<PipelineReply> {
+        let snapshot = self
+            .store
+            .ask(store::ReadRecordSnapshot {
+                subscription: subscription.clone(),
+                trace,
+            })
+            .await
+            .map_err(Self::pipeline_send_error)?;
+        self.subscription
+            .ask(subscription::OpenRecordSubscription {
+                subscription,
+                snapshot: snapshot.records,
+                trace: snapshot.trace,
+            })
+            .await
+            .map_err(Self::subscription_send_error)
+    }
+
+    async fn retract_state_subscription(
+        &self,
+        token: signal_persona_spirit::StateSubscriptionToken,
+        trace: ActorTrace,
+    ) -> Result<PipelineReply> {
+        self.subscription
+            .ask(subscription::RetractStateSubscription { token, trace })
+            .await
+            .map_err(Self::subscription_send_error)
+    }
+
+    async fn retract_record_subscription(
+        &self,
+        token: signal_persona_spirit::RecordSubscriptionToken,
+        trace: ActorTrace,
+    ) -> Result<PipelineReply> {
+        self.subscription
+            .ask(subscription::RetractRecordSubscription { token, trace })
+            .await
+            .map_err(Self::subscription_send_error)
+    }
+
     fn pipeline_send_error<Message>(error: SendError<Message, Error>) -> Error {
         match error {
             SendError::HandlerError(error) => error,
@@ -106,6 +181,10 @@ impl DispatchPhase {
     }
 
     fn state_send_error<Message>(error: SendError<Message, Infallible>) -> Error {
+        Error::actor_runtime(error.to_string())
+    }
+
+    fn subscription_send_error<Message>(error: SendError<Message, Infallible>) -> Error {
         Error::actor_runtime(error.to_string())
     }
 }
@@ -118,7 +197,12 @@ impl Actor for DispatchPhase {
         arguments: Self::Args,
         _actor_reference: ActorRef<Self>,
     ) -> std::result::Result<Self, Self::Error> {
-        Ok(Self::new(arguments.store, arguments.state, arguments.reply))
+        Ok(Self::new(
+            arguments.store,
+            arguments.state,
+            arguments.subscription,
+            arguments.reply,
+        ))
     }
 }
 

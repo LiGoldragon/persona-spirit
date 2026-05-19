@@ -55,6 +55,7 @@ flowchart LR
     decoder["NotaDecoder"]
     dispatch["DispatchPhase"]
     state["StatePlane"]
+    subscription["SubscriptionPlane"]
     store["RecordStore"]
     shaper["ReplyShaper"]
     encoder["ReplyTextEncoder"]
@@ -65,6 +66,7 @@ flowchart LR
     ingress --> decoder
     ingress --> dispatch
     dispatch --> state
+    dispatch --> subscription
     dispatch --> store
     dispatch --> shaper
     store --> writer
@@ -73,8 +75,10 @@ flowchart LR
 ```
 
 `RecordStore` owns `SpiritStore`, which owns the sema-engine handle. It runs as
-the store plane; request decoding, dispatch, unimplemented-reply shaping, and
-NOTA reply rendering are separate actor planes. `ActorTrace` is a runtime
+the store plane. `StatePlane` owns current psyche state and pending
+clarification questions. `SubscriptionPlane` owns subscription tokens and live
+stream registrations. Request decoding, dispatch, unimplemented-reply shaping,
+and NOTA reply rendering are separate actor planes. `ActorTrace` is a runtime
 witness, not an audit log: tests assert the expected actor path for each
 constraint.
 
@@ -102,6 +106,9 @@ decode one NOTA request and forward it to a running daemon socket.
 | Record observations use the read plane and not the write plane. | `persona_spirit_record_observation_uses_read_plane_without_write_plane` checks `SemaReader` without `SemaWriter`. |
 | Psyche-state observations use a working-state plane, not record storage. | `persona_spirit_state_observation_uses_state_plane` checks `StatePlane` without `RecordStore`. |
 | Pending-question observations use the working-state plane. | `persona_spirit_question_observation_uses_state_plane` and `persona_spirit_client_observes_empty_pending_questions` check the empty raw state. |
+| State subscriptions snapshot current psyche state through the state plane before opening a stream. | `persona_spirit_state_subscription_uses_subscription_plane_after_state_snapshot` checks `StatePlane` before `SubscriptionPlane`. |
+| Record subscriptions snapshot record summaries through the read plane before opening a stream. | `persona_spirit_record_subscription_uses_read_plane_then_subscription_plane` checks `SemaReader` before `SubscriptionPlane`. |
+| Subscription retractions use the subscription plane and return typed retraction acknowledgements. | `persona_spirit_subscription_retractions_use_subscription_plane` checks `StateSubscriptionRetracted` and `RecordSubscriptionRetracted`. |
 | Summary queries do not include provenance. | `persona_spirit_client_persists_entries_for_later_summary_observation` checks `RecordsObserved`. |
 | Provenance appears only when requested. | `persona_spirit_client_returns_provenance_only_when_requested` checks `RecordProvenancesObserved`. |
 | Valid unimplemented requests do not touch the store. | `persona_spirit_unimplemented_statement_uses_reply_shaper_not_store` checks `ReplyShaper` and absence of `RecordStore`. |
@@ -128,6 +135,7 @@ src/actors/ingress.rs              — text ingress phase
 src/actors/decoder.rs              — strict NOTA request decoder actor
 src/actors/dispatch.rs             — request dispatch actor
 src/actors/state.rs                — psyche-state and pending-question working-state actor
+src/actors/subscription.rs         — subscription token and stream registration actor
 src/actors/store.rs                — sema-engine store actor
 src/actors/reply.rs                — unimplemented reply shaper + NOTA reply encoder actors
 src/actors/trace.rs                — actor-path witness values
@@ -158,6 +166,8 @@ Implemented now:
 - `RecordObservation` summary and provenance queries;
 - `StateObservation` with default absent psyche state;
 - `QuestionPending` with an empty pending-question set;
+- `SubscribeState` and `SubscribeRecords` with snapshot-open replies;
+- state and record subscription retractions with typed close acknowledgements;
 - typed `RequestUnimplemented` NOTA replies for behavior not built yet;
 - dependency on the ordinary and owner spirit contracts.
 
@@ -165,11 +175,12 @@ Not implemented:
 
 - intent classifier;
 - owner-Mutate forwarding to mind;
-- subscription state and event delivery;
+- subscription event delivery;
 - owner-signal lifecycle handling;
 - bootstrap-policy import;
 - filesystem intent projection.
 
-The next implementation step is subscription state or owner lifecycle handling.
+The next implementation step is subscription event delivery or owner lifecycle
+handling.
 Spirit-to-mind owner variants are not needed for the current raw CLI/storage
 slice.

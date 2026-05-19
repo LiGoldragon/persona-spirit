@@ -6,4 +6,5 @@ pub mod reply;
 pub mod root;
 pub mod state;
 pub mod store;
+pub mod subscription;
 pub mod trace;

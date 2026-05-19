@@ -39,6 +39,12 @@ Contract records stay in `signal-persona-spirit` and
   plane; queries pass through the sema-reader trace plane.
 - `StateObservation` and `QuestionPending` pass through `StatePlane`, not
   `RecordStore`.
+- `SubscribeState` snapshots state through `StatePlane`, then opens the stream
+  through `SubscriptionPlane`.
+- `SubscribeRecords` snapshots summaries through `RecordStore` and
+  `SemaReader`, then opens the stream through `SubscriptionPlane`.
+- Subscription retractions return typed close acknowledgements through
+  `SubscriptionPlane`.
 - `RecordObservation` queries return summaries by default and provenance only
   when the caller asks for it.
 - Valid but unimplemented requests use `ReplyShaper` and do not touch

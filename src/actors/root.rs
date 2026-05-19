@@ -11,6 +11,7 @@ use super::pipeline::PipelineReply;
 use super::reply::{self, TextReply};
 use super::state;
 use super::store;
+use super::subscription;
 use super::trace::{ActorTrace, TraceAction, TraceNode};
 
 pub struct SpiritRoot {
@@ -251,11 +252,18 @@ impl Actor for SpiritRoot {
         let state = state::StatePlane::supervise(&actor_reference, state::Arguments::default())
             .spawn()
             .await;
+        let subscription = subscription::SubscriptionPlane::supervise(
+            &actor_reference,
+            subscription::Arguments::default(),
+        )
+        .spawn()
+        .await;
         let dispatch = dispatch::DispatchPhase::supervise(
             &actor_reference,
             dispatch::Arguments {
                 store,
                 state,
+                subscription,
                 reply: shaper,
             },
         )

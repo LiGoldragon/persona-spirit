@@ -156,6 +156,46 @@ fn persona_spirit_client_observes_empty_pending_questions() {
 }
 
 #[test]
+fn persona_spirit_client_opens_and_retracts_state_subscription() {
+    let fixture = StoreFixture::new("state-subscription");
+    let opened = fixture
+        .client("(SubscribeState ())")
+        .reply_text()
+        .expect("state subscription opened");
+    let retracted = fixture
+        .client("(StateSubscriptionRetraction (1))")
+        .reply_text()
+        .expect("state subscription retracted");
+
+    assert_eq!(opened, "(StateSubscriptionOpened ((1) (Absent None)))");
+    assert_eq!(retracted, "(StateSubscriptionRetracted ((1)))");
+}
+
+#[test]
+fn persona_spirit_client_opens_record_subscription_with_summary_snapshot() {
+    let fixture = StoreFixture::new("record-subscription");
+    fixture
+        .client("(Entry (workspace Decision \"subscription summary\" \"workspace context\" Maximum \"2026-05-19T13:08:11Z\" \"workspace quote\"))")
+        .reply_text()
+        .expect("entry persisted");
+
+    let opened = fixture
+        .client("(SubscribeRecords (None SummaryOnly))")
+        .reply_text()
+        .expect("record subscription opened");
+    let retracted = fixture
+        .client("(RecordSubscriptionRetraction (1))")
+        .reply_text()
+        .expect("record subscription retracted");
+
+    assert_eq!(
+        opened,
+        "(RecordSubscriptionOpened ((1) [(1 workspace Decision \"subscription summary\" Maximum)]))"
+    );
+    assert_eq!(retracted, "(RecordSubscriptionRetracted ((1)))");
+}
+
+#[test]
 fn persona_spirit_client_filters_record_observation_by_topic() {
     let fixture = StoreFixture::new("topic-filter");
     fixture
