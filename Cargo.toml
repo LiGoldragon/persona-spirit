@@ -1,0 +1,31 @@
+[package]
+name         = "persona-spirit"
+version      = "0.1.0"
+edition      = "2024"
+rust-version = "1.85"
+license      = "MIT OR Apache-2.0"
+repository   = "https://github.com/LiGoldragon/persona-spirit"
+description  = "Persona psyche to mind interface component."
+publish      = false
+
+[lib]
+name = "persona_spirit"
+path = "src/lib.rs"
+
+[[bin]]
+name = "persona-spirit"
+path = "src/bin/persona-spirit.rs"
+
+[[bin]]
+name = "persona-spirit-daemon"
+path = "src/bin/persona-spirit-daemon.rs"
+
+[dependencies]
+owner-signal-persona-spirit = { git = "https://github.com/LiGoldragon/owner-signal-persona-spirit.git", branch = "main" }
+signal-persona-spirit       = { git = "https://github.com/LiGoldragon/signal-persona-spirit.git", branch = "main" }
+thiserror                   = "2"
+
+[lints.rust]
+unsafe_code = "forbid"
+unused      = { level = "warn", priority = -1 }
+dead_code   = "warn"
