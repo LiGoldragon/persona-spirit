@@ -104,6 +104,17 @@ wiring lands after the raw component is working. Agents use
 spirit's CLI for typed intent logging before any
 component-to-component integration exists.
 
+## Constraints and actors must drive implementation
+
+The psyche asked for implementation to continue as far as clear
+intent allows, with intent scavenged into the repo and with
+constraints, invariants, and actor logic planes implemented rather
+than left as prose. *"implement all of the constraint tests, the
+invariant tests, and only stop when you've done all that, unless
+you need clarifications on some things."* For `persona-spirit`,
+that means the raw storage/query path must already run through a
+named Kameo actor tree with constraint tests that prove the path.
+
 ## See also
 
 - `ARCHITECTURE.md` — structural shape, state taxonomy, spawn

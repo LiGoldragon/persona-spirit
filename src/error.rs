@@ -22,6 +22,9 @@ pub enum Error {
 
     #[error("persona-spirit store error: {reason}")]
     SpiritStore { reason: String },
+
+    #[error("persona-spirit actor runtime error: {reason}")]
+    ActorRuntime { reason: String },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -42,6 +45,12 @@ impl Error {
     pub fn spirit_store(error: sema_engine::Error) -> Self {
         Self::SpiritStore {
             reason: error.to_string(),
+        }
+    }
+
+    pub fn actor_runtime(reason: impl Into<String>) -> Self {
+        Self::ActorRuntime {
+            reason: reason.into(),
         }
     }
 }

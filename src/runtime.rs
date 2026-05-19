@@ -1,7 +1,7 @@
-use crate::{Error, Result, SingleArgument, SpiritStore, StoreLocation};
+use crate::{Error, Result, SingleArgument, SpiritActorRuntime, StoreLocation};
 use nota_codec::{Decoder, Encoder, NotaDecode, NotaEncode};
 use signal_persona_spirit::{
-    OperationKind, RequestUnimplemented, SpiritReply, SpiritRequest, UnimplementedReason,
+    RequestUnimplemented, SpiritReply, SpiritRequest, UnimplementedReason,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,7 +28,8 @@ impl SpiritClient {
     }
 
     pub fn reply_text(&self) -> Result<String> {
-        SpiritRuntime::open(&self.store)?.reply_text(self.request.as_str())
+        SpiritActorRuntime::submit_text_blocking(self.store.clone(), self.request.as_str())
+            .map(|reply| reply.into_text())
     }
 }
 
@@ -40,10 +41,6 @@ pub struct DaemonRuntime {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SpiritRequestText {
     text: String,
-}
-
-pub struct SpiritRuntime {
-    store: SpiritStore,
 }
 
 impl SpiritRequestText {
@@ -65,49 +62,6 @@ impl SpiritRequestText {
         let request = SpiritRequest::decode(&mut decoder).map_err(Error::invalid_spirit_request)?;
         SpiritRequestEnd::new(&mut decoder).expect()?;
         Ok(request)
-    }
-}
-
-impl SpiritRuntime {
-    pub fn open(store: &StoreLocation) -> Result<Self> {
-        Ok(Self {
-            store: SpiritStore::open(store)?,
-        })
-    }
-
-    pub fn reply_text(&self, text: impl Into<String>) -> Result<String> {
-        let request = SpiritRequestText::new(text).decode_request()?;
-        SpiritReplyText::new(self.handle_request(request)?).encode()
-    }
-
-    pub fn handle_request(&self, request: SpiritRequest) -> Result<SpiritReply> {
-        match request {
-            SpiritRequest::Entry(entry) => {
-                Ok(SpiritReply::RecordAccepted(self.store.assert_entry(entry)?))
-            }
-            SpiritRequest::RecordObservation(observation) => {
-                self.store.observe_records(observation)
-            }
-            other => Ok(SpiritReply::RequestUnimplemented(RequestUnimplemented {
-                operation: other.operation_kind(),
-                reason: Self::unimplemented_reason(other.operation_kind()),
-            })),
-        }
-    }
-
-    fn unimplemented_reason(operation: OperationKind) -> UnimplementedReason {
-        match operation {
-            OperationKind::Statement
-            | OperationKind::StateObservation
-            | OperationKind::QuestionPending
-            | OperationKind::SubscribeState
-            | OperationKind::StateSubscriptionRetraction
-            | OperationKind::SubscribeRecords
-            | OperationKind::RecordSubscriptionRetraction => UnimplementedReason::NotBuiltYet,
-            OperationKind::Entry | OperationKind::RecordObservation => {
-                UnimplementedReason::IntegrationNotLanded
-            }
-        }
     }
 }
 

@@ -21,6 +21,7 @@ name = "persona-spirit-daemon"
 path = "src/bin/persona-spirit-daemon.rs"
 
 [dependencies]
+kameo                       = { git = "https://github.com/LiGoldragon/kameo", branch = "persona-lifecycle-terminal-outcome", default-features = false, features = ["macros", "tracing"] }
 nota-codec                  = { git = "https://github.com/LiGoldragon/nota-codec.git", branch = "main" }
 owner-signal-persona-spirit = { git = "https://github.com/LiGoldragon/owner-signal-persona-spirit.git", branch = "main" }
 rkyv                        = { version = "0.8", default-features = false, features = ["std", "bytecheck", "little_endian", "pointer_width_32", "unaligned"] }
@@ -28,6 +29,7 @@ sema                        = { git = "https://github.com/LiGoldragon/sema.git" 
 sema-engine                 = { git = "https://github.com/LiGoldragon/sema-engine.git", branch = "main" }
 signal-persona-spirit       = { git = "https://github.com/LiGoldragon/signal-persona-spirit.git", branch = "main" }
 thiserror                   = "2"
+tokio                       = { version = "1", default-features = false, features = ["macros", "rt-multi-thread"] }
 
 [lints.rust]
 unsafe_code = "forbid"

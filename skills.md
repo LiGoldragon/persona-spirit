@@ -24,13 +24,20 @@ Contract records stay in `signal-persona-spirit` and
 
 - CLI and daemon binaries take exactly one argument.
 - The CLI decodes that argument as a `signal-persona-spirit::SpiritRequest`.
+- The CLI request path runs through `SpiritActorRuntime` and the Kameo actor
+  tree before it can produce a reply.
+- Each named actor is data-bearing. Do not add public zero-sized actor nouns.
 - `Entry` assertions persist one top-level record in the local sema-engine
   store and return `RecordAccepted`.
+- `Entry` assertions pass through `RecordStore` and the sema-writer trace
+  plane; queries pass through the sema-reader trace plane.
 - `RecordObservation` queries return summaries by default and provenance only
   when the caller asks for it.
+- Valid but unimplemented requests use `ReplyShaper` and do not touch
+  `RecordStore`.
 - Valid but unimplemented CLI requests emit a typed NOTA
   `RequestUnimplemented`.
 - Runtime code does not invent intent-classification behavior.
 - Spirit forwards authority to mind only through typed owner-signal contracts.
-- Until the daemon runtime lands, binaries fail honestly with
-  `RuntimeNotImplemented`.
+- Until the daemon socket runtime lands, `persona-spirit-daemon` fails honestly
+  with `RuntimeNotImplemented`.

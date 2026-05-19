@@ -40,6 +40,10 @@
             inherit cargoArtifacts;
             cargoTestExtraArgs = "--test boundary";
           });
+          test-actor-runtime = craneLib.cargoTest (commonArguments // {
+            inherit cargoArtifacts;
+            cargoTestExtraArgs = "--test actor_runtime";
+          });
           doc = craneLib.cargoDoc (commonArguments // {
             inherit cargoArtifacts;
             RUSTDOCFLAGS = "-D warnings";
