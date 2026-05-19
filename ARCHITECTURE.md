@@ -37,10 +37,11 @@ Spirit is spawned last because it depends on the components it commands.
 
 `persona-spirit` owns one sema-engine database: `persona-spirit.redb`.
 
-Policy state is seeded once from `bootstrap-policy.nota`, then changed only
-through `owner-signal-persona-spirit`. Working state records captured intent,
-psyche presence, pending clarification questions, and downstream owner-Mutate
-audit once the runtime lands.
+Policy state is seeded once from `bootstrap-policy.nota` unless
+`DaemonConfiguration` names an explicit bootstrap-policy path. It is then
+changed only through `owner-signal-persona-spirit`. Working state records
+captured intent, psyche presence, pending clarification questions, and
+downstream owner-Mutate audit once the runtime lands.
 
 ## Actor topology
 
@@ -126,6 +127,7 @@ socket.
 | Owner lifecycle requests route through `OwnerPlane`, not the ordinary dispatch path. | `persona_spirit_owner_lifecycle_orders_use_owner_plane` checks `Started` / `DrainedAndStopped` replies and no dispatch/store trace. |
 | Owner identity requests route through `OwnerPlane`. | `persona_spirit_owner_identity_orders_use_owner_plane` checks register/retire replies. |
 | Bootstrap-policy reload uses the policy plane. | `persona_spirit_bootstrap_policy_reload_uses_policy_plane` returns `BootstrapPolicyReloaded` and checks the `OwnerPlane` → `PolicyPlane` route. |
+| Daemon configuration selects the bootstrap-policy source. | `persona_spirit_daemon_configuration_controls_bootstrap_policy_source` starts a daemon with an explicit policy path and reloads through the owner socket. |
 | The daemon configuration is a single untagged NOTA struct record. | `persona_spirit_daemon_configuration_is_one_nota_record` round-trips the config and rejects a variant wrapper shape. |
 | The daemon serves ordinary length-prefixed Signal frames through the actor root. | `persona_spirit_daemon_serves_signal_frames_through_actor_root` writes and reads through the ordinary Unix socket. |
 | The daemon serves owner length-prefixed Signal frames through `OwnerPlane`. | `persona_spirit_daemon_serves_owner_signal_frames_through_owner_plane` writes and reads through the owner Unix socket. |
@@ -142,7 +144,7 @@ socket.
 ```text
 src/lib.rs                         — module entry
 src/argument.rs                    — one-argument boundary
-src/daemon.rs                      — daemon configuration, socket binding, ordinary/owner frame codecs, signal clients
+src/daemon.rs                      — daemon configuration, bootstrap-policy source selection, socket binding, ordinary/owner frame codecs, signal clients
 src/error.rs                       — typed error
 src/runtime.rs                     — CLI boundary that delegates into SpiritActorRuntime
 src/store.rs                       — sema-engine backed entry store and record queries
@@ -192,8 +194,8 @@ Implemented now:
 - state and record subscription retractions with typed close acknowledgements;
 - owner-signal start, drain/stop, register identity, and retire identity
   handling inside the actor tree;
-- bootstrap-policy parsing and owner-signal reload acknowledgement through
-  `PolicyPlane`;
+- bootstrap-policy source selection from daemon configuration, parsing, and
+  owner-signal reload acknowledgement through `PolicyPlane`;
 - typed `RequestUnimplemented` NOTA replies for behavior not built yet;
 - dependency on the ordinary and owner spirit contracts.
 

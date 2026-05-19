@@ -15,7 +15,10 @@ use signal_core::{
 };
 use signal_persona_spirit::{Frame, FrameBody, SpiritReply, SpiritRequest};
 
-use crate::{Error, Result, StoreLocation, actors::root::SpiritRoot};
+use crate::{
+    Error, Result, StoreLocation,
+    actors::{policy::BootstrapPolicySource, root::SpiritRoot},
+};
 
 const DEFAULT_MAXIMUM_FRAME_BYTES: usize = 1024 * 1024;
 
@@ -25,6 +28,7 @@ pub struct DaemonConfiguration {
     pub owner_socket_path: SocketPath,
     pub store_path: StorePath,
     pub socket_mode: SocketMode,
+    pub bootstrap_policy_path: Option<BootstrapPolicyPath>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, NotaTransparent)]
@@ -32,6 +36,9 @@ pub struct SocketPath(String);
 
 #[derive(Debug, Clone, PartialEq, Eq, NotaTransparent)]
 pub struct StorePath(String);
+
+#[derive(Debug, Clone, PartialEq, Eq, NotaTransparent)]
+pub struct BootstrapPolicyPath(String);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, NotaTransparent)]
 pub struct SocketMode(u32);
@@ -107,7 +114,16 @@ impl DaemonConfiguration {
             owner_socket_path,
             store_path,
             socket_mode,
+            bootstrap_policy_path: None,
         }
+    }
+
+    pub fn with_bootstrap_policy_path(
+        mut self,
+        bootstrap_policy_path: BootstrapPolicyPath,
+    ) -> Self {
+        self.bootstrap_policy_path = Some(bootstrap_policy_path);
+        self
     }
 
     pub fn from_text(text: &str) -> Result<Self> {
@@ -120,6 +136,13 @@ impl DaemonConfiguration {
 
     pub fn store_location(&self) -> StoreLocation {
         StoreLocation::new(self.store_path.as_path())
+    }
+
+    pub fn bootstrap_policy_source(&self) -> BootstrapPolicySource {
+        match &self.bootstrap_policy_path {
+            Some(path) => BootstrapPolicySource::path(path.as_path()),
+            None => BootstrapPolicySource::default(),
+        }
     }
 }
 
@@ -134,6 +157,16 @@ impl SocketPath {
 }
 
 impl StorePath {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    pub fn as_path(&self) -> &Path {
+        Path::new(&self.0)
+    }
+}
+
+impl BootstrapPolicyPath {
     pub fn new(value: impl Into<String>) -> Self {
         Self(value.into())
     }
@@ -371,9 +404,12 @@ impl DaemonRuntime {
                 .build()
                 .map_err(|error| Error::actor_runtime(error.to_string()))?,
         );
-        let root = runtime.block_on(SpiritRoot::start(crate::actors::root::Arguments::new(
-            self.configuration.store_location(),
-        )))?;
+        let root = runtime.block_on(SpiritRoot::start(
+            crate::actors::root::Arguments::with_bootstrap_policy_source(
+                self.configuration.store_location(),
+                self.configuration.bootstrap_policy_source(),
+            ),
+        ))?;
         Ok(BoundDaemon {
             ordinary_socket: self.configuration.ordinary_socket_path,
             owner_socket: self.configuration.owner_socket_path,

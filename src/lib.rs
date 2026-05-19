@@ -10,7 +10,7 @@ pub use actors::root::{RootOperationReply, RootOwnerReply, RootTextReply, Spirit
 pub use actors::trace::{ActorTrace, TraceAction, TraceNode};
 pub use argument::SingleArgument;
 pub use daemon::{
-    BoundDaemon, DaemonConfiguration, DaemonRuntime, OwnerSpiritFrameCodec,
+    BootstrapPolicyPath, BoundDaemon, DaemonConfiguration, DaemonRuntime, OwnerSpiritFrameCodec,
     OwnerSpiritSignalClient, ServedExchange, ServedOwnerExchange, SocketMode, SocketPath,
     SpiritFrameCodec, SpiritSignalClient, StorePath,
 };

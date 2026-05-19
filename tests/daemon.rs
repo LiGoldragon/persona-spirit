@@ -5,12 +5,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use nota_codec::{Encoder, NotaEncode};
 use owner_signal_persona_spirit::{
     Frame as OwnerFrame, FrameBody as OwnerFrameBody, Generation, IdentityName, IdentityRegistered,
-    OwnerSpiritReply, OwnerSpiritRequest, RegisterIdentity, StartOrder, Started,
+    OwnerSpiritReply, OwnerSpiritRequest, RegisterIdentity, ReloadBootstrapPolicyOrder, StartOrder,
+    Started,
 };
 use persona_spirit::{
-    DaemonConfiguration, DaemonRuntime, OwnerSpiritFrameCodec, OwnerSpiritSignalClient,
-    SingleArgument, SocketMode, SocketPath, SpiritClient, SpiritFrameCodec, SpiritSignalClient,
-    StorePath,
+    BootstrapPolicyPath, DaemonConfiguration, DaemonRuntime, OwnerSpiritFrameCodec,
+    OwnerSpiritSignalClient, SingleArgument, SocketMode, SocketPath, SpiritClient,
+    SpiritFrameCodec, SpiritSignalClient, StorePath,
 };
 use signal_core::{
     ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Operation, Reply, Request,
@@ -111,6 +112,10 @@ fn persona_spirit_daemon_configuration_is_one_nota_record() {
         text.starts_with('(') && !text.starts_with("(DaemonConfiguration"),
         "daemon configuration is a struct record, not a variant wrapper"
     );
+    assert!(
+        text.ends_with(" None)"),
+        "daemon configuration carries an explicit optional bootstrap-policy path"
+    );
 }
 
 #[test]
@@ -207,6 +212,50 @@ fn persona_spirit_daemon_serves_owner_signal_frames_through_owner_plane() {
         .expect("daemon thread exits")
         .expect("daemon served two owner exchanges");
     assert_eq!(served.len(), 2);
+}
+
+#[test]
+fn persona_spirit_daemon_configuration_controls_bootstrap_policy_source() {
+    let fixture = DaemonFixture::new("configured-policy");
+    let mut policy_path = std::env::temp_dir();
+    policy_path.push(format!(
+        "persona-spirit-configured-policy-{}.nota",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock after epoch")
+            .as_nanos()
+    ));
+    std::fs::write(&policy_path, "(\"daemon configured bootstrap policy\")")
+        .expect("policy fixture writes");
+    let configuration =
+        fixture
+            .configuration()
+            .with_bootstrap_policy_path(BootstrapPolicyPath::new(
+                policy_path.to_string_lossy().into_owned(),
+            ));
+    let daemon = DaemonRuntime::from_configuration(configuration)
+        .bind()
+        .expect("daemon binds");
+    let handle = thread::spawn(move || daemon.serve_owner_count(1));
+
+    let reply = fixture
+        .owner_client()
+        .submit(OwnerSpiritRequest::ReloadBootstrapPolicyOrder(
+            ReloadBootstrapPolicyOrder {},
+        ))
+        .expect("configured policy reloads through owner socket");
+
+    assert_eq!(
+        reply,
+        OwnerSpiritReply::BootstrapPolicyReloaded(
+            owner_signal_persona_spirit::BootstrapPolicyReloaded {}
+        )
+    );
+    handle
+        .join()
+        .expect("daemon thread exits")
+        .expect("daemon served owner reload");
+    std::fs::remove_file(policy_path).expect("policy fixture removed");
 }
 
 #[test]

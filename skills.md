@@ -24,9 +24,10 @@ Contract records stay in `signal-persona-spirit` and
 
 - CLI and daemon binaries take exactly one argument.
 - The CLI decodes that argument as a `signal-persona-spirit::SpiritRequest`.
-- The daemon decodes that argument as `DaemonConfiguration`, then binds one
-  ordinary socket for `signal-persona-spirit::Frame` values and one owner
-  socket for `owner-signal-persona-spirit::Frame` values.
+- The daemon decodes that argument as `DaemonConfiguration`, selects the
+  embedded or configured bootstrap-policy source, then binds one ordinary
+  socket for `signal-persona-spirit::Frame` values and one owner socket for
+  `owner-signal-persona-spirit::Frame` values.
 - The CLI request path runs through `SpiritActorRuntime` and the Kameo actor
   tree before it can produce a reply.
 - When a daemon socket is selected, the CLI decodes NOTA once and sends a
@@ -40,6 +41,8 @@ Contract records stay in `signal-persona-spirit` and
   through the ordinary text ingress or dispatch path.
 - Bootstrap-policy reload routes from `OwnerPlane` into `PolicyPlane` and
   returns `BootstrapPolicyReloaded` only after the policy source parses.
+- A daemon configured with a bootstrap-policy path passes that path into
+  `PolicyPlane`; it does not silently fall back to the embedded seed.
 - `Entry` assertions persist one top-level record in the local sema-engine
   store and return `RecordAccepted`.
 - `Entry` assertions pass through `RecordStore` and the sema-writer trace
