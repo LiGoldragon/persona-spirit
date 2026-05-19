@@ -3,13 +3,18 @@ use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use nota_codec::{Encoder, NotaEncode};
+use owner_signal_persona_spirit::{
+    Frame as OwnerFrame, FrameBody as OwnerFrameBody, Generation, IdentityName, IdentityRegistered,
+    OwnerSpiritReply, OwnerSpiritRequest, RegisterIdentity, StartOrder, Started,
+};
 use persona_spirit::{
-    DaemonConfiguration, DaemonRuntime, SingleArgument, SocketMode, SocketPath, SpiritClient,
-    SpiritFrameCodec, SpiritSignalClient, StorePath,
+    DaemonConfiguration, DaemonRuntime, OwnerSpiritFrameCodec, OwnerSpiritSignalClient,
+    SingleArgument, SocketMode, SocketPath, SpiritClient, SpiritFrameCodec, SpiritSignalClient,
+    StorePath,
 };
 use signal_core::{
     ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Operation, Reply, Request,
-    SessionEpoch, SignalVerb,
+    RequestPayload, SessionEpoch, SignalVerb,
 };
 use signal_persona_spirit::{
     Certainty, Context, Entry, Frame, FrameBody, Kind, ObservationMode, Quote, RecordObservation,
@@ -18,7 +23,8 @@ use signal_persona_spirit::{
 
 #[derive(Debug, Clone)]
 struct DaemonFixture {
-    socket: SocketPath,
+    ordinary_socket: SocketPath,
+    owner_socket: SocketPath,
     store: StorePath,
 }
 
@@ -29,25 +35,33 @@ impl DaemonFixture {
             .expect("system clock after epoch")
             .as_nanos();
         let mut socket = std::env::temp_dir();
-        socket.push(format!("persona-spirit-{test_name}-{nanos}.sock"));
+        socket.push(format!("persona-spirit-{test_name}-{nanos}-ordinary.sock"));
+        let mut owner_socket = std::env::temp_dir();
+        owner_socket.push(format!("persona-spirit-{test_name}-{nanos}-owner.sock"));
         let mut store = std::env::temp_dir();
         store.push(format!("persona-spirit-{test_name}-{nanos}.redb"));
         Self {
-            socket: SocketPath::new(socket.to_string_lossy().into_owned()),
+            ordinary_socket: SocketPath::new(socket.to_string_lossy().into_owned()),
+            owner_socket: SocketPath::new(owner_socket.to_string_lossy().into_owned()),
             store: StorePath::new(store.to_string_lossy().into_owned()),
         }
     }
 
     fn configuration(&self) -> DaemonConfiguration {
         DaemonConfiguration::new(
-            self.socket.clone(),
+            self.ordinary_socket.clone(),
+            self.owner_socket.clone(),
             self.store.clone(),
             SocketMode::from_octal(0o600),
         )
     }
 
     fn client(&self) -> SpiritSignalClient {
-        SpiritSignalClient::new(self.socket.clone())
+        SpiritSignalClient::new(self.ordinary_socket.clone())
+    }
+
+    fn owner_client(&self) -> OwnerSpiritSignalClient {
+        OwnerSpiritSignalClient::new(self.owner_socket.clone())
     }
 }
 
@@ -105,7 +119,8 @@ fn persona_spirit_daemon_serves_signal_frames_through_actor_root() {
     let daemon = DaemonRuntime::from_configuration(fixture.configuration())
         .bind()
         .expect("daemon binds");
-    let socket = fixture.socket.clone();
+    let ordinary_socket = fixture.ordinary_socket.clone();
+    let owner_socket = fixture.owner_socket.clone();
     let handle = thread::spawn(move || daemon.serve_count(2));
 
     let client = fixture.client();
@@ -145,9 +160,53 @@ fn persona_spirit_daemon_serves_signal_frames_through_actor_root() {
         .expect("daemon served two exchanges");
     assert_eq!(served.len(), 2);
     assert!(
-        !socket.as_path().exists(),
-        "daemon shutdown removes the socket path"
+        !ordinary_socket.as_path().exists(),
+        "daemon shutdown removes the ordinary socket path"
     );
+    assert!(
+        !owner_socket.as_path().exists(),
+        "daemon shutdown removes the owner socket path"
+    );
+}
+
+#[test]
+fn persona_spirit_daemon_serves_owner_signal_frames_through_owner_plane() {
+    let fixture = DaemonFixture::new("owner-signal-frame");
+    let daemon = DaemonRuntime::from_configuration(fixture.configuration())
+        .bind()
+        .expect("daemon binds");
+    let handle = thread::spawn(move || daemon.serve_owner_count(2));
+
+    let client = fixture.owner_client();
+    let started = client
+        .submit(OwnerSpiritRequest::StartOrder(StartOrder {
+            generation: Generation::new(7),
+        }))
+        .expect("owner start accepted through owner socket");
+    assert_eq!(
+        started,
+        OwnerSpiritReply::Started(Started {
+            generation: Generation::new(7),
+        })
+    );
+
+    let registered = client
+        .submit(OwnerSpiritRequest::RegisterIdentity(RegisterIdentity {
+            name: IdentityName::new("operator"),
+        }))
+        .expect("owner identity accepted through owner socket");
+    assert_eq!(
+        registered,
+        OwnerSpiritReply::IdentityRegistered(IdentityRegistered {
+            name: IdentityName::new("operator"),
+        })
+    );
+
+    let served = handle
+        .join()
+        .expect("daemon thread exits")
+        .expect("daemon served two owner exchanges");
+    assert_eq!(served.len(), 2);
 }
 
 #[test]
@@ -156,7 +215,7 @@ fn persona_spirit_daemon_rejects_verb_payload_mismatch_before_actor_execution() 
     let mut daemon = DaemonRuntime::from_configuration(fixture.configuration())
         .bind()
         .expect("daemon binds");
-    let socket = fixture.socket.clone();
+    let socket = fixture.ordinary_socket.clone();
     let handle = thread::spawn(move || {
         let served = daemon.serve_one().expect("daemon serves rejected request");
         daemon.shutdown().expect("daemon shuts down");
@@ -188,6 +247,75 @@ fn persona_spirit_daemon_rejects_verb_payload_mismatch_before_actor_execution() 
 }
 
 #[test]
+fn persona_spirit_ordinary_socket_rejects_owner_signal_frames() {
+    let fixture = DaemonFixture::new("ordinary-rejects-owner");
+    let mut daemon = DaemonRuntime::from_configuration(fixture.configuration())
+        .bind()
+        .expect("daemon binds");
+    let socket = fixture.ordinary_socket.clone();
+    let handle = thread::spawn(move || {
+        let served = daemon.serve_one();
+        daemon.shutdown().expect("daemon shuts down");
+        served
+    });
+
+    let codec = OwnerSpiritFrameCodec::default();
+    let mut stream = UnixStream::connect(socket.as_path()).expect("client connects");
+    let frame = OwnerFrame::new(OwnerFrameBody::Request {
+        exchange: exchange(),
+        request: OwnerSpiritRequest::StartOrder(StartOrder {
+            generation: Generation::new(1),
+        })
+        .into_request(),
+    });
+    codec
+        .write_frame(&mut stream, &frame)
+        .expect("owner request frame writes to ordinary socket");
+
+    assert!(
+        handle
+            .join()
+            .expect("daemon thread exits")
+            .expect_err("ordinary socket rejects owner frame")
+            .to_string()
+            .contains("persona-spirit signal frame error")
+    );
+}
+
+#[test]
+fn persona_spirit_owner_socket_rejects_ordinary_signal_frames() {
+    let fixture = DaemonFixture::new("owner-rejects-ordinary");
+    let mut daemon = DaemonRuntime::from_configuration(fixture.configuration())
+        .bind()
+        .expect("daemon binds");
+    let socket = fixture.owner_socket.clone();
+    let handle = thread::spawn(move || {
+        let served = daemon.serve_owner_one();
+        daemon.shutdown().expect("daemon shuts down");
+        served
+    });
+
+    let codec = SpiritFrameCodec::default();
+    let mut stream = UnixStream::connect(socket.as_path()).expect("client connects");
+    let frame = Frame::new(FrameBody::Request {
+        exchange: exchange(),
+        request: SpiritRequest::Entry(entry("wrong socket")).into_request(),
+    });
+    codec
+        .write_frame(&mut stream, &frame)
+        .expect("ordinary request frame writes to owner socket");
+
+    assert!(
+        handle
+            .join()
+            .expect("daemon thread exits")
+            .expect_err("owner socket rejects ordinary frame")
+            .to_string()
+            .contains("persona-spirit signal frame error")
+    );
+}
+
+#[test]
 fn persona_spirit_daemon_source_does_not_route_signal_frames_through_nota_decoder() {
     let source = std::fs::read_to_string(format!("{}/src/daemon.rs", env!("CARGO_MANIFEST_DIR")))
         .expect("daemon source is readable");
@@ -210,7 +338,7 @@ fn persona_spirit_client_can_send_nota_request_to_running_daemon() {
     ])
     .expect("single request argument");
 
-    let reply = SpiritClient::with_socket(argument, fixture.socket.clone())
+    let reply = SpiritClient::with_socket(argument, fixture.ordinary_socket.clone())
         .reply_text()
         .expect("client sends to daemon");
 

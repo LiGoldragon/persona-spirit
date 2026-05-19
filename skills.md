@@ -24,14 +24,17 @@ Contract records stay in `signal-persona-spirit` and
 
 - CLI and daemon binaries take exactly one argument.
 - The CLI decodes that argument as a `signal-persona-spirit::SpiritRequest`.
-- The daemon decodes that argument as `DaemonConfiguration`, then accepts
-  length-prefixed `signal-persona-spirit::Frame` values on its Unix socket.
+- The daemon decodes that argument as `DaemonConfiguration`, then binds one
+  ordinary socket for `signal-persona-spirit::Frame` values and one owner
+  socket for `owner-signal-persona-spirit::Frame` values.
 - The CLI request path runs through `SpiritActorRuntime` and the Kameo actor
   tree before it can produce a reply.
 - When a daemon socket is selected, the CLI decodes NOTA once and sends a
   Signal frame to the daemon rather than opening the store itself.
 - Signal-frame ingress submits typed requests directly to `SpiritRoot`; it does
   not go back through the NOTA decoder actor.
+- The ordinary socket rejects owner frames; the owner socket rejects ordinary
+  frames.
 - Each named actor is data-bearing. Do not add public zero-sized actor nouns.
 - Owner-signal lifecycle and identity requests route through `OwnerPlane`, not
   through the ordinary text ingress or dispatch path.
@@ -55,6 +58,6 @@ Contract records stay in `signal-persona-spirit` and
   `RequestUnimplemented`.
 - Runtime code does not invent intent-classification behavior.
 - Spirit forwards authority to mind only through typed owner-signal contracts.
-- `persona-spirit-daemon` currently serves ordinary request/reply frames and
-  stops only when its process is stopped or test code calls bounded serving
-  helpers.
+- `persona-spirit-daemon` serves ordinary request/reply frames and owner
+  request/reply frames on different sockets. Test-only bounded helpers must
+  remove both sockets on shutdown.
