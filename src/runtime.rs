@@ -1,17 +1,25 @@
-use crate::{Error, Result, SingleArgument};
+use crate::{Error, Result, SingleArgument, SpiritStore, StoreLocation};
 use nota_codec::{Decoder, Encoder, NotaDecode, NotaEncode};
 use signal_persona_spirit::{
-    SpiritReply, SpiritRequest, SpiritRequestUnimplemented, SpiritUnimplementedReason,
+    OperationKind, RequestUnimplemented, SpiritReply, SpiritRequest, UnimplementedReason,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SpiritClient {
     request: SingleArgument,
+    store: StoreLocation,
 }
 
 impl SpiritClient {
     pub fn from_argument(request: SingleArgument) -> Self {
-        Self { request }
+        Self {
+            request,
+            store: StoreLocation::from_environment(),
+        }
+    }
+
+    pub fn with_store(request: SingleArgument, store: StoreLocation) -> Self {
+        Self { request, store }
     }
 
     pub fn run(&self) -> Result<()> {
@@ -20,7 +28,7 @@ impl SpiritClient {
     }
 
     pub fn reply_text(&self) -> Result<String> {
-        SpiritRequestText::new(self.request.as_str()).reply_text()
+        SpiritRuntime::open(&self.store)?.reply_text(self.request.as_str())
     }
 }
 
@@ -34,6 +42,10 @@ pub struct SpiritRequestText {
     text: String,
 }
 
+pub struct SpiritRuntime {
+    store: SpiritStore,
+}
+
 impl SpiritRequestText {
     pub fn new(text: impl Into<String>) -> Self {
         Self { text: text.into() }
@@ -41,12 +53,10 @@ impl SpiritRequestText {
 
     pub fn reply_text(&self) -> Result<String> {
         let request = self.decode_request()?;
-        SpiritReplyText::new(SpiritReply::SpiritRequestUnimplemented(
-            SpiritRequestUnimplemented {
-                operation: request.operation_kind(),
-                reason: SpiritUnimplementedReason::NotBuiltYet,
-            },
-        ))
+        SpiritReplyText::new(SpiritReply::RequestUnimplemented(RequestUnimplemented {
+            operation: request.operation_kind(),
+            reason: UnimplementedReason::NotBuiltYet,
+        }))
         .encode()
     }
 
@@ -55,6 +65,49 @@ impl SpiritRequestText {
         let request = SpiritRequest::decode(&mut decoder).map_err(Error::invalid_spirit_request)?;
         SpiritRequestEnd::new(&mut decoder).expect()?;
         Ok(request)
+    }
+}
+
+impl SpiritRuntime {
+    pub fn open(store: &StoreLocation) -> Result<Self> {
+        Ok(Self {
+            store: SpiritStore::open(store)?,
+        })
+    }
+
+    pub fn reply_text(&self, text: impl Into<String>) -> Result<String> {
+        let request = SpiritRequestText::new(text).decode_request()?;
+        SpiritReplyText::new(self.handle_request(request)?).encode()
+    }
+
+    pub fn handle_request(&self, request: SpiritRequest) -> Result<SpiritReply> {
+        match request {
+            SpiritRequest::Entry(entry) => {
+                Ok(SpiritReply::RecordAccepted(self.store.assert_entry(entry)?))
+            }
+            SpiritRequest::RecordObservation(observation) => {
+                self.store.observe_records(observation)
+            }
+            other => Ok(SpiritReply::RequestUnimplemented(RequestUnimplemented {
+                operation: other.operation_kind(),
+                reason: Self::unimplemented_reason(other.operation_kind()),
+            })),
+        }
+    }
+
+    fn unimplemented_reason(operation: OperationKind) -> UnimplementedReason {
+        match operation {
+            OperationKind::Statement
+            | OperationKind::StateObservation
+            | OperationKind::QuestionPending
+            | OperationKind::SubscribeState
+            | OperationKind::StateSubscriptionRetraction
+            | OperationKind::SubscribeRecords
+            | OperationKind::RecordSubscriptionRetraction => UnimplementedReason::NotBuiltYet,
+            OperationKind::Entry | OperationKind::RecordObservation => {
+                UnimplementedReason::IntegrationNotLanded
+            }
+        }
     }
 }
 

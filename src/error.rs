@@ -19,6 +19,9 @@ pub enum Error {
 
     #[error("invalid persona-spirit reply: {reason}")]
     InvalidSpiritReply { reason: String },
+
+    #[error("persona-spirit store error: {reason}")]
+    SpiritStore { reason: String },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -32,6 +35,12 @@ impl Error {
 
     pub fn invalid_spirit_reply(error: nota_codec::Error) -> Self {
         Self::InvalidSpiritReply {
+            reason: error.to_string(),
+        }
+    }
+
+    pub fn spirit_store(error: sema_engine::Error) -> Self {
+        Self::SpiritStore {
             reason: error.to_string(),
         }
     }

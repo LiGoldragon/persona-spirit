@@ -38,6 +38,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33"
 
 [[package]]
+name = "camino"
+version = "1.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e629a66d692cb9ff1a1c664e41771b3dcaf961985a9774c0eb0bd1b51cf60a48"
+
+[[package]]
 name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -102,6 +108,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "libc"
+version = "0.2.186"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
+
+[[package]]
 name = "munge"
 version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -124,8 +136,9 @@ dependencies = [
 [[package]]
 name = "nota-codec"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/nota-codec.git?branch=main#97c1f4969a1c79d5d79be780cdc8ec8356883b84"
+source = "git+https://github.com/LiGoldragon/nota-codec.git?branch=main#88852e6897c12e4418b252351813f758ee438ea0"
 dependencies = [
+ "camino",
  "nota-derive",
  "thiserror",
 ]
@@ -133,7 +146,7 @@ dependencies = [
 [[package]]
 name = "nota-derive"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/nota-derive.git?branch=main#e24e50afe110810db50a7eb8f9a7963c6761c0af"
+source = "git+https://github.com/LiGoldragon/nota-derive.git?branch=main#30c665f3ebf7d03e66dd1a5ee9cf67a0f36cd470"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -149,7 +162,7 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 [[package]]
 name = "owner-signal-persona-spirit"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/owner-signal-persona-spirit.git?branch=main#367bec15905f983ffd279727b870f0366d7690dc"
+source = "git+https://github.com/LiGoldragon/owner-signal-persona-spirit.git?branch=main#8dc296b1a20164ab3d923968f8e05dafc4da7ce6"
 dependencies = [
  "nota-codec",
  "rkyv",
@@ -164,6 +177,9 @@ version = "0.1.0"
 dependencies = [
  "nota-codec",
  "owner-signal-persona-spirit",
+ "rkyv",
+ "sema",
+ "sema-engine",
  "signal-persona-spirit",
  "thiserror",
 ]
@@ -222,6 +238,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "redb"
+version = "4.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e925444704b5f17d32bf42f5b6e2df050bceebc3dcd6e71cc73dafe8092e839"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "rend"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -267,9 +292,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 
 [[package]]
+name = "sema"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/sema.git#4ea561bc53f6aa38fb71a7570665d57191fce0ea"
+dependencies = [
+ "redb",
+ "rkyv",
+ "thiserror",
+]
+
+[[package]]
+name = "sema-engine"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/sema-engine.git?branch=main#d73701f3698568d0e00022d3fd158633892b6eff"
+dependencies = [
+ "rkyv",
+ "sema",
+ "signal-core",
+ "thiserror",
+]
+
+[[package]]
 name = "signal-core"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-core.git#f17efc1c9c8c2d3bf755ef3a285a8618886c49fa"
+source = "git+https://github.com/LiGoldragon/signal-core.git#5762bba19a118cedc9fc7edcb1237f9a53d444aa"
 dependencies = [
  "nota-codec",
  "rkyv",
@@ -280,7 +326,7 @@ dependencies = [
 [[package]]
 name = "signal-core-macros"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-core.git#f17efc1c9c8c2d3bf755ef3a285a8618886c49fa"
+source = "git+https://github.com/LiGoldragon/signal-core.git#5762bba19a118cedc9fc7edcb1237f9a53d444aa"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -290,7 +336,7 @@ dependencies = [
 [[package]]
 name = "signal-persona-spirit"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#6a6efdec1282c9f0163aed5ce98390bf7cb36edf"
+source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#c6fd250c29bf3d35c47c27598a0eec0c1c0840d0"
 dependencies = [
  "nota-codec",
  "rkyv",
