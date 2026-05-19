@@ -104,6 +104,12 @@ wiring lands after the raw component is working. Agents use
 spirit's CLI for typed intent logging before any
 component-to-component integration exists.
 
+The daemon boundary is part of raw form. It accepts one typed
+configuration argument, owns the long-lived Kameo root and
+sema-engine store, and receives typed Signal frames from other
+components. It does not parse NOTA request text on the socket;
+NOTA belongs to the CLI/testing surface.
+
 ## Constraints and actors must drive implementation
 
 The psyche asked for implementation to continue as far as clear

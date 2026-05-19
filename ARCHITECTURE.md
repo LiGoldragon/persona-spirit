@@ -76,6 +76,12 @@ NOTA reply rendering are separate actor planes. `ActorTrace` is a runtime
 witness, not an audit log: tests assert the expected actor path for each
 constraint.
 
+The daemon socket path does not pretend RKYV Signal traffic is text. It reads
+length-prefixed `signal-persona-spirit::Frame` values, checks the
+`signal-core::Request`, and submits each `SpiritRequest` directly to
+`SpiritRoot` through the dispatch plane. The NOTA decoder remains a CLI/text
+ingress actor only.
+
 ## Constraints
 
 | Constraint | Witness |
@@ -96,6 +102,10 @@ constraint.
 | Valid unimplemented requests do not touch the store. | `persona_spirit_unimplemented_statement_uses_reply_shaper_not_store` checks `ReplyShaper` and absence of `RecordStore`. |
 | Invalid NOTA keeps a typed decode error through the actor path. | `persona_spirit_invalid_text_keeps_typed_decode_error` checks `Error::InvalidSpiritRequest`. |
 | Shutdown releases the store so a later runtime can reopen the same path. | `persona_spirit_shutdown_releases_store_for_restart` writes, stops, restarts, and reads. |
+| The daemon configuration is a single untagged NOTA struct record. | `persona_spirit_daemon_configuration_is_one_nota_record` round-trips the config and rejects a variant wrapper shape. |
+| The daemon serves length-prefixed Signal frames through the actor root. | `persona_spirit_daemon_serves_signal_frames_through_actor_root` writes and reads through a real Unix socket. |
+| The daemon rejects verb/payload mismatch before actor execution. | `persona_spirit_daemon_rejects_verb_payload_mismatch_before_actor_execution` constructs a bad `signal-core::Request`. |
+| Signal-frame daemon ingress does not route through the NOTA decoder. | `persona_spirit_daemon_source_does_not_route_signal_frames_through_nota_decoder` checks the socket boundary calls `SubmitRequest`. |
 | No classifier or mind-forwarding behavior exists until its intent is clear. | Status section says this explicitly. |
 
 ## Code Map
@@ -103,6 +113,7 @@ constraint.
 ```text
 src/lib.rs                         — module entry
 src/argument.rs                    — one-argument boundary
+src/daemon.rs                      — daemon configuration, socket binding, frame codec, signal client
 src/error.rs                       — typed error
 src/runtime.rs                     — CLI boundary that delegates into SpiritActorRuntime
 src/store.rs                       — sema-engine backed entry store and record queries
@@ -119,6 +130,7 @@ src/bin/persona-spirit-daemon.rs   — daemon binary
 bootstrap-policy.nota              — first policy seed placeholder
 tests/boundary.rs                  — argument-boundary witnesses
 tests/actor_runtime.rs             — actor-path and architectural-truth witnesses
+tests/daemon.rs                    — socket, signal-frame, and daemon-boundary witnesses
 ```
 
 ## Status
@@ -130,6 +142,8 @@ Implemented now:
 - one-argument boundary parser;
 - typed CLI request decoding for `signal-persona-spirit::SpiritRequest`;
 - Kameo actor tree for the CLI request path;
+- `persona-spirit-daemon` typed configuration and Unix socket binding;
+- length-prefixed RKYV Signal frame request/reply path over the daemon socket;
 - actor trace witnesses for root, ingress, decode, dispatch, store, sema
   writer/reader, reply shaping, and reply encoding;
 - sema-engine backed `Entry` assertion;
@@ -139,11 +153,13 @@ Implemented now:
 
 Not implemented:
 
-- daemon socket listener;
 - intent classifier;
 - owner-Mutate forwarding to mind;
+- subscription state and event delivery;
+- owner-signal lifecycle handling;
+- bootstrap-policy import;
 - filesystem intent projection.
 
-The next implementation step needs daemon configuration and socket shape so
-the same actor tree becomes long-lived. Spirit-to-mind owner variants are not
-needed for the current raw CLI/storage slice.
+The next implementation step is subscription state or owner lifecycle handling.
+Spirit-to-mind owner variants are not needed for the current raw CLI/storage
+slice.

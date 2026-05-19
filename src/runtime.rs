@@ -34,11 +34,6 @@ impl SpiritClient {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DaemonRuntime {
-    configuration: SingleArgument,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SpiritRequestText {
     text: String,
 }
@@ -105,19 +100,5 @@ impl<'decoder, 'input> SpiritRequestEnd<'decoder, 'input> {
         } else {
             Ok(())
         }
-    }
-}
-
-impl DaemonRuntime {
-    pub fn from_argument(configuration: SingleArgument) -> Self {
-        Self { configuration }
-    }
-
-    pub fn run(&self) -> Result<()> {
-        let _configuration_text = self.configuration.as_str();
-        Err(Error::RuntimeNotImplemented {
-            surface: "persona-spirit-daemon",
-            reason: "Kameo actor tree, sema-engine state, and sockets are not implemented",
-        })
     }
 }

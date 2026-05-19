@@ -20,6 +20,26 @@ pub enum Error {
     #[error("invalid persona-spirit reply: {reason}")]
     InvalidSpiritReply { reason: String },
 
+    #[error("invalid persona-spirit daemon configuration: {reason}")]
+    InvalidDaemonConfiguration { reason: String },
+
+    #[error("persona-spirit input/output error: {reason}")]
+    InputOutput { reason: String },
+
+    #[error("persona-spirit signal frame error: {reason}")]
+    SignalFrame { reason: String },
+
+    #[error("persona-spirit frame too large: found {found} bytes, limit {limit}")]
+    FrameTooLarge { found: usize, limit: usize },
+
+    #[error("unexpected persona-spirit signal frame: expected {expected}, got {got}")]
+    UnexpectedFrame { expected: &'static str, got: String },
+
+    #[error("persona-spirit request rejected before execution: {reason}")]
+    RequestRejected {
+        reason: signal_core::RequestRejectionReason,
+    },
+
     #[error("persona-spirit store error: {reason}")]
     SpiritStore { reason: String },
 
@@ -38,6 +58,24 @@ impl Error {
 
     pub fn invalid_spirit_reply(error: nota_codec::Error) -> Self {
         Self::InvalidSpiritReply {
+            reason: error.to_string(),
+        }
+    }
+
+    pub fn invalid_daemon_configuration(error: nota_codec::Error) -> Self {
+        Self::InvalidDaemonConfiguration {
+            reason: error.to_string(),
+        }
+    }
+
+    pub fn input_output(error: std::io::Error) -> Self {
+        Self::InputOutput {
+            reason: error.to_string(),
+        }
+    }
+
+    pub fn signal_frame(error: signal_core::FrameError) -> Self {
+        Self::SignalFrame {
             reason: error.to_string(),
         }
     }

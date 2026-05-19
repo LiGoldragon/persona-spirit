@@ -24,8 +24,12 @@ Contract records stay in `signal-persona-spirit` and
 
 - CLI and daemon binaries take exactly one argument.
 - The CLI decodes that argument as a `signal-persona-spirit::SpiritRequest`.
+- The daemon decodes that argument as `DaemonConfiguration`, then accepts
+  length-prefixed `signal-persona-spirit::Frame` values on its Unix socket.
 - The CLI request path runs through `SpiritActorRuntime` and the Kameo actor
   tree before it can produce a reply.
+- Signal-frame ingress submits typed requests directly to `SpiritRoot`; it does
+  not go back through the NOTA decoder actor.
 - Each named actor is data-bearing. Do not add public zero-sized actor nouns.
 - `Entry` assertions persist one top-level record in the local sema-engine
   store and return `RecordAccepted`.
@@ -39,5 +43,6 @@ Contract records stay in `signal-persona-spirit` and
   `RequestUnimplemented`.
 - Runtime code does not invent intent-classification behavior.
 - Spirit forwards authority to mind only through typed owner-signal contracts.
-- Until the daemon socket runtime lands, `persona-spirit-daemon` fails honestly
-  with `RuntimeNotImplemented`.
+- `persona-spirit-daemon` currently serves ordinary request/reply frames and
+  stops only when its process is stopped or test code calls bounded serving
+  helpers.

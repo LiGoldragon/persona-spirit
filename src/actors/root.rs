@@ -14,6 +14,7 @@ use super::trace::{ActorTrace, TraceAction, TraceNode};
 
 pub struct SpiritRoot {
     ingress: ActorRef<ingress::IngressPhase>,
+    dispatch: ActorRef<dispatch::DispatchPhase>,
     encoder: ActorRef<reply::ReplyTextEncoder>,
 }
 
@@ -26,9 +27,19 @@ pub struct SubmitText {
     pub text: String,
 }
 
+pub struct SubmitRequest {
+    pub request: signal_persona_spirit::SpiritRequest,
+}
+
 #[derive(Debug, kameo::Reply)]
 pub struct RootTextReply {
     text: String,
+    trace: ActorTrace,
+}
+
+#[derive(Debug, kameo::Reply)]
+pub struct RootOperationReply {
+    reply: signal_persona_spirit::SpiritReply,
     trace: ActorTrace,
 }
 
@@ -45,9 +56,14 @@ impl Arguments {
 impl SpiritRoot {
     fn new(
         ingress: ActorRef<ingress::IngressPhase>,
+        dispatch: ActorRef<dispatch::DispatchPhase>,
         encoder: ActorRef<reply::ReplyTextEncoder>,
     ) -> Self {
-        Self { ingress, encoder }
+        Self {
+            ingress,
+            dispatch,
+            encoder,
+        }
     }
 
     pub async fn start(arguments: Arguments) -> Result<ActorRef<Self>> {
@@ -77,6 +93,22 @@ impl SpiritRoot {
         let mut trace = encoded.trace().clone();
         trace.record(TraceNode::SPIRIT_ROOT, TraceAction::MessageReplied);
         Ok(RootTextReply::new(encoded.into_text(), trace))
+    }
+
+    async fn submit_request(
+        &self,
+        request: signal_persona_spirit::SpiritRequest,
+    ) -> Result<RootOperationReply> {
+        let mut trace = ActorTrace::new();
+        trace.record(TraceNode::SPIRIT_ROOT, TraceAction::MessageReceived);
+        let pipeline = self
+            .dispatch
+            .ask(dispatch::RouteRequest { request, trace })
+            .await
+            .map_err(Self::pipeline_send_error)?;
+        let (reply, mut trace) = pipeline.into_parts();
+        trace.record(TraceNode::SPIRIT_ROOT, TraceAction::MessageReplied);
+        Ok(RootOperationReply::new(reply, trace))
     }
 
     async fn encode(&self, pipeline: PipelineReply) -> Result<TextReply> {
@@ -120,6 +152,24 @@ impl RootTextReply {
     }
 }
 
+impl RootOperationReply {
+    fn new(reply: signal_persona_spirit::SpiritReply, trace: ActorTrace) -> Self {
+        Self { reply, trace }
+    }
+
+    pub fn reply(&self) -> &signal_persona_spirit::SpiritReply {
+        &self.reply
+    }
+
+    pub fn trace(&self) -> &ActorTrace {
+        &self.trace
+    }
+
+    pub fn into_reply(self) -> signal_persona_spirit::SpiritReply {
+        self.reply
+    }
+}
+
 impl SpiritActorRuntime {
     pub async fn start(store: StoreLocation) -> Result<Self> {
         Ok(Self {
@@ -130,6 +180,16 @@ impl SpiritActorRuntime {
     pub async fn submit_text(&self, text: impl Into<String>) -> Result<RootTextReply> {
         self.root
             .ask(SubmitText { text: text.into() })
+            .await
+            .map_err(Self::root_send_error)
+    }
+
+    pub async fn submit_request(
+        &self,
+        request: signal_persona_spirit::SpiritRequest,
+    ) -> Result<RootOperationReply> {
+        self.root
+            .ask(SubmitRequest { request })
             .await
             .map_err(Self::root_send_error)
     }
@@ -202,7 +262,10 @@ impl Actor for SpiritRoot {
                 .await;
         let ingress = ingress::IngressPhase::supervise(
             &actor_reference,
-            ingress::Arguments { decoder, dispatch },
+            ingress::Arguments {
+                decoder,
+                dispatch: dispatch.clone(),
+            },
         )
         .spawn()
         .await;
@@ -213,7 +276,7 @@ impl Actor for SpiritRoot {
         .spawn()
         .await;
 
-        Ok(Self::new(ingress, encoder))
+        Ok(Self::new(ingress, dispatch, encoder))
     }
 }
 
@@ -226,5 +289,17 @@ impl Message<SubmitText> for SpiritRoot {
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.submit_text(message.text).await
+    }
+}
+
+impl Message<SubmitRequest> for SpiritRoot {
+    type Reply = Result<RootOperationReply>;
+
+    async fn handle(
+        &mut self,
+        message: SubmitRequest,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.submit_request(message.request).await
     }
 }

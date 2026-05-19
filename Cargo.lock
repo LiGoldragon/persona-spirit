@@ -294,6 +294,7 @@ dependencies = [
  "rkyv",
  "sema",
  "sema-engine",
+ "signal-core",
  "signal-persona-spirit",
  "thiserror",
  "tokio",

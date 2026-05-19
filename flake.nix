@@ -44,6 +44,10 @@
             inherit cargoArtifacts;
             cargoTestExtraArgs = "--test actor_runtime";
           });
+          test-daemon = craneLib.cargoTest (commonArguments // {
+            inherit cargoArtifacts;
+            cargoTestExtraArgs = "--test daemon";
+          });
           doc = craneLib.cargoDoc (commonArguments // {
             inherit cargoArtifacts;
             RUSTDOCFLAGS = "-D warnings";
