@@ -80,7 +80,8 @@ The daemon socket path does not pretend RKYV Signal traffic is text. It reads
 length-prefixed `signal-persona-spirit::Frame` values, checks the
 `signal-core::Request`, and submits each `SpiritRequest` directly to
 `SpiritRoot` through the dispatch plane. The NOTA decoder remains a CLI/text
-ingress actor only.
+ingress actor only. The CLI can still run in raw one-shot mode, but it can also
+decode one NOTA request and forward it to a running daemon socket.
 
 ## Constraints
 
@@ -106,6 +107,7 @@ ingress actor only.
 | The daemon serves length-prefixed Signal frames through the actor root. | `persona_spirit_daemon_serves_signal_frames_through_actor_root` writes and reads through a real Unix socket. |
 | The daemon rejects verb/payload mismatch before actor execution. | `persona_spirit_daemon_rejects_verb_payload_mismatch_before_actor_execution` constructs a bad `signal-core::Request`. |
 | Signal-frame daemon ingress does not route through the NOTA decoder. | `persona_spirit_daemon_source_does_not_route_signal_frames_through_nota_decoder` checks the socket boundary calls `SubmitRequest`. |
+| The CLI can act as a daemon client without bypassing Signal. | `persona_spirit_client_can_send_nota_request_to_running_daemon` decodes NOTA then sends a Signal frame to the socket. |
 | No classifier or mind-forwarding behavior exists until its intent is clear. | Status section says this explicitly. |
 
 ## Code Map
@@ -144,6 +146,7 @@ Implemented now:
 - Kameo actor tree for the CLI request path;
 - `persona-spirit-daemon` typed configuration and Unix socket binding;
 - length-prefixed RKYV Signal frame request/reply path over the daemon socket;
+- CLI socket-client mode for a running daemon;
 - actor trace witnesses for root, ingress, decode, dispatch, store, sema
   writer/reader, reply shaping, and reply encoding;
 - sema-engine backed `Entry` assertion;

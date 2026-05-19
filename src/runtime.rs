@@ -1,4 +1,7 @@
-use crate::{Error, Result, SingleArgument, SpiritActorRuntime, StoreLocation};
+use crate::{
+    Error, Result, SingleArgument, SocketPath, SpiritActorRuntime, SpiritSignalClient,
+    StoreLocation,
+};
 use nota_codec::{Decoder, Encoder, NotaDecode, NotaEncode};
 use signal_persona_spirit::{
     RequestUnimplemented, SpiritReply, SpiritRequest, UnimplementedReason,
@@ -7,19 +10,35 @@ use signal_persona_spirit::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SpiritClient {
     request: SingleArgument,
-    store: StoreLocation,
+    target: ClientTarget,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClientTarget {
+    Daemon(SocketPath),
+    OneShot(StoreLocation),
 }
 
 impl SpiritClient {
     pub fn from_argument(request: SingleArgument) -> Self {
         Self {
             request,
-            store: StoreLocation::from_environment(),
+            target: ClientTarget::from_environment(),
         }
     }
 
     pub fn with_store(request: SingleArgument, store: StoreLocation) -> Self {
-        Self { request, store }
+        Self {
+            request,
+            target: ClientTarget::OneShot(store),
+        }
+    }
+
+    pub fn with_socket(request: SingleArgument, socket: SocketPath) -> Self {
+        Self {
+            request,
+            target: ClientTarget::Daemon(socket),
+        }
     }
 
     pub fn run(&self) -> Result<()> {
@@ -28,8 +47,32 @@ impl SpiritClient {
     }
 
     pub fn reply_text(&self) -> Result<String> {
-        SpiritActorRuntime::submit_text_blocking(self.store.clone(), self.request.as_str())
-            .map(|reply| reply.into_text())
+        self.target.reply_text(self.request.as_str())
+    }
+}
+
+impl ClientTarget {
+    pub fn from_environment() -> Self {
+        match std::env::var("PERSONA_SPIRIT_SOCKET") {
+            Ok(socket) => Self::Daemon(SocketPath::new(socket)),
+            Err(_) => Self::OneShot(StoreLocation::from_environment()),
+        }
+    }
+
+    fn reply_text(&self, request_text: &str) -> Result<String> {
+        match self {
+            Self::Daemon(socket) => self.daemon_reply_text(socket, request_text),
+            Self::OneShot(store) => {
+                SpiritActorRuntime::submit_text_blocking(store.clone(), request_text.to_string())
+                    .map(|reply| reply.into_text())
+            }
+        }
+    }
+
+    fn daemon_reply_text(&self, socket: &SocketPath, request_text: &str) -> Result<String> {
+        let request = SpiritRequestText::new(request_text).decode_request()?;
+        let reply = SpiritSignalClient::new(socket.clone()).submit(request)?;
+        SpiritReplyText::new(reply).encode()
     }
 }
 

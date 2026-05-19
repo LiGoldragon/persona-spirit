@@ -108,7 +108,9 @@ The daemon boundary is part of raw form. It accepts one typed
 configuration argument, owns the long-lived Kameo root and
 sema-engine store, and receives typed Signal frames from other
 components. It does not parse NOTA request text on the socket;
-NOTA belongs to the CLI/testing surface.
+NOTA belongs to the CLI/testing surface. The CLI may use a
+running daemon by decoding one NOTA request into a typed
+`SpiritRequest`, then sending it as a Signal frame.
 
 ## Constraints and actors must drive implementation
 

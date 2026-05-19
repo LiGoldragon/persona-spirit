@@ -28,6 +28,8 @@ Contract records stay in `signal-persona-spirit` and
   length-prefixed `signal-persona-spirit::Frame` values on its Unix socket.
 - The CLI request path runs through `SpiritActorRuntime` and the Kameo actor
   tree before it can produce a reply.
+- When a daemon socket is selected, the CLI decodes NOTA once and sends a
+  Signal frame to the daemon rather than opening the store itself.
 - Signal-frame ingress submits typed requests directly to `SpiritRoot`; it does
   not go back through the NOTA decoder actor.
 - Each named actor is data-bearing. Do not add public zero-sized actor nouns.

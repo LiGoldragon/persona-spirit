@@ -4,8 +4,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use nota_codec::{Encoder, NotaEncode};
 use persona_spirit::{
-    DaemonConfiguration, DaemonRuntime, SocketMode, SocketPath, SpiritFrameCodec,
-    SpiritSignalClient, StorePath,
+    DaemonConfiguration, DaemonRuntime, SingleArgument, SocketMode, SocketPath, SpiritClient,
+    SpiritFrameCodec, SpiritSignalClient, StorePath,
 };
 use signal_core::{
     ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Operation, Reply, Request,
@@ -194,4 +194,32 @@ fn persona_spirit_daemon_source_does_not_route_signal_frames_through_nota_decode
 
     assert!(!source.contains("NotaDecoder"));
     assert!(source.contains("SubmitRequest"));
+}
+
+#[test]
+fn persona_spirit_client_can_send_nota_request_to_running_daemon() {
+    let fixture = DaemonFixture::new("client-socket");
+    let daemon = DaemonRuntime::from_configuration(fixture.configuration())
+        .bind()
+        .expect("daemon binds");
+    let handle = thread::spawn(move || daemon.serve_count(1));
+    let argument = SingleArgument::from_arguments([
+        "persona-spirit".to_string(),
+        "(Entry (workspace Decision \"client socket\" \"daemon context\" Maximum \"2026-05-19T18:13:52Z\" \"daemon quote\"))"
+            .to_string(),
+    ])
+    .expect("single request argument");
+
+    let reply = SpiritClient::with_socket(argument, fixture.socket.clone())
+        .reply_text()
+        .expect("client sends to daemon");
+
+    assert_eq!(
+        reply,
+        "(RecordAccepted ((1 workspace Decision \"client socket\" Maximum)))"
+    );
+    handle
+        .join()
+        .expect("daemon thread exits")
+        .expect("daemon served client request");
 }

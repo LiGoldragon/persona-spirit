@@ -13,5 +13,5 @@ pub use daemon::{
     SpiritFrameCodec, SpiritSignalClient, StorePath,
 };
 pub use error::{Error, Result};
-pub use runtime::{SpiritClient, SpiritReplyText, SpiritRequestText};
+pub use runtime::{ClientTarget, SpiritClient, SpiritReplyText, SpiritRequestText};
 pub use store::{SpiritStore, StoreLocation};
