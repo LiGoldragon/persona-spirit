@@ -2,10 +2,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use owner_signal_persona_spirit::{
     BootstrapPolicyReloaded, DrainAndStopOrder, DrainedAndStopped, Generation, IdentityName,
-    IdentityRegistered, IdentityRetired, OwnerSpiritReply, OwnerSpiritRequest, RegisterIdentity,
-    ReloadBootstrapPolicyOrder, RetireIdentity, StartOrder, Started,
+    IdentityRegistered, IdentityRetired, OperationKind, OwnerSpiritReply, OwnerSpiritRequest,
+    RegisterIdentity, ReloadBootstrapPolicyOrder, RequestUnimplemented, RetireIdentity, StartOrder,
+    Started, UnimplementedReason,
 };
-use persona_spirit::{Error, SpiritActorRuntime, StoreLocation, TraceAction, TraceNode};
+use persona_spirit::{
+    BootstrapPolicySource, Error, SpiritActorRuntime, StoreLocation, TraceAction, TraceNode,
+};
 
 #[derive(Debug, Clone)]
 struct SpiritRuntimeFixture {
@@ -27,6 +30,15 @@ impl SpiritRuntimeFixture {
 
     async fn runtime(&self) -> SpiritActorRuntime {
         SpiritActorRuntime::start(self.location.clone())
+            .await
+            .expect("actor runtime starts")
+    }
+
+    async fn runtime_with_policy_source(
+        &self,
+        source: BootstrapPolicySource,
+    ) -> SpiritActorRuntime {
+        SpiritActorRuntime::start_with_bootstrap_policy_source(self.location.clone(), source)
             .await
             .expect("actor runtime starts")
     }
@@ -318,6 +330,35 @@ async fn persona_spirit_bootstrap_policy_reload_uses_policy_plane() {
         TraceNode::POLICY_PLANE,
         TraceNode::OWNER_PLANE,
     ]));
+    assert!(!reply.trace().contains(TraceNode::DISPATCH_PHASE));
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn persona_spirit_bootstrap_policy_reload_reports_missing_policy_source() {
+    let fixture = SpiritRuntimeFixture::new("missing-policy");
+    let mut missing = std::env::temp_dir();
+    missing.push("persona-spirit-missing-bootstrap-policy.nota");
+    let runtime = fixture
+        .runtime_with_policy_source(BootstrapPolicySource::path(missing))
+        .await;
+
+    let reply = runtime
+        .submit_owner_request(OwnerSpiritRequest::ReloadBootstrapPolicyOrder(
+            ReloadBootstrapPolicyOrder {},
+        ))
+        .await
+        .expect("policy reload type checked");
+
+    assert_eq!(
+        reply.reply(),
+        &OwnerSpiritReply::RequestUnimplemented(RequestUnimplemented {
+            operation: OperationKind::ReloadBootstrapPolicyOrder,
+            reason: UnimplementedReason::DependencyNotReady,
+        })
+    );
+    assert!(reply.trace().contains(TraceNode::POLICY_PLANE));
     assert!(!reply.trace().contains(TraceNode::DISPATCH_PHASE));
 
     runtime.stop().await.expect("runtime stops");

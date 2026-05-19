@@ -26,6 +26,7 @@ pub struct SpiritRoot {
 #[derive(Clone)]
 pub struct Arguments {
     pub store: StoreLocation,
+    pub bootstrap_policy_source: policy::BootstrapPolicySource,
 }
 
 pub struct SubmitText {
@@ -64,7 +65,20 @@ pub struct SpiritActorRuntime {
 
 impl Arguments {
     pub fn new(store: StoreLocation) -> Self {
-        Self { store }
+        Self {
+            store,
+            bootstrap_policy_source: policy::BootstrapPolicySource::default(),
+        }
+    }
+
+    pub fn with_bootstrap_policy_source(
+        store: StoreLocation,
+        bootstrap_policy_source: policy::BootstrapPolicySource,
+    ) -> Self {
+        Self {
+            store,
+            bootstrap_policy_source,
+        }
     }
 }
 
@@ -227,8 +241,23 @@ impl RootOwnerReply {
 
 impl SpiritActorRuntime {
     pub async fn start(store: StoreLocation) -> Result<Self> {
+        Self::start_with_arguments(Arguments::new(store)).await
+    }
+
+    pub async fn start_with_bootstrap_policy_source(
+        store: StoreLocation,
+        bootstrap_policy_source: policy::BootstrapPolicySource,
+    ) -> Result<Self> {
+        Self::start_with_arguments(Arguments::with_bootstrap_policy_source(
+            store,
+            bootstrap_policy_source,
+        ))
+        .await
+    }
+
+    async fn start_with_arguments(arguments: Arguments) -> Result<Self> {
         Ok(Self {
-            root: SpiritRoot::start(Arguments::new(store)).await?,
+            root: SpiritRoot::start(arguments).await?,
         })
     }
 
@@ -308,9 +337,14 @@ impl Actor for SpiritRoot {
         )
         .spawn_in_thread()
         .await;
-        let policy = policy::PolicyPlane::supervise(&actor_reference, policy::Arguments::default())
-            .spawn()
-            .await;
+        let policy = policy::PolicyPlane::supervise(
+            &actor_reference,
+            policy::Arguments {
+                source: arguments.bootstrap_policy_source,
+            },
+        )
+        .spawn()
+        .await;
         let owner = owner::OwnerPlane::supervise(
             &actor_reference,
             owner::Arguments {
