@@ -7,6 +7,7 @@ use crate::{Error, Result, StoreLocation};
 use super::decoder;
 use super::dispatch;
 use super::ingress;
+use super::owner;
 use super::pipeline::PipelineReply;
 use super::reply::{self, TextReply};
 use super::state;
@@ -15,6 +16,7 @@ use super::subscription;
 use super::trace::{ActorTrace, TraceAction, TraceNode};
 
 pub struct SpiritRoot {
+    owner: ActorRef<owner::OwnerPlane>,
     ingress: ActorRef<ingress::IngressPhase>,
     dispatch: ActorRef<dispatch::DispatchPhase>,
     encoder: ActorRef<reply::ReplyTextEncoder>,
@@ -33,6 +35,10 @@ pub struct SubmitRequest {
     pub request: signal_persona_spirit::SpiritRequest,
 }
 
+pub struct SubmitOwnerRequest {
+    pub request: owner_signal_persona_spirit::OwnerSpiritRequest,
+}
+
 #[derive(Debug, kameo::Reply)]
 pub struct RootTextReply {
     text: String,
@@ -42,6 +48,12 @@ pub struct RootTextReply {
 #[derive(Debug, kameo::Reply)]
 pub struct RootOperationReply {
     reply: signal_persona_spirit::SpiritReply,
+    trace: ActorTrace,
+}
+
+#[derive(Debug, kameo::Reply)]
+pub struct RootOwnerReply {
+    reply: owner_signal_persona_spirit::OwnerSpiritReply,
     trace: ActorTrace,
 }
 
@@ -57,11 +69,13 @@ impl Arguments {
 
 impl SpiritRoot {
     fn new(
+        owner: ActorRef<owner::OwnerPlane>,
         ingress: ActorRef<ingress::IngressPhase>,
         dispatch: ActorRef<dispatch::DispatchPhase>,
         encoder: ActorRef<reply::ReplyTextEncoder>,
     ) -> Self {
         Self {
+            owner,
             ingress,
             dispatch,
             encoder,
@@ -113,6 +127,22 @@ impl SpiritRoot {
         Ok(RootOperationReply::new(reply, trace))
     }
 
+    async fn submit_owner_request(
+        &self,
+        request: owner_signal_persona_spirit::OwnerSpiritRequest,
+    ) -> Result<RootOwnerReply> {
+        let mut trace = ActorTrace::new();
+        trace.record(TraceNode::SPIRIT_ROOT, TraceAction::MessageReceived);
+        let owner = self
+            .owner
+            .ask(owner::RouteOwnerRequest { request, trace })
+            .await
+            .map_err(Self::owner_send_error)?;
+        let mut trace = owner.trace;
+        trace.record(TraceNode::SPIRIT_ROOT, TraceAction::MessageReplied);
+        Ok(RootOwnerReply::new(owner.reply, trace))
+    }
+
     async fn encode(&self, pipeline: PipelineReply) -> Result<TextReply> {
         let (reply, trace) = pipeline.into_parts();
         self.encoder
@@ -133,6 +163,10 @@ impl SpiritRoot {
             SendError::HandlerError(error) => error,
             other => Error::actor_runtime(other.to_string()),
         }
+    }
+
+    fn owner_send_error<Message>(error: SendError<Message, kameo::error::Infallible>) -> Error {
+        Error::actor_runtime(error.to_string())
     }
 }
 
@@ -172,6 +206,24 @@ impl RootOperationReply {
     }
 }
 
+impl RootOwnerReply {
+    fn new(reply: owner_signal_persona_spirit::OwnerSpiritReply, trace: ActorTrace) -> Self {
+        Self { reply, trace }
+    }
+
+    pub fn reply(&self) -> &owner_signal_persona_spirit::OwnerSpiritReply {
+        &self.reply
+    }
+
+    pub fn trace(&self) -> &ActorTrace {
+        &self.trace
+    }
+
+    pub fn into_reply(self) -> owner_signal_persona_spirit::OwnerSpiritReply {
+        self.reply
+    }
+}
+
 impl SpiritActorRuntime {
     pub async fn start(store: StoreLocation) -> Result<Self> {
         Ok(Self {
@@ -192,6 +244,16 @@ impl SpiritActorRuntime {
     ) -> Result<RootOperationReply> {
         self.root
             .ask(SubmitRequest { request })
+            .await
+            .map_err(Self::root_send_error)
+    }
+
+    pub async fn submit_owner_request(
+        &self,
+        request: owner_signal_persona_spirit::OwnerSpiritRequest,
+    ) -> Result<RootOwnerReply> {
+        self.root
+            .ask(SubmitOwnerRequest { request })
             .await
             .map_err(Self::root_send_error)
     }
@@ -245,6 +307,9 @@ impl Actor for SpiritRoot {
         )
         .spawn_in_thread()
         .await;
+        let owner = owner::OwnerPlane::supervise(&actor_reference, owner::Arguments::default())
+            .spawn()
+            .await;
         let shaper =
             reply::ReplyShaper::supervise(&actor_reference, reply::ShaperArguments::default())
                 .spawn()
@@ -289,7 +354,7 @@ impl Actor for SpiritRoot {
         .spawn()
         .await;
 
-        Ok(Self::new(ingress, dispatch, encoder))
+        Ok(Self::new(owner, ingress, dispatch, encoder))
     }
 }
 
@@ -314,5 +379,17 @@ impl Message<SubmitRequest> for SpiritRoot {
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.submit_request(message.request).await
+    }
+}
+
+impl Message<SubmitOwnerRequest> for SpiritRoot {
+    type Reply = Result<RootOwnerReply>;
+
+    async fn handle(
+        &mut self,
+        message: SubmitOwnerRequest,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.submit_owner_request(message.request).await
     }
 }

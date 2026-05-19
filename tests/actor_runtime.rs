@@ -1,5 +1,11 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use owner_signal_persona_spirit::{
+    DrainAndStopOrder, DrainedAndStopped, Generation, IdentityName, IdentityRegistered,
+    IdentityRetired, OperationKind, OwnerSpiritReply, OwnerSpiritRequest, RegisterIdentity,
+    ReloadBootstrapPolicyOrder, RequestUnimplemented, RetireIdentity, StartOrder, Started,
+    UnimplementedReason,
+};
 use persona_spirit::{Error, SpiritActorRuntime, StoreLocation, TraceAction, TraceNode};
 
 #[derive(Debug, Clone)]
@@ -220,6 +226,104 @@ async fn persona_spirit_subscription_retractions_use_subscription_plane() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn persona_spirit_owner_lifecycle_orders_use_owner_plane() {
+    let fixture = SpiritRuntimeFixture::new("owner-lifecycle");
+    let runtime = fixture.runtime().await;
+
+    let started = runtime
+        .submit_owner_request(OwnerSpiritRequest::StartOrder(StartOrder {
+            generation: Generation::new(7),
+        }))
+        .await
+        .expect("owner start accepted");
+    let stopped = runtime
+        .submit_owner_request(OwnerSpiritRequest::DrainAndStopOrder(DrainAndStopOrder {}))
+        .await
+        .expect("owner drain accepted");
+
+    assert_eq!(
+        started.reply(),
+        &OwnerSpiritReply::Started(Started {
+            generation: Generation::new(7),
+        })
+    );
+    assert_eq!(
+        stopped.reply(),
+        &OwnerSpiritReply::DrainedAndStopped(DrainedAndStopped {})
+    );
+    assert!(started.trace().contains_ordered(&[
+        TraceNode::SPIRIT_ROOT,
+        TraceNode::OWNER_PLANE,
+        TraceNode::SPIRIT_ROOT,
+    ]));
+    assert!(!started.trace().contains(TraceNode::DISPATCH_PHASE));
+    assert!(!started.trace().contains(TraceNode::RECORD_STORE));
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn persona_spirit_owner_identity_orders_use_owner_plane() {
+    let fixture = SpiritRuntimeFixture::new("owner-identity");
+    let runtime = fixture.runtime().await;
+
+    let registered = runtime
+        .submit_owner_request(OwnerSpiritRequest::RegisterIdentity(RegisterIdentity {
+            name: IdentityName::new("author"),
+        }))
+        .await
+        .expect("identity registered");
+    let retired = runtime
+        .submit_owner_request(OwnerSpiritRequest::RetireIdentity(RetireIdentity {
+            name: IdentityName::new("author"),
+        }))
+        .await
+        .expect("identity retired");
+
+    assert_eq!(
+        registered.reply(),
+        &OwnerSpiritReply::IdentityRegistered(IdentityRegistered {
+            name: IdentityName::new("author"),
+        })
+    );
+    assert_eq!(
+        retired.reply(),
+        &OwnerSpiritReply::IdentityRetired(IdentityRetired {
+            name: IdentityName::new("author"),
+        })
+    );
+    assert!(registered.trace().contains(TraceNode::OWNER_PLANE));
+    assert!(retired.trace().contains(TraceNode::OWNER_PLANE));
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn persona_spirit_bootstrap_policy_reload_is_honestly_unimplemented() {
+    let fixture = SpiritRuntimeFixture::new("owner-policy");
+    let runtime = fixture.runtime().await;
+
+    let reply = runtime
+        .submit_owner_request(OwnerSpiritRequest::ReloadBootstrapPolicyOrder(
+            ReloadBootstrapPolicyOrder {},
+        ))
+        .await
+        .expect("policy reload type checked");
+
+    assert_eq!(
+        reply.reply(),
+        &OwnerSpiritReply::RequestUnimplemented(RequestUnimplemented {
+            operation: OperationKind::ReloadBootstrapPolicyOrder,
+            reason: UnimplementedReason::NotBuiltYet,
+        })
+    );
+    assert!(reply.trace().contains(TraceNode::OWNER_PLANE));
+    assert!(!reply.trace().contains(TraceNode::DISPATCH_PHASE));
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn persona_spirit_unimplemented_statement_uses_reply_shaper_not_store() {
     let fixture = SpiritRuntimeFixture::new("reply-shaper");
     let runtime = fixture.runtime().await;
@@ -304,6 +408,7 @@ fn persona_spirit_actor_types_are_data_bearing() {
         ("src/actors/decoder.rs", "pub struct NotaDecoder {"),
         ("src/actors/dispatch.rs", "pub struct DispatchPhase {"),
         ("src/actors/ingress.rs", "pub struct IngressPhase {"),
+        ("src/actors/owner.rs", "pub struct OwnerPlane {"),
         ("src/actors/reply.rs", "pub struct ReplyShaper {"),
         ("src/actors/reply.rs", "pub struct ReplyTextEncoder {"),
         ("src/actors/root.rs", "pub struct SpiritRoot {"),

@@ -1,6 +1,7 @@
 pub mod decoder;
 pub mod dispatch;
 pub mod ingress;
+pub mod owner;
 pub mod pipeline;
 pub mod reply;
 pub mod root;

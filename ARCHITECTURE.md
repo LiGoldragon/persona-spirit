@@ -51,6 +51,7 @@ uses the same logic planes the daemon will keep alive:
 ```mermaid
 flowchart LR
     root["SpiritRoot"]
+    owner["OwnerPlane"]
     ingress["IngressPhase"]
     decoder["NotaDecoder"]
     dispatch["DispatchPhase"]
@@ -62,6 +63,7 @@ flowchart LR
     writer["SemaWriter trace"]
     reader["SemaReader trace"]
 
+    root --> owner
     root --> ingress
     ingress --> decoder
     ingress --> dispatch
@@ -74,13 +76,15 @@ flowchart LR
     root --> encoder
 ```
 
-`RecordStore` owns `SpiritStore`, which owns the sema-engine handle. It runs as
-the store plane. `StatePlane` owns current psyche state and pending
-clarification questions. `SubscriptionPlane` owns subscription tokens and live
-stream registrations. Request decoding, dispatch, unimplemented-reply shaping,
-and NOTA reply rendering are separate actor planes. `ActorTrace` is a runtime
-witness, not an audit log: tests assert the expected actor path for each
-constraint.
+`OwnerPlane` handles the owner-only lifecycle and identity requests carried by
+`owner-signal-persona-spirit`; it is not reachable through the ordinary text
+ingress or dispatch path. `RecordStore` owns `SpiritStore`, which owns the
+sema-engine handle. It runs as the store plane. `StatePlane` owns current
+psyche state and pending clarification questions. `SubscriptionPlane` owns
+subscription tokens and live stream registrations. Request decoding, dispatch,
+unimplemented-reply shaping, and NOTA reply rendering are separate actor
+planes. `ActorTrace` is a runtime witness, not an audit log: tests assert the
+expected actor path for each constraint.
 
 The daemon socket path does not pretend RKYV Signal traffic is text. It reads
 length-prefixed `signal-persona-spirit::Frame` values, checks the
@@ -114,6 +118,9 @@ decode one NOTA request and forward it to a running daemon socket.
 | Valid unimplemented requests do not touch the store. | `persona_spirit_unimplemented_statement_uses_reply_shaper_not_store` checks `ReplyShaper` and absence of `RecordStore`. |
 | Invalid NOTA keeps a typed decode error through the actor path. | `persona_spirit_invalid_text_keeps_typed_decode_error` checks `Error::InvalidSpiritRequest`. |
 | Shutdown releases the store so a later runtime can reopen the same path. | `persona_spirit_shutdown_releases_store_for_restart` writes, stops, restarts, and reads. |
+| Owner lifecycle requests route through `OwnerPlane`, not the ordinary dispatch path. | `persona_spirit_owner_lifecycle_orders_use_owner_plane` checks `Started` / `DrainedAndStopped` replies and no dispatch/store trace. |
+| Owner identity requests route through `OwnerPlane`. | `persona_spirit_owner_identity_orders_use_owner_plane` checks register/retire replies. |
+| Bootstrap-policy reload remains honestly unimplemented until import policy lands. | `persona_spirit_bootstrap_policy_reload_is_honestly_unimplemented` returns owner `RequestUnimplemented`. |
 | The daemon configuration is a single untagged NOTA struct record. | `persona_spirit_daemon_configuration_is_one_nota_record` round-trips the config and rejects a variant wrapper shape. |
 | The daemon serves length-prefixed Signal frames through the actor root. | `persona_spirit_daemon_serves_signal_frames_through_actor_root` writes and reads through a real Unix socket. |
 | The daemon rejects verb/payload mismatch before actor execution. | `persona_spirit_daemon_rejects_verb_payload_mismatch_before_actor_execution` constructs a bad `signal-core::Request`. |
@@ -132,6 +139,7 @@ src/runtime.rs                     — CLI boundary that delegates into SpiritAc
 src/store.rs                       — sema-engine backed entry store and record queries
 src/actors/root.rs                 — Kameo root and blocking one-shot runtime helper
 src/actors/ingress.rs              — text ingress phase
+src/actors/owner.rs                — owner-signal lifecycle and identity actor
 src/actors/decoder.rs              — strict NOTA request decoder actor
 src/actors/dispatch.rs             — request dispatch actor
 src/actors/state.rs                — psyche-state and pending-question working-state actor
@@ -168,6 +176,9 @@ Implemented now:
 - `QuestionPending` with an empty pending-question set;
 - `SubscribeState` and `SubscribeRecords` with snapshot-open replies;
 - state and record subscription retractions with typed close acknowledgements;
+- owner-signal start, drain/stop, register identity, and retire identity
+  handling inside the actor tree;
+- honest owner-signal unimplemented reply for bootstrap-policy reload;
 - typed `RequestUnimplemented` NOTA replies for behavior not built yet;
 - dependency on the ordinary and owner spirit contracts.
 
@@ -176,7 +187,7 @@ Not implemented:
 - intent classifier;
 - owner-Mutate forwarding to mind;
 - subscription event delivery;
-- owner-signal lifecycle handling;
+- owner socket binding and owner Signal frame serving;
 - bootstrap-policy import;
 - filesystem intent projection.
 

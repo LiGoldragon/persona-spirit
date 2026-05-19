@@ -33,6 +33,8 @@ Contract records stay in `signal-persona-spirit` and
 - Signal-frame ingress submits typed requests directly to `SpiritRoot`; it does
   not go back through the NOTA decoder actor.
 - Each named actor is data-bearing. Do not add public zero-sized actor nouns.
+- Owner-signal lifecycle and identity requests route through `OwnerPlane`, not
+  through the ordinary text ingress or dispatch path.
 - `Entry` assertions persist one top-level record in the local sema-engine
   store and return `RecordAccepted`.
 - `Entry` assertions pass through `RecordStore` and the sema-writer trace

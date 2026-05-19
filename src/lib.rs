@@ -5,7 +5,7 @@ pub mod error;
 pub mod runtime;
 pub mod store;
 
-pub use actors::root::{RootTextReply, SpiritActorRuntime};
+pub use actors::root::{RootOperationReply, RootOwnerReply, RootTextReply, SpiritActorRuntime};
 pub use actors::trace::{ActorTrace, TraceAction, TraceNode};
 pub use argument::SingleArgument;
 pub use daemon::{
