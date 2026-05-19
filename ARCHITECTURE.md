@@ -48,7 +48,7 @@ audit once the runtime lands.
 |---|---|
 | The CLI binary accepts exactly one argument. | `tests/boundary.rs` checks missing and extra arguments. |
 | The daemon binary accepts exactly one argument. | `tests/boundary.rs` checks the shared argument parser. |
-| The CLI type-checks one `signal-persona-spirit::SpiritRequest`. | `tests/boundary.rs` checks valid `PsycheStatement` and `IntentEntry` requests. |
+| The CLI type-checks one `signal-persona-spirit::SpiritRequest`. | `tests/boundary.rs` checks valid `PsycheStatement` and `Entry` requests. |
 | Valid CLI requests return one typed NOTA reply. | The current reply is `SpiritRequestUnimplemented`, naming the accepted operation honestly. |
 | No classifier or mind-forwarding behavior exists until its intent is clear. | Status section says this explicitly. |
 

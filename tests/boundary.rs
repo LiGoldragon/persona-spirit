@@ -79,21 +79,18 @@ fn persona_spirit_client_type_checks_psyche_statement() {
 }
 
 #[test]
-fn persona_spirit_client_type_checks_intent_entry_with_restatements() {
+fn persona_spirit_client_type_checks_entry_with_restatements() {
     let argument = SingleArgument::from_arguments([
         "persona-spirit".to_string(),
-        "(IntentEntry workspace Decision \"summary only\" \"current implementation context\" Maximum [(IntentVerbatim \"2026-05-19T13:08:11Z\" \"first statement\") (IntentVerbatim \"2026-05-19T13:12:00Z\" \"restated statement\")])".to_string(),
+        "(Entry workspace Decision \"summary only\" \"current implementation context\" Maximum [(Verbatim \"2026-05-19T13:08:11Z\" \"first statement\") (Verbatim \"2026-05-19T13:12:00Z\" \"restated statement\")])".to_string(),
     ])
     .expect("single argument accepted");
 
     let reply = SpiritClient::from_argument(argument)
         .reply_text()
-        .expect("intent entry type checked");
+        .expect("entry type checked");
 
-    assert_eq!(
-        reply,
-        "(SpiritRequestUnimplemented IntentEntry NotBuiltYet)"
-    );
+    assert_eq!(reply, "(SpiritRequestUnimplemented Entry NotBuiltYet)");
 }
 
 #[test]
