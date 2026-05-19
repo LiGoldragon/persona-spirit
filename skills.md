@@ -23,6 +23,9 @@ Contract records stay in `signal-persona-spirit` and
 ## Invariants
 
 - CLI and daemon binaries take exactly one argument.
+- The CLI decodes that argument as a `signal-persona-spirit::SpiritRequest`.
+- Valid CLI requests emit a typed NOTA `SpiritReply`; until storage exists the
+  reply is `SpiritRequestUnimplemented`.
 - Runtime code does not invent intent-classification behavior.
 - Spirit forwards authority to mind only through typed owner-signal contracts.
 - Until the daemon runtime lands, binaries fail honestly with

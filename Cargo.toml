@@ -21,6 +21,7 @@ name = "persona-spirit-daemon"
 path = "src/bin/persona-spirit-daemon.rs"
 
 [dependencies]
+nota-codec                  = { git = "https://github.com/LiGoldragon/nota-codec.git", branch = "main" }
 owner-signal-persona-spirit = { git = "https://github.com/LiGoldragon/owner-signal-persona-spirit.git", branch = "main" }
 signal-persona-spirit       = { git = "https://github.com/LiGoldragon/signal-persona-spirit.git", branch = "main" }
 thiserror                   = "2"

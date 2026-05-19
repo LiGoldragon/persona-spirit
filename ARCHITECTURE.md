@@ -48,7 +48,8 @@ audit once the runtime lands.
 |---|---|
 | The CLI binary accepts exactly one argument. | `tests/boundary.rs` checks missing and extra arguments. |
 | The daemon binary accepts exactly one argument. | `tests/boundary.rs` checks the shared argument parser. |
-| Runtime stubs are honest. | CLI and daemon return `RuntimeNotImplemented`, not fake success. |
+| The CLI type-checks one `signal-persona-spirit::SpiritRequest`. | `tests/boundary.rs` checks valid `PsycheStatement` and `IntentEntry` requests. |
+| Valid CLI requests return one typed NOTA reply. | The current reply is `SpiritRequestUnimplemented`, naming the accepted operation honestly. |
 | No classifier or mind-forwarding behavior exists until its intent is clear. | Status section says this explicitly. |
 
 ## Code Map
@@ -57,7 +58,7 @@ audit once the runtime lands.
 src/lib.rs                         — module entry
 src/argument.rs                    — one-argument boundary
 src/error.rs                       — typed error
-src/runtime.rs                     — honest not-built-yet runtime shell
+src/runtime.rs                     — CLI request decoding + honest not-built-yet reply
 src/bin/persona-spirit.rs          — thin CLI binary
 src/bin/persona-spirit-daemon.rs   — daemon binary
 bootstrap-policy.nota              — first policy seed placeholder
@@ -71,7 +72,8 @@ Implemented now:
 - repo scaffold;
 - daemon and CLI binary names;
 - one-argument boundary parser;
-- typed runtime-not-implemented errors;
+- typed CLI request decoding for `signal-persona-spirit::SpiritRequest`;
+- typed `SpiritRequestUnimplemented` NOTA replies for valid requests;
 - dependency on the ordinary and owner spirit contracts.
 
 Not implemented:
@@ -84,5 +86,5 @@ Not implemented:
 - filesystem intent projection.
 
 The next implementation step needs the daemon configuration and socket shape
-for spirit plus the first `owner-signal-persona-mind` variants spirit will
-issue.
+for spirit. Spirit-to-mind owner variants are not needed for the current raw
+CLI/type-checking slice.

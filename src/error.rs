@@ -13,6 +13,26 @@ pub enum Error {
         surface: &'static str,
         reason: &'static str,
     },
+
+    #[error("invalid persona-spirit request: {reason}")]
+    InvalidSpiritRequest { reason: String },
+
+    #[error("invalid persona-spirit reply: {reason}")]
+    InvalidSpiritReply { reason: String },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+impl Error {
+    pub fn invalid_spirit_request(error: nota_codec::Error) -> Self {
+        Self::InvalidSpiritRequest {
+            reason: error.to_string(),
+        }
+    }
+
+    pub fn invalid_spirit_reply(error: nota_codec::Error) -> Self {
+        Self::InvalidSpiritReply {
+            reason: error.to_string(),
+        }
+    }
+}
