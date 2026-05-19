@@ -89,6 +89,41 @@ async fn persona_spirit_record_observation_uses_read_plane_without_write_plane()
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn persona_spirit_state_observation_uses_state_plane() {
+    let fixture = SpiritRuntimeFixture::new("state-plane");
+    let runtime = fixture.runtime().await;
+
+    let reply = runtime
+        .submit_text("(StateObservation ())")
+        .await
+        .expect("state observed");
+
+    assert_eq!(reply.text(), "(StateObserved ((Absent None)))");
+    assert!(reply.trace().contains(TraceNode::STATE_PLANE));
+    assert!(!reply.trace().contains(TraceNode::RECORD_STORE));
+    assert!(!reply.trace().contains(TraceNode::SEMA_READER));
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn persona_spirit_question_observation_uses_state_plane() {
+    let fixture = SpiritRuntimeFixture::new("question-plane");
+    let runtime = fixture.runtime().await;
+
+    let reply = runtime
+        .submit_text("(QuestionPending ())")
+        .await
+        .expect("questions observed");
+
+    assert_eq!(reply.text(), "(QuestionsObserved ([]))");
+    assert!(reply.trace().contains(TraceNode::STATE_PLANE));
+    assert!(!reply.trace().contains(TraceNode::RECORD_STORE));
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn persona_spirit_unimplemented_statement_uses_reply_shaper_not_store() {
     let fixture = SpiritRuntimeFixture::new("reply-shaper");
     let runtime = fixture.runtime().await;
@@ -176,6 +211,7 @@ fn persona_spirit_actor_types_are_data_bearing() {
         ("src/actors/reply.rs", "pub struct ReplyShaper {"),
         ("src/actors/reply.rs", "pub struct ReplyTextEncoder {"),
         ("src/actors/root.rs", "pub struct SpiritRoot {"),
+        ("src/actors/state.rs", "pub struct StatePlane {"),
         ("src/actors/store.rs", "pub struct RecordStore {"),
     ];
 

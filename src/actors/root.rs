@@ -9,6 +9,7 @@ use super::dispatch;
 use super::ingress;
 use super::pipeline::PipelineReply;
 use super::reply::{self, TextReply};
+use super::state;
 use super::store;
 use super::trace::{ActorTrace, TraceAction, TraceNode};
 
@@ -247,10 +248,14 @@ impl Actor for SpiritRoot {
             reply::ReplyShaper::supervise(&actor_reference, reply::ShaperArguments::default())
                 .spawn()
                 .await;
+        let state = state::StatePlane::supervise(&actor_reference, state::Arguments::default())
+            .spawn()
+            .await;
         let dispatch = dispatch::DispatchPhase::supervise(
             &actor_reference,
             dispatch::Arguments {
                 store,
+                state,
                 reply: shaper,
             },
         )

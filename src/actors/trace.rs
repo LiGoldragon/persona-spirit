@@ -8,6 +8,7 @@ impl TraceNode {
     pub const INGRESS_PHASE: Self = Self::new("IngressPhase");
     pub const NOTA_DECODER: Self = Self::new("NotaDecoder");
     pub const DISPATCH_PHASE: Self = Self::new("DispatchPhase");
+    pub const STATE_PLANE: Self = Self::new("StatePlane");
     pub const RECORD_STORE: Self = Self::new("RecordStore");
     pub const SEMA_WRITER: Self = Self::new("SemaWriter");
     pub const SEMA_READER: Self = Self::new("SemaReader");

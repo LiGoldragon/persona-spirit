@@ -37,6 +37,8 @@ Contract records stay in `signal-persona-spirit` and
   store and return `RecordAccepted`.
 - `Entry` assertions pass through `RecordStore` and the sema-writer trace
   plane; queries pass through the sema-reader trace plane.
+- `StateObservation` and `QuestionPending` pass through `StatePlane`, not
+  `RecordStore`.
 - `RecordObservation` queries return summaries by default and provenance only
   when the caller asks for it.
 - Valid but unimplemented requests use `ReplyShaper` and do not touch

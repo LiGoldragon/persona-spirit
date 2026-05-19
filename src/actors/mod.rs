@@ -4,5 +4,6 @@ pub mod ingress;
 pub mod pipeline;
 pub mod reply;
 pub mod root;
+pub mod state;
 pub mod store;
 pub mod trace;

@@ -54,6 +54,7 @@ flowchart LR
     ingress["IngressPhase"]
     decoder["NotaDecoder"]
     dispatch["DispatchPhase"]
+    state["StatePlane"]
     store["RecordStore"]
     shaper["ReplyShaper"]
     encoder["ReplyTextEncoder"]
@@ -63,6 +64,7 @@ flowchart LR
     root --> ingress
     ingress --> decoder
     ingress --> dispatch
+    dispatch --> state
     dispatch --> store
     dispatch --> shaper
     store --> writer
@@ -98,6 +100,8 @@ decode one NOTA request and forward it to a running daemon socket.
 | Spirit mints `RecordIdentifier`; agents never submit it. | `persona_spirit_client_asserts_entry_and_mints_record_identifier` sends no identifier and receives one. |
 | Repeated similar entries remain distinct records. | `persona_spirit_client_repeated_entries_remain_distinct_records` stores two matching summaries. |
 | Record observations use the read plane and not the write plane. | `persona_spirit_record_observation_uses_read_plane_without_write_plane` checks `SemaReader` without `SemaWriter`. |
+| Psyche-state observations use a working-state plane, not record storage. | `persona_spirit_state_observation_uses_state_plane` checks `StatePlane` without `RecordStore`. |
+| Pending-question observations use the working-state plane. | `persona_spirit_question_observation_uses_state_plane` and `persona_spirit_client_observes_empty_pending_questions` check the empty raw state. |
 | Summary queries do not include provenance. | `persona_spirit_client_persists_entries_for_later_summary_observation` checks `RecordsObserved`. |
 | Provenance appears only when requested. | `persona_spirit_client_returns_provenance_only_when_requested` checks `RecordProvenancesObserved`. |
 | Valid unimplemented requests do not touch the store. | `persona_spirit_unimplemented_statement_uses_reply_shaper_not_store` checks `ReplyShaper` and absence of `RecordStore`. |
@@ -123,6 +127,7 @@ src/actors/root.rs                 — Kameo root and blocking one-shot runtime 
 src/actors/ingress.rs              — text ingress phase
 src/actors/decoder.rs              — strict NOTA request decoder actor
 src/actors/dispatch.rs             — request dispatch actor
+src/actors/state.rs                — psyche-state and pending-question working-state actor
 src/actors/store.rs                — sema-engine store actor
 src/actors/reply.rs                — unimplemented reply shaper + NOTA reply encoder actors
 src/actors/trace.rs                — actor-path witness values
@@ -148,9 +153,11 @@ Implemented now:
 - length-prefixed RKYV Signal frame request/reply path over the daemon socket;
 - CLI socket-client mode for a running daemon;
 - actor trace witnesses for root, ingress, decode, dispatch, store, sema
-  writer/reader, reply shaping, and reply encoding;
+  writer/reader, working state, reply shaping, and reply encoding;
 - sema-engine backed `Entry` assertion;
 - `RecordObservation` summary and provenance queries;
+- `StateObservation` with default absent psyche state;
+- `QuestionPending` with an empty pending-question set;
 - typed `RequestUnimplemented` NOTA replies for behavior not built yet;
 - dependency on the ordinary and owner spirit contracts.
 

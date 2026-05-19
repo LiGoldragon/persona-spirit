@@ -134,6 +134,28 @@ fn persona_spirit_client_persists_entries_for_later_summary_observation() {
 }
 
 #[test]
+fn persona_spirit_client_observes_default_psyche_state() {
+    let fixture = StoreFixture::new("state-observation");
+    let reply = fixture
+        .client("(StateObservation ())")
+        .reply_text()
+        .expect("state observed");
+
+    assert_eq!(reply, "(StateObserved ((Absent None)))");
+}
+
+#[test]
+fn persona_spirit_client_observes_empty_pending_questions() {
+    let fixture = StoreFixture::new("question-observation");
+    let reply = fixture
+        .client("(QuestionPending ())")
+        .reply_text()
+        .expect("questions observed");
+
+    assert_eq!(reply, "(QuestionsObserved ([]))");
+}
+
+#[test]
 fn persona_spirit_client_filters_record_observation_by_topic() {
     let fixture = StoreFixture::new("topic-filter");
     fixture
