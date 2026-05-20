@@ -2,8 +2,12 @@
 
 Persona component for the psyche ↔ mind interface.
 
-Current status: foundation shell. The ordinary and owner contracts exist in
-`signal-persona-spirit` and `owner-signal-persona-spirit`; this runtime crate
-currently exposes the binary names, single-argument boundary checks, and
-bootstrap policy seed while the daemon actor tree and mind forwarding are
-designed.
+Current status: typed daemon foundation. The ordinary socket accepts
+length-prefixed `signal-persona-spirit` frames over `signal-frame`; the owner
+socket accepts `owner-signal-persona-spirit` frames over `signal-core`. The CLI
+can type-check one NOTA request or forward it to a running daemon. The actor
+tree persists `Record` operations, serves `Observe` reads, opens/retracts
+`Watch` subscriptions, and handles owner lifecycle/bootstrap-policy requests.
+
+Not implemented yet: intent classification, spirit-to-mind owner-Mutate
+forwarding, and live subscription event delivery.

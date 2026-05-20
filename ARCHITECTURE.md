@@ -105,12 +105,12 @@ socket.
 |---|---|
 | The CLI binary accepts exactly one argument. | `tests/boundary.rs` checks missing and extra arguments. |
 | The daemon binary accepts exactly one argument. | `tests/boundary.rs` checks the shared argument parser. |
-| The CLI type-checks one `signal-persona-spirit::SpiritRequest`. | `tests/boundary.rs` checks valid `Statement`, `Entry`, and `RecordObservation` requests. |
+| The CLI type-checks one `signal-persona-spirit::SpiritRequest`. | `tests/boundary.rs` checks valid `State`, `Record`, and `Observe` requests. |
 | The CLI request path uses the Kameo actor tree. | `persona_spirit_command_line_path_uses_actor_runtime` checks the CLI path delegates to `SpiritActorRuntime`. |
 | Kameo is the only actor runtime dependency. | `persona_spirit_uses_kameo_as_only_actor_runtime` scans the manifest. |
 | Actor types are data-bearing, not public zero-sized actor nouns. | `persona_spirit_actor_types_are_data_bearing` checks each named actor has a struct body. |
-| `Entry` assertions traverse root, ingress, decoder, dispatch, store, sema writer, and reply encoder. | `persona_spirit_entry_assertion_runs_through_actor_planes` checks `ActorTrace` ordering. |
-| `Entry` assertions persist a top-level record. | `persona_spirit_client_asserts_entry_and_mints_record_identifier` checks `RecordAccepted`. |
+| `Record` operations traverse root, ingress, decoder, dispatch, store, sema writer, and reply encoder. | `persona_spirit_entry_assertion_runs_through_actor_planes` checks `ActorTrace` ordering. |
+| `Record` operations persist a top-level record. | `persona_spirit_client_asserts_entry_and_mints_record_identifier` checks `RecordAccepted`. |
 | Spirit mints `RecordIdentifier`; agents never submit it. | `persona_spirit_client_asserts_entry_and_mints_record_identifier` sends no identifier and receives one. |
 | Repeated similar entries remain distinct records. | `persona_spirit_client_repeated_entries_remain_distinct_records` stores two matching summaries. |
 | Record observations use the read plane and not the write plane. | `persona_spirit_record_observation_uses_read_plane_without_write_plane` checks `SemaReader` without `SemaWriter`. |
@@ -134,7 +134,6 @@ socket.
 | The ordinary socket rejects owner Signal frames. | `persona_spirit_ordinary_socket_rejects_owner_signal_frames` writes an owner frame to the ordinary socket and expects decode rejection. |
 | The owner socket rejects ordinary Signal frames. | `persona_spirit_owner_socket_rejects_ordinary_signal_frames` writes an ordinary frame to the owner socket and expects decode rejection. |
 | Daemon shutdown removes both socket paths. | `persona_spirit_daemon_serves_signal_frames_through_actor_root` checks both ordinary and owner sockets are removed after bounded serving. |
-| The daemon rejects verb/payload mismatch before actor execution. | `persona_spirit_daemon_rejects_verb_payload_mismatch_before_actor_execution` constructs a bad `signal-frame::Request`. |
 | Signal-frame daemon ingress does not route through the NOTA decoder. | `persona_spirit_daemon_source_does_not_route_signal_frames_through_nota_decoder` checks the socket boundary calls `SubmitRequest`. |
 | The CLI can act as a daemon client without bypassing Signal. | `persona_spirit_client_can_send_nota_request_to_running_daemon` decodes NOTA then sends a Signal frame to the socket. |
 | No classifier or mind-forwarding behavior exists until its intent is clear. | Status section says this explicitly. |
@@ -186,12 +185,12 @@ Implemented now:
 - CLI socket-client mode for a running daemon;
 - actor trace witnesses for root, ingress, decode, dispatch, store, sema
   writer/reader, working state, reply shaping, and reply encoding;
-- sema-engine backed `Entry` assertion;
-- `RecordObservation` summary and provenance queries;
-- `StateObservation` with default absent psyche state;
-- `QuestionPending` with an empty pending-question set;
-- `SubscribeState` and `SubscribeRecords` with snapshot-open replies;
-- state and record subscription retractions with typed close acknowledgements;
+- sema-engine backed `Record` operation;
+- `Observe(Records(...))` summary and provenance queries;
+- `Observe(State(...))` with default absent psyche state;
+- `Observe(Questions(...))` with an empty pending-question set;
+- `Watch(State(...))` and `Watch(Records(...))` with snapshot-open replies;
+- `Unwatch(State(...))` and `Unwatch(Records(...))` with typed close acknowledgements;
 - owner-signal start, drain/stop, register identity, and retire identity
   handling inside the actor tree;
 - bootstrap-policy source selection from daemon configuration, parsing, and
