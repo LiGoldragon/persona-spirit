@@ -81,7 +81,7 @@ impl ClassificationPolicy {
             .duration_since(UNIX_EPOCH)
             .map(|duration| duration.as_secs())
             .unwrap_or(0);
-        Timestamp::new(format!("unix-seconds-{seconds}"))
+        Timestamp::new(seconds)
     }
 }
 
