@@ -5,8 +5,7 @@ use kameo::error::Infallible;
 use kameo::message::{Context, Message};
 use nota_codec::{Decoder, NotaDecode, NotaRecord};
 use owner_signal_persona_spirit::{
-    BootstrapPolicyReloaded, OperationKind, OwnerSpiritReply, RequestUnimplemented,
-    UnimplementedReason,
+    BootstrapPolicyReloaded, OwnerSpiritReply, RequestUnimplemented, UnimplementedReason,
 };
 
 use super::trace::{ActorTrace, TraceAction, TraceNode};
@@ -56,7 +55,6 @@ impl PolicyPlane {
                 OwnerSpiritReply::BootstrapPolicyReloaded(BootstrapPolicyReloaded {})
             }
             Err(_reason) => OwnerSpiritReply::RequestUnimplemented(RequestUnimplemented {
-                operation: OperationKind::Reload,
                 reason: UnimplementedReason::DependencyNotReady,
             }),
         };

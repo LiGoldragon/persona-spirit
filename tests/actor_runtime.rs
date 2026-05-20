@@ -2,8 +2,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use owner_signal_persona_spirit::{
     BootstrapPolicy, BootstrapPolicyReloaded, Drain, DrainedAndStopped, Generation, IdentityName,
-    IdentityRegistered, IdentityRetired, OperationKind, OwnerSpiritReply, OwnerSpiritRequest,
-    Registration, RequestUnimplemented, Retirement, Start, Started, UnimplementedReason,
+    IdentityRegistered, IdentityRetired, OwnerSpiritReply, OwnerSpiritRequest, Registration,
+    RequestUnimplemented, Retirement, Start, Started, UnimplementedReason,
 };
 use persona_spirit::{
     BootstrapPolicySource, Error, SpiritActorRuntime, StoreLocation, TraceAction, TraceNode,
@@ -434,7 +434,6 @@ async fn persona_spirit_bootstrap_policy_reload_reports_missing_policy_source() 
     assert_eq!(
         reply.reply(),
         &OwnerSpiritReply::RequestUnimplemented(RequestUnimplemented {
-            operation: OperationKind::Reload,
             reason: UnimplementedReason::DependencyNotReady,
         })
     );

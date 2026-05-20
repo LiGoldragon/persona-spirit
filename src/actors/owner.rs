@@ -3,8 +3,8 @@ use kameo::error::{Infallible, SendError};
 use kameo::message::{Context, Message};
 use owner_signal_persona_spirit::{
     Drain, DrainedAndStopped, Generation, IdentityName, IdentityRegistered, IdentityRetired,
-    OperationKind, OwnerSpiritReply, OwnerSpiritRequest, Registration, RequestUnimplemented,
-    Retirement, Started, UnimplementedReason,
+    OwnerSpiritReply, OwnerSpiritRequest, Registration, RequestUnimplemented, Retirement, Started,
+    UnimplementedReason,
 };
 
 use super::policy;
@@ -138,7 +138,6 @@ impl OwnerPlane {
         trace.record(TraceNode::OWNER_PLANE, TraceAction::MessageReplied);
         OwnerPipelineReply {
             reply: OwnerSpiritReply::RequestUnimplemented(RequestUnimplemented {
-                operation: OperationKind::Reload,
                 reason: UnimplementedReason::DependencyNotReady,
             }),
             trace,
