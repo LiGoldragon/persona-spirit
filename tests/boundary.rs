@@ -116,7 +116,7 @@ fn persona_spirit_binary_rejects_flag_style_argument() {
 fn persona_spirit_binary_requires_socket_environment() {
     let output = Command::new(env!("CARGO_BIN_EXE_spirit"))
         .env_remove("PERSONA_SPIRIT_SOCKET")
-        .arg("(Observe (State ()))")
+        .arg("(Observe State)")
         .output()
         .expect("binary runs");
 
@@ -200,7 +200,7 @@ fn persona_spirit_client_persists_entries_for_later_summary_observation() {
 fn persona_spirit_client_observes_default_psyche_state() {
     let fixture = StoreFixture::new("state-observation");
     let reply = fixture
-        .reply_text("(Observe (State ()))")
+        .reply_text("(Observe State)")
         .expect("state observed");
 
     assert_eq!(reply, "(StateObserved ((Absent None)))");
@@ -210,7 +210,7 @@ fn persona_spirit_client_observes_default_psyche_state() {
 fn persona_spirit_client_observes_empty_pending_questions() {
     let fixture = StoreFixture::new("question-observation");
     let reply = fixture
-        .reply_text("(Observe (Questions ()))")
+        .reply_text("(Observe Questions)")
         .expect("questions observed");
 
     assert_eq!(reply, "(QuestionsObserved ([]))");
@@ -220,7 +220,7 @@ fn persona_spirit_client_observes_empty_pending_questions() {
 fn persona_spirit_client_opens_and_retracts_state_subscription() {
     let fixture = StoreFixture::new("state-subscription");
     let opened = fixture
-        .reply_text("(Watch (State ()))")
+        .reply_text("(Watch State)")
         .expect("state subscription opened");
     let retracted = fixture
         .reply_text("(Unwatch (State (1)))")

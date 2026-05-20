@@ -158,7 +158,7 @@ async fn persona_spirit_state_observation_uses_state_plane() {
     let runtime = fixture.runtime().await;
 
     let reply = runtime
-        .submit_text("(Observe (State ()))")
+        .submit_text("(Observe State)")
         .await
         .expect("state observed");
 
@@ -176,7 +176,7 @@ async fn persona_spirit_question_observation_uses_state_plane() {
     let runtime = fixture.runtime().await;
 
     let reply = runtime
-        .submit_text("(Observe (Questions ()))")
+        .submit_text("(Observe Questions)")
         .await
         .expect("questions observed");
 
@@ -221,7 +221,7 @@ async fn persona_spirit_state_subscription_uses_subscription_plane_after_state_s
     let runtime = fixture.runtime().await;
 
     let reply = runtime
-        .submit_text("(Watch (State ()))")
+        .submit_text("(Watch State)")
         .await
         .expect("state subscription opened");
 
@@ -281,7 +281,7 @@ async fn persona_spirit_subscription_retractions_use_subscription_plane() {
     let runtime = fixture.runtime().await;
 
     runtime
-        .submit_text("(Watch (State ()))")
+        .submit_text("(Watch State)")
         .await
         .expect("state subscription opened");
     runtime

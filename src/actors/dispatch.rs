@@ -222,9 +222,9 @@ impl SpiritCommandExecutor {
             Command::ClassifyStatement(statement) => self.classify_statement(statement).await?,
             Command::AssertEntry(entry) => self.capture_entry(entry).await?,
             Command::ReadRecords(observation) => self.observe_records(observation).await?,
-            Command::ReadState(_observation) => self.observe_state().await?,
-            Command::ReadQuestions(_pending) => self.observe_questions().await?,
-            Command::OpenStateSubscription(_subscription) => self.subscribe_state().await?,
+            Command::ReadState => self.observe_state().await?,
+            Command::ReadQuestions => self.observe_questions().await?,
+            Command::OpenStateSubscription => self.subscribe_state().await?,
             Command::OpenRecordSubscription(subscription) => {
                 self.subscribe_records(subscription).await?
             }

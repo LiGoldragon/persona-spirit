@@ -5,12 +5,12 @@
 //! receives only payloadless classification labels.
 
 use signal_persona_spirit::{
-    Observation, QuestionPending, QuestionsObserved, RecordAccepted, RecordObservation,
-    RecordProvenancesObserved, RecordQuery, RecordSubscription, RecordSubscriptionToken,
-    RecordsObserved, RequestUnimplemented, SpiritObserverFilter, SpiritObserverSubscriptionOpened,
-    SpiritObserverSubscriptionToken, SpiritReply, SpiritRequest, StateObservation, StateObserved,
-    StateSubscription, StateSubscriptionToken, Statement, Subscription, SubscriptionOpened,
-    SubscriptionRetracted, SubscriptionToken,
+    Observation, QuestionsObserved, RecordAccepted, RecordObservation, RecordProvenancesObserved,
+    RecordQuery, RecordSubscription, RecordSubscriptionToken, RecordsObserved,
+    RequestUnimplemented, SpiritObserverFilter, SpiritObserverSubscriptionOpened,
+    SpiritObserverSubscriptionToken, SpiritReply, SpiritRequest, StateObserved,
+    StateSubscriptionToken, Statement, Subscription, SubscriptionOpened, SubscriptionRetracted,
+    SubscriptionToken,
 };
 use signal_sema::{SemaObservation, SemaOperation, SemaOutcome, ToSemaOperation, ToSemaOutcome};
 
@@ -19,9 +19,9 @@ pub enum Command {
     ClassifyStatement(Statement),
     AssertEntry(signal_persona_spirit::Entry),
     ReadRecords(RecordObservation),
-    ReadState(StateObservation),
-    ReadQuestions(QuestionPending),
-    OpenStateSubscription(StateSubscription),
+    ReadState,
+    ReadQuestions,
+    OpenStateSubscription,
     OpenRecordSubscription(RecordSubscription),
     CloseStateSubscription(StateSubscriptionToken),
     CloseRecordSubscription(RecordSubscriptionToken),
@@ -50,15 +50,9 @@ impl Command {
             SpiritRequest::Observe(Observation::Records(query)) => {
                 Some(Self::ReadRecords(RecordObservation { query }))
             }
-            SpiritRequest::Observe(Observation::State(observation)) => {
-                Some(Self::ReadState(observation))
-            }
-            SpiritRequest::Observe(Observation::Questions(pending)) => {
-                Some(Self::ReadQuestions(pending))
-            }
-            SpiritRequest::Watch(Subscription::State(subscription)) => {
-                Some(Self::OpenStateSubscription(subscription))
-            }
+            SpiritRequest::Observe(Observation::State) => Some(Self::ReadState),
+            SpiritRequest::Observe(Observation::Questions) => Some(Self::ReadQuestions),
+            SpiritRequest::Watch(Subscription::State) => Some(Self::OpenStateSubscription),
             SpiritRequest::Watch(Subscription::Records(subscription)) => {
                 Some(Self::OpenRecordSubscription(subscription))
             }
@@ -120,10 +114,8 @@ impl ToSemaOperation for Command {
     fn to_sema_operation(&self) -> SemaOperation {
         match self {
             Self::ClassifyStatement(_) | Self::AssertEntry(_) => SemaOperation::Assert,
-            Self::ReadRecords(_) | Self::ReadState(_) | Self::ReadQuestions(_) => {
-                SemaOperation::Match
-            }
-            Self::OpenStateSubscription(_)
+            Self::ReadRecords(_) | Self::ReadState | Self::ReadQuestions => SemaOperation::Match,
+            Self::OpenStateSubscription
             | Self::OpenRecordSubscription(_)
             | Self::OpenObserverSubscription(_) => SemaOperation::Subscribe,
             Self::CloseStateSubscription(_)

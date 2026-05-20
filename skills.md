@@ -51,8 +51,8 @@ Contract records stay in `signal-persona-spirit` and
   store and return `RecordAccepted`.
 - `Entry` assertions pass through `RecordStore` and the sema-writer trace
   plane; queries pass through the sema-reader trace plane.
-- `StateObservation` and `QuestionPending` pass through `StatePlane`, not
-  `RecordStore`.
+- `Observation::State` and `Observation::Questions` pass through
+  `StatePlane`, not `RecordStore`.
 - `SubscribeState` snapshots state through `StatePlane`, then opens the stream
   through `SubscriptionPlane`.
 - `SubscribeRecords` snapshots summaries through `RecordStore` and

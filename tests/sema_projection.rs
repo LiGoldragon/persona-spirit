@@ -5,8 +5,8 @@ use signal_frame::SubscriptionTokenInner;
 use signal_persona_spirit::{
     Certainty, Context, Entry, Kind, Observation, ObservationMode, Quote, RecordQuery,
     SpiritObserverFilter, SpiritObserverSubscriptionToken, SpiritReply, SpiritRequest,
-    StateObservation, StateSubscription, StateSubscriptionToken, Statement, StatementText,
-    Subscription, SubscriptionToken, Summary, Timestamp, Topic,
+    StateSubscriptionToken, Statement, StatementText, Subscription, SubscriptionToken, Summary,
+    Timestamp, Topic,
 };
 use signal_sema::{SemaObservation, SemaOperation, SemaOutcome};
 
@@ -139,7 +139,7 @@ async fn spirit_record_query_projects_to_matched_observation() {
 async fn spirit_state_query_projects_to_matched_observation() {
     let fixture = RuntimeFixture::new("state-query");
     let runtime = fixture.runtime().await;
-    let request = SpiritRequest::Observe(Observation::State(StateObservation {}));
+    let request = SpiritRequest::Observe(Observation::State);
     let runtime_reply = runtime
         .submit_request(request.clone())
         .await
@@ -159,7 +159,7 @@ async fn spirit_state_query_projects_to_matched_observation() {
 async fn spirit_state_subscription_projects_to_subscribed_observation() {
     let fixture = RuntimeFixture::new("state-subscription");
     let runtime = fixture.runtime().await;
-    let request = SpiritRequest::Watch(Subscription::State(StateSubscription {}));
+    let request = SpiritRequest::Watch(Subscription::State);
     let runtime_reply = runtime
         .submit_request(request.clone())
         .await
@@ -180,9 +180,7 @@ async fn spirit_state_subscription_retraction_projects_to_retracted_observation(
     let fixture = RuntimeFixture::new("state-retraction");
     let runtime = fixture.runtime().await;
     runtime
-        .submit_request(SpiritRequest::Watch(Subscription::State(
-            StateSubscription {},
-        )))
+        .submit_request(SpiritRequest::Watch(Subscription::State))
         .await
         .expect("subscription opened");
     let request = SpiritRequest::Unwatch(SubscriptionToken::State(StateSubscriptionToken {
