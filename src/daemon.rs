@@ -650,26 +650,15 @@ impl OrdinaryExchangeHandler {
         &self,
         request: signal_frame::Request<SpiritRequest>,
     ) -> Result<Reply<SpiritReply>> {
-        let replies = request
-            .payloads
-            .into_iter()
-            .map(|request| self.reply_to_operation(request))
-            .collect::<Result<Vec<_>>>()?;
-        Ok(Reply::committed(
-            NonEmpty::try_from_vec(replies).expect("request is non-empty"),
-        ))
-    }
-
-    fn reply_to_operation(&self, request: SpiritRequest) -> Result<SubReply<SpiritReply>> {
         let reply = self
             .runtime
             .block_on(async {
                 self.root
-                    .ask(crate::actors::root::SubmitRequest { request })
+                    .ask(crate::actors::root::SubmitFrameRequest { request })
                     .await
             })
             .map_err(|error| Error::actor_runtime(error.to_string()))?;
-        Ok(SubReply::Ok(reply.into_reply()))
+        Ok(reply.into_reply())
     }
 }
 

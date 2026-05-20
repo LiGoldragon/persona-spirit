@@ -56,6 +56,8 @@ flowchart LR
     decoder["NotaDecoder"]
     classifier["ClassifierPlane"]
     dispatch["DispatchPhase"]
+    executor["SignalExecutor"]
+    observer["SemaObserver"]
     state["StatePlane"]
     subscription["SubscriptionPlane"]
     store["RecordStore"]
@@ -70,6 +72,8 @@ flowchart LR
     ingress --> decoder
     ingress --> dispatch
     dispatch --> classifier
+    dispatch --> executor
+    executor --> observer
     dispatch --> state
     dispatch --> subscription
     dispatch --> store
@@ -83,10 +87,14 @@ flowchart LR
 `owner-signal-persona-spirit`; it is not reachable through the ordinary text
 ingress or dispatch path. `PolicyPlane` owns bootstrap-policy parsing and
 reload state. `ClassifierPlane` owns the current conservative statement-to-record
-policy. `RecordStore` owns `SpiritStore`, which owns the sema-engine
-handle. It runs as the store plane. `StatePlane` owns current psyche state and
-pending clarification questions. `SubscriptionPlane` owns subscription tokens
-and live stream registrations. Request decoding, dispatch,
+policy. `DispatchPhase` is the boundary where ordinary operations enter
+`signal-executor`: it lowers contract operations into Spirit-local `Command`
+values, executes them through the Kameo planes, and publishes payloadless
+`signal-sema` observations after successful execution. `RecordStore` owns
+`SpiritStore`, which owns the sema-engine handle. It runs as the store plane.
+`StatePlane` owns current psyche state and pending clarification questions.
+`SubscriptionPlane` owns subscription tokens and live stream registrations.
+Request decoding, dispatch,
 unimplemented-reply shaping, and NOTA reply rendering are separate actor
 planes. `ActorTrace` is a runtime witness, not an audit log: tests assert the
 expected actor path for each constraint.
@@ -119,6 +127,8 @@ running the actor tree in-process.
 | Spirit-local commands project to payloadless Sema operation labels. | `tests/sema_projection.rs` checks `Command::from_request` and `ToSemaOperation` through real actor-runtime requests. |
 | Spirit-local effects project to payloadless Sema outcome labels. | `tests/sema_projection.rs` checks `Effect::from_reply`, `ToSemaOutcome`, and `SemaObservation` after real actor-runtime replies. |
 | Sema observations do not carry Spirit payloads. | `tests/sema_projection.rs` expects only `SemaOperation` plus `SemaOutcome` for assert, match, subscribe, and retract paths. |
+| Ordinary requests execute through `signal-executor`, not a hand-rolled request match. | `persona_spirit_ordinary_request_path_uses_signal_executor_and_sema_observer` and `persona_spirit_dispatch_path_depends_on_signal_executor` check runtime trace and source dependency. |
+| Multi-operation ordinary batches do not pretend to be atomic until the store supports atomic batch execution. | `persona_spirit_daemon_rejects_multi_operation_batches_before_any_commit` expects `BatchAborted` with `NotCommitted` and an empty later query. |
 | Accepted no-change paths still project through explicit Spirit-local commands. | `spirit_unimplemented_observer_operations_project_as_explicit_no_change_commands` checks valid-but-unimplemented `Tap` / `Untap` requests become `Subscribe` / `Retract` commands with `NoChange` outcomes. |
 | Kameo is the only actor runtime dependency. | `persona_spirit_uses_kameo_as_only_actor_runtime` scans the manifest. |
 | Actor types are data-bearing, not public zero-sized actor nouns. | `persona_spirit_actor_types_are_data_bearing` checks each named actor has a struct body. |
@@ -169,7 +179,7 @@ src/actors/owner.rs                — owner-signal lifecycle and identity actor
 src/actors/policy.rs               — bootstrap-policy parsing and reload actor
 src/actors/decoder.rs              — strict NOTA request decoder actor
 src/actors/classifier.rs           — conservative statement-to-record classifier actor
-src/actors/dispatch.rs             — request dispatch actor
+src/actors/dispatch.rs             — request dispatch actor; signal-executor lowering, command execution, and Sema observation publication
 src/actors/state.rs                — psyche-state and pending-question working-state actor
 src/actors/subscription.rs         — subscription token and stream registration actor
 src/actors/store.rs                — sema-engine store actor
@@ -206,7 +216,8 @@ Implemented now:
   daemon socket;
 - CLI socket-client mode for a running daemon;
 - actor trace witnesses for root, ingress, decode, dispatch, store, sema
-  writer/reader, working state, reply shaping, and reply encoding;
+  writer/reader, signal-executor, signal-sema observer, working state, reply
+  shaping, and reply encoding;
 - sema-engine backed `Record` operation;
 - `Observe(Records(...))` summary and provenance queries;
 - `Observe(State(...))` with default absent psyche state;
@@ -220,13 +231,17 @@ Implemented now:
 - typed `RequestUnimplemented` NOTA replies for behavior not built yet;
 - dependency on the ordinary and owner spirit contracts.
 - local `Command` / `Effect` projection into payloadless
-  `signal-sema::SemaObservation` labels, tested through the actor runtime.
+  `signal-sema::SemaObservation` labels, tested through the actor runtime;
+- ordinary request execution through `signal-executor::Executor`, with the
+  existing Kameo planes serving as Spirit's component-local
+  `CommandExecutor`.
 
 Not implemented:
 
 - LLM-backed intent classification;
 - owner-Mutate forwarding to mind;
 - subscription event delivery;
+- atomic execution for multi-operation ordinary batches;
 - filesystem intent projection.
 
 `persona-spirit` can now replace manual file editing for typed capture/query

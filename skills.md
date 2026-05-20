@@ -35,6 +35,9 @@ Contract records stay in `signal-persona-spirit` and
   Signal frame to the daemon rather than opening the store itself.
 - Signal-frame ingress submits typed requests directly to `SpiritRoot`; it does
   not go back through the NOTA decoder actor.
+- Ordinary request execution passes through `signal-executor`: dispatch lowers
+  `SpiritRequest` into Spirit-local `Command`, executes through the Kameo actor
+  planes as `CommandExecutor`, and publishes `signal-sema` observations.
 - The ordinary socket rejects owner frames; the owner socket rejects ordinary
   frames.
 - Each named actor is data-bearing. Do not add public zero-sized actor nouns.

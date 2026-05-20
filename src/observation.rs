@@ -111,6 +111,34 @@ impl Effect {
     pub fn sema_observation_for(&self, command: &Command) -> SemaObservation {
         SemaObservation::from_projection(command, self)
     }
+
+    pub fn into_reply(self) -> SpiritReply {
+        match self {
+            Self::RecordAccepted(payload) => SpiritReply::RecordAccepted(payload),
+            Self::StateObserved(payload) => SpiritReply::StateObserved(payload),
+            Self::RecordsObserved(payload) => SpiritReply::RecordsObserved(payload),
+            Self::RecordProvenancesObserved(payload) => {
+                SpiritReply::RecordProvenancesObserved(payload)
+            }
+            Self::QuestionsObserved(payload) => SpiritReply::QuestionsObserved(payload),
+            Self::StateSubscriptionOpened(payload) => SpiritReply::StateSubscriptionOpened(payload),
+            Self::RecordSubscriptionOpened(payload) => {
+                SpiritReply::RecordSubscriptionOpened(payload)
+            }
+            Self::SubscriptionOpened(payload) => SpiritReply::SubscriptionOpened(payload),
+            Self::StateSubscriptionRetracted(payload) => {
+                SpiritReply::StateSubscriptionRetracted(payload)
+            }
+            Self::RecordSubscriptionRetracted(payload) => {
+                SpiritReply::RecordSubscriptionRetracted(payload)
+            }
+            Self::SubscriptionRetracted(payload) => SpiritReply::SubscriptionRetracted(payload),
+            Self::ObserverSubscriptionOpened(payload) => {
+                SpiritReply::ObserverSubscriptionOpened(payload)
+            }
+            Self::RequestUnimplemented(payload) => SpiritReply::RequestUnimplemented(payload),
+        }
+    }
 }
 
 impl ToSemaOperation for Command {

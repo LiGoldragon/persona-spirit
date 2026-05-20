@@ -7,7 +7,9 @@ pub mod runtime;
 pub mod store;
 
 pub use actors::policy::BootstrapPolicySource;
-pub use actors::root::{RootOperationReply, RootOwnerReply, RootTextReply, SpiritActorRuntime};
+pub use actors::root::{
+    RootFrameReply, RootOperationReply, RootOwnerReply, RootTextReply, SpiritActorRuntime,
+};
 pub use actors::trace::{ActorTrace, TraceAction, TraceNode};
 pub use argument::SingleArgument;
 pub use daemon::{

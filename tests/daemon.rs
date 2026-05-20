@@ -15,7 +15,11 @@ use persona_spirit::{
     OwnerSpiritSignalClient, SingleArgument, SocketMode, SocketPath, SpiritClient,
     SpiritFrameCodec, SpiritSignalClient, StorePath,
 };
-use signal_frame::{ExchangeIdentifier, ExchangeLane, LaneSequence, RequestPayload, SessionEpoch};
+use signal_frame::{
+    AcceptedOutcome, BatchFailureReason, CommitStatus, ExchangeIdentifier, ExchangeLane,
+    LaneSequence, Reply, RequestBuilder, RequestPayload, RetryClassification, SessionEpoch,
+    SubReply,
+};
 use signal_persona_spirit::{
     Certainty, Context, Entry, Frame, FrameBody, Kind, Observation, ObservationMode, Quote,
     RecordQuery, SpiritReply, SpiritRequest, Statement, StatementText, Summary, Timestamp, Topic,
@@ -169,6 +173,65 @@ fn persona_spirit_daemon_serves_signal_frames_through_actor_root() {
         !owner_socket.as_path().exists(),
         "daemon shutdown removes the owner socket path"
     );
+}
+
+#[test]
+fn persona_spirit_daemon_rejects_multi_operation_batches_before_any_commit() {
+    let fixture = DaemonFixture::new("multi-operation-batch");
+    let daemon = DaemonRuntime::from_configuration(fixture.configuration())
+        .bind()
+        .expect("daemon binds");
+    let ordinary_socket = fixture.ordinary_socket.clone();
+    let handle = thread::spawn(move || daemon.serve_count(2));
+
+    let codec = SpiritFrameCodec::default();
+    let request = RequestBuilder::new()
+        .with(SpiritRequest::Record(entry("first batch entry")))
+        .with(SpiritRequest::Record(entry("second batch entry")))
+        .build()
+        .expect("non-empty multi operation request");
+    let mut stream = UnixStream::connect(ordinary_socket.as_path()).expect("client connects");
+    let frame = Frame::new(FrameBody::Request {
+        exchange: exchange(),
+        request,
+    });
+    codec
+        .write_frame(&mut stream, &frame)
+        .expect("multi operation request writes");
+    let reply = codec
+        .reply_from_frame(codec.read_frame(&mut stream).expect("reply frame reads"))
+        .expect("reply decodes");
+
+    assert_eq!(
+        reply,
+        Reply::Accepted {
+            outcome: AcceptedOutcome::BatchAborted {
+                reason: BatchFailureReason::EngineRejected,
+                retry: RetryClassification::NotRetryable,
+                commit: CommitStatus::NotCommitted,
+            },
+            per_operation: signal_frame::NonEmpty::from_head_and_tail(
+                SubReply::Invalidated,
+                vec![SubReply::Invalidated]
+            ),
+        }
+    );
+
+    let observed = fixture
+        .client()
+        .submit(observe_all())
+        .expect("records observed");
+    assert_eq!(
+        observed,
+        SpiritReply::RecordsObserved(signal_persona_spirit::RecordsObserved {
+            records: Vec::new(),
+        })
+    );
+
+    handle
+        .join()
+        .expect("daemon thread exits")
+        .expect("daemon served batch and observe frames");
 }
 
 #[test]
@@ -373,7 +436,7 @@ fn persona_spirit_daemon_source_does_not_route_signal_frames_through_nota_decode
         .expect("daemon source is readable");
 
     assert!(!source.contains("NotaDecoder"));
-    assert!(source.contains("SubmitRequest"));
+    assert!(source.contains("SubmitFrameRequest"));
 }
 
 #[test]

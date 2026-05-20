@@ -38,6 +38,10 @@ pub struct SubmitRequest {
     pub request: signal_persona_spirit::SpiritRequest,
 }
 
+pub struct SubmitFrameRequest {
+    pub request: signal_frame::Request<signal_persona_spirit::SpiritRequest>,
+}
+
 pub struct SubmitOwnerRequest {
     pub request: owner_signal_persona_spirit::OwnerSpiritRequest,
 }
@@ -51,6 +55,12 @@ pub struct RootTextReply {
 #[derive(Debug, kameo::Reply)]
 pub struct RootOperationReply {
     reply: signal_persona_spirit::SpiritReply,
+    trace: ActorTrace,
+}
+
+#[derive(Debug, kameo::Reply)]
+pub struct RootFrameReply {
+    reply: signal_frame::Reply<signal_persona_spirit::SpiritReply>,
     trace: ActorTrace,
 }
 
@@ -133,14 +143,30 @@ impl SpiritRoot {
     ) -> Result<RootOperationReply> {
         let mut trace = ActorTrace::new();
         trace.record(TraceNode::SPIRIT_ROOT, TraceAction::MessageReceived);
-        let pipeline = self
+        let frame = self
             .dispatch
             .ask(dispatch::RouteRequest { request, trace })
             .await
             .map_err(Self::pipeline_send_error)?;
-        let (reply, mut trace) = pipeline.into_parts();
+        let (reply, mut trace) = frame.into_parts();
         trace.record(TraceNode::SPIRIT_ROOT, TraceAction::MessageReplied);
         Ok(RootOperationReply::new(reply, trace))
+    }
+
+    async fn submit_frame_request(
+        &self,
+        request: signal_frame::Request<signal_persona_spirit::SpiritRequest>,
+    ) -> Result<RootFrameReply> {
+        let mut trace = ActorTrace::new();
+        trace.record(TraceNode::SPIRIT_ROOT, TraceAction::MessageReceived);
+        let frame = self
+            .dispatch
+            .ask(dispatch::RouteFrameRequest { request, trace })
+            .await
+            .map_err(Self::frame_send_error)?;
+        let (reply, mut trace) = frame.into_parts();
+        trace.record(TraceNode::SPIRIT_ROOT, TraceAction::MessageReplied);
+        Ok(RootFrameReply::new(reply, trace))
     }
 
     async fn submit_owner_request(
@@ -168,6 +194,13 @@ impl SpiritRoot {
     }
 
     fn pipeline_send_error<Message>(error: SendError<Message, Error>) -> Error {
+        match error {
+            SendError::HandlerError(error) => error,
+            other => Error::actor_runtime(other.to_string()),
+        }
+    }
+
+    fn frame_send_error<Message>(error: SendError<Message, Error>) -> Error {
         match error {
             SendError::HandlerError(error) => error,
             other => Error::actor_runtime(other.to_string()),
@@ -218,6 +251,27 @@ impl RootOperationReply {
     }
 
     pub fn into_reply(self) -> signal_persona_spirit::SpiritReply {
+        self.reply
+    }
+}
+
+impl RootFrameReply {
+    fn new(
+        reply: signal_frame::Reply<signal_persona_spirit::SpiritReply>,
+        trace: ActorTrace,
+    ) -> Self {
+        Self { reply, trace }
+    }
+
+    pub fn reply(&self) -> &signal_frame::Reply<signal_persona_spirit::SpiritReply> {
+        &self.reply
+    }
+
+    pub fn trace(&self) -> &ActorTrace {
+        &self.trace
+    }
+
+    pub fn into_reply(self) -> signal_frame::Reply<signal_persona_spirit::SpiritReply> {
         self.reply
     }
 }
@@ -275,6 +329,16 @@ impl SpiritActorRuntime {
     ) -> Result<RootOperationReply> {
         self.root
             .ask(SubmitRequest { request })
+            .await
+            .map_err(Self::root_send_error)
+    }
+
+    pub async fn submit_frame_request(
+        &self,
+        request: signal_frame::Request<signal_persona_spirit::SpiritRequest>,
+    ) -> Result<RootFrameReply> {
+        self.root
+            .ask(SubmitFrameRequest { request })
             .await
             .map_err(Self::root_send_error)
     }
@@ -431,6 +495,18 @@ impl Message<SubmitRequest> for SpiritRoot {
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.submit_request(message.request).await
+    }
+}
+
+impl Message<SubmitFrameRequest> for SpiritRoot {
+    type Reply = Result<RootFrameReply>;
+
+    async fn handle(
+        &mut self,
+        message: SubmitFrameRequest,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.submit_frame_request(message.request).await
     }
 }
 

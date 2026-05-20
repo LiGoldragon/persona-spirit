@@ -67,8 +67,10 @@ async fn persona_spirit_entry_assertion_runs_through_actor_planes() {
         TraceNode::INGRESS_PHASE,
         TraceNode::NOTA_DECODER,
         TraceNode::DISPATCH_PHASE,
+        TraceNode::SIGNAL_EXECUTOR,
         TraceNode::RECORD_STORE,
         TraceNode::SEMA_WRITER,
+        TraceNode::SEMA_OBSERVER,
         TraceNode::REPLY_TEXT_ENCODER,
         TraceNode::SPIRIT_ROOT,
     ]));
@@ -77,6 +79,46 @@ async fn persona_spirit_entry_assertion_runs_through_actor_planes() {
             .trace()
             .contains_action(TraceNode::SEMA_WRITER, TraceAction::RecordCommitted)
     );
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn persona_spirit_ordinary_request_path_uses_signal_executor_and_sema_observer() {
+    let fixture = SpiritRuntimeFixture::new("signal-executor-path");
+    let runtime = fixture.runtime().await;
+
+    let reply = runtime
+        .submit_request(SpiritRequest::Record(signal_persona_spirit::Entry {
+            topic: signal_persona_spirit::Topic::new("workspace"),
+            kind: signal_persona_spirit::Kind::Decision,
+            summary: signal_persona_spirit::Summary::new("executor path"),
+            context: signal_persona_spirit::Context::new("actor context"),
+            certainty: signal_persona_spirit::Certainty::Maximum,
+            timestamp: signal_persona_spirit::Timestamp::new("2026-05-20T18:13:52Z"),
+            quote: signal_persona_spirit::Quote::new("actor quote"),
+        }))
+        .await
+        .expect("entry accepted");
+
+    assert!(
+        reply
+            .trace()
+            .contains_action(TraceNode::SIGNAL_EXECUTOR, TraceAction::OperationReceived)
+    );
+    assert!(
+        reply
+            .trace()
+            .contains_action(TraceNode::SEMA_OBSERVER, TraceAction::ObservationProjected)
+    );
+    assert!(reply.trace().contains_ordered(&[
+        TraceNode::DISPATCH_PHASE,
+        TraceNode::SIGNAL_EXECUTOR,
+        TraceNode::RECORD_STORE,
+        TraceNode::SEMA_WRITER,
+        TraceNode::SEMA_OBSERVER,
+        TraceNode::SPIRIT_ROOT,
+    ]));
 
     runtime.stop().await.expect("runtime stops");
 }
@@ -472,6 +514,22 @@ fn persona_spirit_command_line_path_does_not_use_actor_runtime_directly() {
     assert!(source.contains("SpiritReplyText::new"));
     assert!(!source.contains("SpiritActorRuntime"));
     assert!(!source.contains("StoreLocation"));
+}
+
+#[test]
+fn persona_spirit_dispatch_path_depends_on_signal_executor() {
+    let manifest = std::fs::read_to_string(format!("{}/Cargo.toml", env!("CARGO_MANIFEST_DIR")))
+        .expect("cargo manifest is readable");
+    let source = std::fs::read_to_string(format!(
+        "{}/src/actors/dispatch.rs",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .expect("dispatch source is readable");
+
+    assert!(manifest.contains("signal-executor"));
+    assert!(source.contains("signal_executor::"));
+    assert!(source.contains("Executor::new"));
+    assert!(source.contains(".execute(request).await"));
 }
 
 #[test]

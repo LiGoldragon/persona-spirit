@@ -1,3 +1,6 @@
+use signal_frame::{
+    BatchErrorClassification, BatchFailureReason, CommitStatus, RetryClassification,
+};
 use thiserror::Error as ThisError;
 
 #[derive(ThisError, Debug, Clone, PartialEq, Eq)]
@@ -40,6 +43,9 @@ pub enum Error {
 
     #[error("persona-spirit request rejected before execution: {reason}")]
     RequestRejected { reason: String },
+
+    #[error("persona-spirit does not yet support atomic batches with {operation_count} operations")]
+    UnsupportedAtomicBatch { operation_count: usize },
 
     #[error("persona-spirit store error: {reason}")]
     SpiritStore { reason: String },
@@ -90,6 +96,45 @@ impl Error {
     pub fn actor_runtime(reason: impl Into<String>) -> Self {
         Self::ActorRuntime {
             reason: reason.into(),
+        }
+    }
+}
+
+impl BatchErrorClassification for Error {
+    fn batch_failure_reason(&self) -> BatchFailureReason {
+        match self {
+            Self::ActorRuntime { .. } | Self::InputOutput { .. } => {
+                BatchFailureReason::EngineUnavailable
+            }
+            _ => BatchFailureReason::EngineRejected,
+        }
+    }
+
+    fn retry_classification(&self) -> RetryClassification {
+        match self {
+            Self::ActorRuntime { .. } | Self::InputOutput { .. } => RetryClassification::Unknown,
+            Self::UnsupportedAtomicBatch { .. } => RetryClassification::NotRetryable,
+            _ => RetryClassification::NotRetryable,
+        }
+    }
+
+    fn commit_status(&self) -> CommitStatus {
+        match self {
+            Self::UnsupportedAtomicBatch { .. }
+            | Self::InvalidSpiritRequest { .. }
+            | Self::InvalidSpiritReply { .. }
+            | Self::InvalidDaemonConfiguration { .. }
+            | Self::RequestRejected { .. }
+            | Self::RuntimeNotImplemented { .. }
+            | Self::SignalFrame { .. }
+            | Self::FrameTooLarge { .. }
+            | Self::UnexpectedFrame { .. }
+            | Self::MissingSpiritSocket
+            | Self::WrongArgumentCount { .. }
+            | Self::FlagArgument { .. } => CommitStatus::NotCommitted,
+            Self::InputOutput { .. } | Self::ActorRuntime { .. } | Self::SpiritStore { .. } => {
+                CommitStatus::Unknown
+            }
         }
     }
 }

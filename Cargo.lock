@@ -293,6 +293,7 @@ dependencies = [
  "rkyv",
  "sema",
  "sema-engine",
+ "signal-executor",
  "signal-frame",
  "signal-persona-spirit",
  "signal-sema",
@@ -477,6 +478,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "signal-executor"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/signal-executor.git?branch=main#7b0ca56a7b0ce5d7c5c53fe36a2acc5d9df090e2"
+dependencies = [
+ "rkyv",
+ "signal-frame",
+ "signal-sema",
+ "thiserror",
 ]
 
 [[package]]
