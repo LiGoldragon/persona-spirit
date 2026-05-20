@@ -148,7 +148,8 @@ impl StoredRecord {
         RecordProvenance {
             summary: self.summary(),
             context: self.entry.context,
-            timestamp: self.entry.timestamp,
+            date: self.entry.date,
+            time: self.entry.time,
             quote: self.entry.quote,
         }
     }

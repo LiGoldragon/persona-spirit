@@ -136,7 +136,7 @@ fn persona_spirit_client_accepts_request_file_path_argument() {
     request_path.push(format!("persona-spirit-request-{nanos}.nota"));
     fs::write(
         &request_path,
-        "(Record (workspace Decision \"file request\" \"path context\" Maximum 1779000000 \"path quote\"))",
+        "(Record (workspace Decision \"file request\" \"path context\" Maximum (2026 5 20) (14 30 0) \"path quote\"))",
     )
     .expect("request file written");
 
@@ -167,7 +167,7 @@ fn persona_spirit_client_classifies_statement_as_provisional_record() {
 fn persona_spirit_client_asserts_entry_and_mints_record_identifier() {
     let fixture = StoreFixture::new("assert-entry");
     let reply = fixture
-        .reply_text("(Record (workspace Decision \"summary only\" \"current implementation context\" Maximum 1779000000 \"first statement\"))")
+        .reply_text("(Record (workspace Decision \"summary only\" \"current implementation context\" Maximum (2026 5 20) (14 30 0) \"first statement\"))")
         .expect("entry persisted");
 
     assert_eq!(
@@ -177,13 +177,27 @@ fn persona_spirit_client_asserts_entry_and_mints_record_identifier() {
 }
 
 #[test]
+fn persona_spirit_client_rejects_opaque_integer_timestamp_shape() {
+    let error = SpiritRequestText::new(
+        "(Record (workspace Decision \"summary only\" \"current implementation context\" Maximum 1779000000 \"first statement\"))",
+    )
+    .decode_request()
+    .expect_err("old opaque timestamp shape must not decode");
+
+    assert!(
+        error.to_string().contains("opening a record"),
+        "old timestamp must fail at the typed Date field, got {error:?}"
+    );
+}
+
+#[test]
 fn persona_spirit_client_persists_entries_for_later_summary_observation() {
     let fixture = StoreFixture::new("summary-observation");
     fixture
-        .reply_text("(Record (workspace Decision \"first summary\" \"current implementation context\" Maximum 1779000000 \"first statement\"))")
+        .reply_text("(Record (workspace Decision \"first summary\" \"current implementation context\" Maximum (2026 5 20) (14 30 0) \"first statement\"))")
         .expect("first entry persisted");
     fixture
-        .reply_text("(Record (workspace Correction \"second summary\" \"current implementation context\" Medium 1779000001 \"second statement\"))")
+        .reply_text("(Record (workspace Correction \"second summary\" \"current implementation context\" Medium (2026 5 20) (14 30 1) \"second statement\"))")
         .expect("second entry persisted");
 
     let reply = fixture
@@ -237,7 +251,7 @@ fn persona_spirit_client_opens_and_retracts_state_subscription() {
 fn persona_spirit_client_opens_record_subscription_with_summary_snapshot() {
     let fixture = StoreFixture::new("record-subscription");
     fixture
-        .reply_text("(Record (workspace Decision \"subscription summary\" \"workspace context\" Maximum 1779000000 \"workspace quote\"))")
+        .reply_text("(Record (workspace Decision \"subscription summary\" \"workspace context\" Maximum (2026 5 20) (14 30 0) \"workspace quote\"))")
         .expect("entry persisted");
 
     let opened = fixture
@@ -258,10 +272,10 @@ fn persona_spirit_client_opens_record_subscription_with_summary_snapshot() {
 fn persona_spirit_client_filters_record_observation_by_topic() {
     let fixture = StoreFixture::new("topic-filter");
     fixture
-        .reply_text("(Record (workspace Decision \"workspace summary\" \"workspace context\" Maximum 1779000000 \"workspace quote\"))")
+        .reply_text("(Record (workspace Decision \"workspace summary\" \"workspace context\" Maximum (2026 5 20) (14 30 0) \"workspace quote\"))")
         .expect("workspace entry persisted");
     fixture
-        .reply_text("(Record (naming Correction \"naming summary\" \"naming context\" Maximum 1779000001 \"naming quote\"))")
+        .reply_text("(Record (naming Correction \"naming summary\" \"naming context\" Maximum (2026 5 20) (14 30 1) \"naming quote\"))")
         .expect("naming entry persisted");
 
     let reply = fixture
@@ -278,7 +292,7 @@ fn persona_spirit_client_filters_record_observation_by_topic() {
 fn persona_spirit_client_returns_provenance_only_when_requested() {
     let fixture = StoreFixture::new("provenance");
     fixture
-        .reply_text("(Record (workspace Decision \"summary only\" \"current implementation context\" Maximum 1779000000 \"first statement\"))")
+        .reply_text("(Record (workspace Decision \"summary only\" \"current implementation context\" Maximum (2026 5 20) (14 30 0) \"first statement\"))")
         .expect("entry persisted");
 
     let reply = fixture
@@ -287,7 +301,7 @@ fn persona_spirit_client_returns_provenance_only_when_requested() {
 
     assert_eq!(
         reply,
-        "(RecordProvenancesObserved ([((1 workspace Decision \"summary only\" Maximum) \"current implementation context\" 1779000000 \"first statement\")]))"
+        "(RecordProvenancesObserved ([((1 workspace Decision \"summary only\" Maximum) \"current implementation context\" (2026 5 20) (14 30 0) \"first statement\")]))"
     );
 }
 
@@ -295,10 +309,10 @@ fn persona_spirit_client_returns_provenance_only_when_requested() {
 fn persona_spirit_client_repeated_entries_remain_distinct_records() {
     let fixture = StoreFixture::new("repetition");
     fixture
-        .reply_text("(Record (naming Correction \"drop ancestor prefixes\" \"first context\" Maximum 1779000000 \"first wording\"))")
+        .reply_text("(Record (naming Correction \"drop ancestor prefixes\" \"first context\" Maximum (2026 5 20) (14 30 0) \"first wording\"))")
         .expect("first entry persisted");
     fixture
-        .reply_text("(Record (naming Correction \"drop ancestor prefixes\" \"second context\" Maximum 1779000001 \"second wording\"))")
+        .reply_text("(Record (naming Correction \"drop ancestor prefixes\" \"second context\" Maximum (2026 5 20) (14 30 1) \"second wording\"))")
         .expect("second entry persisted");
 
     let reply = fixture

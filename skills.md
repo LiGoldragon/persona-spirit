@@ -38,6 +38,10 @@ Contract records stay in `signal-persona-spirit` and
 - Ordinary request execution passes through `signal-executor`: dispatch lowers
   `SpiritRequest` into Spirit-local `Command`, executes through the Kameo actor
   planes as `CommandExecutor`, and publishes `signal-sema` observations.
+- Spirit's current `CommandExecutor` implementation is degenerate-atomic:
+  each accepted operation lowers to one command, and multi-operation batches
+  are rejected before any command runs. A future multi-command operation must
+  add a real transaction boundary before it lands.
 - The ordinary socket rejects owner frames; the owner socket rejects ordinary
   frames.
 - Each named actor is data-bearing. Do not add public zero-sized actor nouns.
@@ -49,6 +53,8 @@ Contract records stay in `signal-persona-spirit` and
   `PolicyPlane`; it does not silently fall back to the embedded seed.
 - `Entry` assertions persist one top-level record in the local sema-engine
   store and return `RecordAccepted`.
+- `Entry` records carry split `date` and `time` fields. Opaque epoch
+  timestamp fields are rejected at decode time.
 - `Entry` assertions pass through `RecordStore` and the sema-writer trace
   plane; queries pass through the sema-reader trace plane.
 - `Observation::State` and `Observation::Questions` pass through

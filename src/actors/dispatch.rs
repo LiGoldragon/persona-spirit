@@ -175,6 +175,9 @@ impl Lowering for SpiritLowering {
         _operation: &Self::Operation,
         effects: &OperationEffects<Command, Effect>,
     ) -> SpiritReply {
+        // Spirit currently lowers each operation to a one-command plan.
+        // If an operation grows a multi-command pipeline, the final
+        // command effect is the canonical reply by convention.
         effects
             .component_effects()
             .last()
@@ -430,6 +433,10 @@ impl CommandExecutor for SpiritCommandExecutor {
         &mut self,
         plan: BatchPlan<Self::Command>,
     ) -> Result<BatchEffects<Self::Command, Self::ComponentEffect>> {
+        // Degenerate atomicity: today's Spirit lowering emits exactly
+        // one command plan per request and exactly one command per plan.
+        // Multi-operation batches are rejected before any command runs,
+        // so the single committed command is the whole atomic unit.
         let operation_count = plan.operations().len();
         if operation_count != 1 {
             return Err(Error::UnsupportedAtomicBatch { operation_count });

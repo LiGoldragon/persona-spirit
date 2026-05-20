@@ -53,7 +53,7 @@ async fn persona_spirit_entry_assertion_runs_through_actor_planes() {
     let runtime = fixture.runtime().await;
 
     let reply = runtime
-        .submit_text("(Record (workspace Decision \"actor path\" \"actor context\" Maximum 1779000000 \"actor quote\"))")
+        .submit_text("(Record (workspace Decision \"actor path\" \"actor context\" Maximum (2026 5 20) (14 30 0) \"actor quote\"))")
         .await
         .expect("entry accepted");
 
@@ -94,7 +94,8 @@ async fn persona_spirit_ordinary_request_path_uses_signal_executor_and_sema_obse
             summary: signal_persona_spirit::Summary::new("executor path"),
             context: signal_persona_spirit::Context::new("actor context"),
             certainty: signal_persona_spirit::Certainty::Maximum,
-            timestamp: signal_persona_spirit::Timestamp::new(1_779_000_000),
+            date: signal_persona_spirit::Date::new(2026, 5, 20),
+            time: signal_persona_spirit::Time::new(14, 30, 0),
             quote: signal_persona_spirit::Quote::new("actor quote"),
         }))
         .await
@@ -129,7 +130,7 @@ async fn persona_spirit_record_observation_uses_read_plane_without_write_plane()
 
     runtime
         .submit_text(
-            "(Record (workspace Decision \"summary\" \"context\" Maximum 1779000000 \"quote\"))",
+            "(Record (workspace Decision \"summary\" \"context\" Maximum (2026 5 20) (14 30 0) \"quote\"))",
         )
         .await
         .expect("entry accepted");
@@ -249,7 +250,7 @@ async fn persona_spirit_record_subscription_uses_read_plane_then_subscription_pl
     let runtime = fixture.runtime().await;
 
     runtime
-        .submit_text("(Record (workspace Decision \"subscription path\" \"context\" Maximum 1779000000 \"quote\"))")
+        .submit_text("(Record (workspace Decision \"subscription path\" \"context\" Maximum (2026 5 20) (14 30 0) \"quote\"))")
         .await
         .expect("entry accepted");
     let reply = runtime
@@ -473,7 +474,7 @@ async fn persona_spirit_shutdown_releases_store_for_restart() {
     let first_runtime = fixture.runtime().await;
 
     first_runtime
-        .submit_text("(Record (workspace Decision \"restart survives\" \"context\" Maximum 1779000000 \"quote\"))")
+        .submit_text("(Record (workspace Decision \"restart survives\" \"context\" Maximum (2026 5 20) (14 30 0) \"quote\"))")
         .await
         .expect("entry accepted");
     first_runtime.stop().await.expect("first runtime stops");
