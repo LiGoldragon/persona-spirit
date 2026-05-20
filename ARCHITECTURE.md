@@ -246,9 +246,11 @@ Not implemented:
 
 `persona-spirit` can now replace manual file editing for typed capture/query
 experiments when an agent supplies a complete `Entry` record to `spirit`.
-The old `intent/*.nota` files remain canonical until existing records are
-imported, the workspace cutover is declared, and the remaining intent-log
-semantics are covered by the daemon.
+The old `intent/*.nota` files remain canonical until the workspace cutover is
+declared and the remaining intent-log semantics are covered by the daemon.
+Spirit does not import those files. Any one-time migration, if wanted, belongs
+in a separate throwaway tool or in manual relogging through Spirit's normal
+CLI path.
 
 The next implementation step is subscription event delivery or spirit-to-mind
 owner-Mutate forwarding. Spirit-to-mind owner variants are not needed for the
