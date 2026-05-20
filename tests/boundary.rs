@@ -1,9 +1,10 @@
+use std::fs;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use persona_spirit::{
     DaemonConfiguration, DaemonRuntime, Error, SingleArgument, SocketMode, SocketPath,
-    SpiritClient, SpiritRequestText, StorePath,
+    SpiritClient, SpiritRequestInput, SpiritRequestText, StorePath,
 };
 
 #[derive(Debug, Clone)]
@@ -33,7 +34,10 @@ impl StoreFixture {
     }
 
     fn reply_text(&self, text: &str) -> persona_spirit::Result<String> {
-        SpiritRequestText::new(text).decode_request()?;
+        let argument = SingleArgument::from_arguments(["spirit".to_string(), text.to_string()])
+            .expect("single argument accepted");
+        let request_text = SpiritRequestInput::new(argument.clone()).text()?;
+        SpiritRequestText::new(request_text).decode_request()?;
         let daemon = DaemonRuntime::from_configuration(DaemonConfiguration::new(
             self.ordinary_socket.clone(),
             self.owner_socket.clone(),
@@ -43,9 +47,6 @@ impl StoreFixture {
         .bind()
         .expect("daemon binds");
         let handle = std::thread::spawn(move || daemon.serve_count(1));
-        let argument =
-            SingleArgument::from_arguments(["persona-spirit".to_string(), text.to_string()])
-                .expect("single argument accepted");
         let reply = SpiritClient::with_socket(argument, self.ordinary_socket.clone()).reply_text();
         handle
             .join()
@@ -58,7 +59,7 @@ impl StoreFixture {
 #[test]
 fn persona_spirit_binary_accepts_exactly_one_argument() {
     let argument = SingleArgument::from_arguments([
-        "persona-spirit".to_string(),
+        "spirit".to_string(),
         "(State \"capture this intent\")".to_string(),
     ])
     .expect("single argument accepted");
@@ -68,12 +69,12 @@ fn persona_spirit_binary_accepts_exactly_one_argument() {
 
 #[test]
 fn persona_spirit_binary_rejects_missing_argument() {
-    let error = SingleArgument::from_arguments(["persona-spirit".to_string()]).unwrap_err();
+    let error = SingleArgument::from_arguments(["spirit".to_string()]).unwrap_err();
 
     assert_eq!(
         error,
         Error::WrongArgumentCount {
-            program: "persona-spirit".to_string(),
+            program: "spirit".to_string(),
             found: 0,
         }
     );
@@ -82,7 +83,7 @@ fn persona_spirit_binary_rejects_missing_argument() {
 #[test]
 fn persona_spirit_binary_rejects_extra_argument() {
     let error = SingleArgument::from_arguments([
-        "persona-spirit".to_string(),
+        "spirit".to_string(),
         "(State \"one\")".to_string(),
         "(State \"two\")".to_string(),
     ])
@@ -91,7 +92,7 @@ fn persona_spirit_binary_rejects_extra_argument() {
     assert_eq!(
         error,
         Error::WrongArgumentCount {
-            program: "persona-spirit".to_string(),
+            program: "spirit".to_string(),
             found: 2,
         }
     );
@@ -100,13 +101,12 @@ fn persona_spirit_binary_rejects_extra_argument() {
 #[test]
 fn persona_spirit_binary_rejects_flag_style_argument() {
     let error =
-        SingleArgument::from_arguments(["persona-spirit".to_string(), "--help".to_string()])
-            .unwrap_err();
+        SingleArgument::from_arguments(["spirit".to_string(), "--help".to_string()]).unwrap_err();
 
     assert_eq!(
         error,
         Error::FlagArgument {
-            program: "persona-spirit".to_string(),
+            program: "spirit".to_string(),
             argument: "--help".to_string(),
         }
     );
@@ -114,7 +114,7 @@ fn persona_spirit_binary_rejects_flag_style_argument() {
 
 #[test]
 fn persona_spirit_binary_requires_socket_environment() {
-    let output = Command::new(env!("CARGO_BIN_EXE_persona-spirit"))
+    let output = Command::new(env!("CARGO_BIN_EXE_spirit"))
         .env_remove("PERSONA_SPIRIT_SOCKET")
         .arg("(Observe (State ()))")
         .output()
@@ -123,6 +123,31 @@ fn persona_spirit_binary_requires_socket_environment() {
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("MissingSpiritSocket"));
+}
+
+#[test]
+fn persona_spirit_client_accepts_request_file_path_argument() {
+    let fixture = StoreFixture::new("request-file");
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock after epoch")
+        .as_nanos();
+    let mut request_path = std::env::temp_dir();
+    request_path.push(format!("persona-spirit-request-{nanos}.nota"));
+    fs::write(
+        &request_path,
+        "(Record (workspace Decision \"file request\" \"path context\" Maximum \"2026-05-20T15:42:00+02:00\" \"path quote\"))",
+    )
+    .expect("request file written");
+
+    let reply = fixture
+        .reply_text(&request_path.to_string_lossy())
+        .expect("file path request persisted");
+
+    assert_eq!(
+        reply,
+        "(RecordAccepted ((1 workspace Decision \"file request\" Maximum)))"
+    );
 }
 
 #[test]

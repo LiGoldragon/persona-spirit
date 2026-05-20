@@ -1,23 +1,28 @@
+use std::fs;
+
 use crate::{Error, Result, SingleArgument, SocketPath, SpiritSignalClient};
 use nota_codec::{Decoder, Encoder, NotaDecode, NotaEncode};
 use signal_persona_spirit::{SpiritReply, SpiritRequest};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SpiritClient {
-    request: SingleArgument,
+    input: SpiritRequestInput,
     socket: SocketPath,
 }
 
 impl SpiritClient {
-    pub fn from_argument(request: SingleArgument) -> Result<Self> {
+    pub fn from_argument(argument: SingleArgument) -> Result<Self> {
         Ok(Self {
-            request,
+            input: SpiritRequestInput::new(argument),
             socket: SocketPath::from_environment()?,
         })
     }
 
-    pub fn with_socket(request: SingleArgument, socket: SocketPath) -> Self {
-        Self { request, socket }
+    pub fn with_socket(argument: SingleArgument, socket: SocketPath) -> Self {
+        Self {
+            input: SpiritRequestInput::new(argument),
+            socket,
+        }
     }
 
     pub fn run(&self) -> Result<()> {
@@ -26,13 +31,33 @@ impl SpiritClient {
     }
 
     pub fn reply_text(&self) -> Result<String> {
-        self.daemon_reply_text(self.request.as_str())
+        self.daemon_reply_text(&self.input.text()?)
     }
 
     fn daemon_reply_text(&self, request_text: &str) -> Result<String> {
         let request = SpiritRequestText::new(request_text).decode_request()?;
         let reply = SpiritSignalClient::new(self.socket.clone()).submit(request)?;
         SpiritReplyText::new(reply).encode()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpiritRequestInput {
+    argument: SingleArgument,
+}
+
+impl SpiritRequestInput {
+    pub fn new(argument: SingleArgument) -> Self {
+        Self { argument }
+    }
+
+    pub fn text(&self) -> Result<String> {
+        let value = self.argument.as_str();
+        if value.starts_with('(') {
+            Ok(value.to_string())
+        } else {
+            fs::read_to_string(value).map_err(Error::input_output)
+        }
     }
 }
 

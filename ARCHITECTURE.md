@@ -98,21 +98,24 @@ checks the `signal-frame::Request`, and submits each `SpiritRequest` directly to
 length-prefixed `owner-signal-persona-spirit::Frame` values and submits each
 `OwnerSpiritRequest` directly to `OwnerPlane`.
 
-The `persona-spirit` CLI is not a second runtime. It decodes its single NOTA
-argument into a `SpiritRequest`, sends that request to the daemon as a
-length-prefixed `signal-frame` exchange on `PERSONA_SPIRIT_SOCKET`, and encodes
-the daemon's `SpiritReply` back to NOTA. If no daemon socket is configured, the
-CLI fails instead of opening a store or running the actor tree in-process.
+The `spirit` CLI is not a second runtime. It resolves its single argument as
+either a raw NOTA request record (argument begins with `(`) or a path to a NOTA
+request file, decodes the result into a `SpiritRequest`, sends that request to
+the daemon as a length-prefixed `signal-frame` exchange on
+`PERSONA_SPIRIT_SOCKET`, and encodes the daemon's `SpiritReply` back to NOTA.
+If no daemon socket is configured, the CLI fails instead of opening a store or
+running the actor tree in-process.
 
 ## Constraints
 
 | Constraint | Witness |
 |---|---|
-| The CLI binary accepts exactly one argument. | `tests/boundary.rs` checks missing and extra arguments. |
+| The `spirit` CLI accepts exactly one argument. | `tests/boundary.rs` checks missing and extra arguments. |
 | The daemon binary accepts exactly one argument. | `tests/boundary.rs` checks the shared argument parser. |
 | The CLI type-checks one `signal-persona-spirit::SpiritRequest`. | `tests/boundary.rs` checks valid `State`, `Record`, and `Observe` requests before daemon submission. |
 | The CLI requires a daemon socket instead of using an in-process store fallback. | `persona_spirit_binary_requires_socket_environment` runs the binary without `PERSONA_SPIRIT_SOCKET` and expects failure. |
 | The CLI path only translates NOTA to Signal frames and Signal replies to NOTA. | `persona_spirit_command_line_path_does_not_use_actor_runtime_directly` checks `runtime.rs` uses `SpiritRequestText`, `SpiritSignalClient`, and `SpiritReplyText`, and not `SpiritActorRuntime` or `StoreLocation`. |
+| The CLI accepts a path to a NOTA request file. | `persona_spirit_client_accepts_request_file_path_argument` writes a request file, invokes the same client path, and checks daemon-backed persistence. |
 | Spirit-local commands project to payloadless Sema operation labels. | `tests/sema_projection.rs` checks `Command::from_request` and `ToSemaOperation` through real actor-runtime requests. |
 | Spirit-local effects project to payloadless Sema outcome labels. | `tests/sema_projection.rs` checks `Effect::from_reply`, `ToSemaOutcome`, and `SemaObservation` after real actor-runtime replies. |
 | Sema observations do not carry Spirit payloads. | `tests/sema_projection.rs` expects only `SemaOperation` plus `SemaOutcome` for assert, match, subscribe, and retract paths. |
@@ -172,7 +175,7 @@ src/actors/store.rs                — sema-engine store actor
 src/actors/reply.rs                — unimplemented reply shaper + NOTA reply encoder actors
 src/actors/trace.rs                — actor-path witness values
 src/actors/pipeline.rs             — typed in-process pipeline carriers
-src/bin/persona-spirit.rs          — thin CLI binary
+src/bin/spirit.rs                  — thin CLI binary
 src/bin/persona-spirit-daemon.rs   — daemon binary
 bootstrap-policy.nota              — first policy seed
 tests/boundary.rs                  — argument-boundary witnesses
@@ -186,9 +189,10 @@ tests/sema_projection.rs           — command/effect projection to SemaObservat
 Implemented now:
 
 - repo scaffold;
-- daemon and CLI binary names;
+- daemon binary and `spirit` CLI binary names;
 - one-argument boundary parser;
-- typed CLI request decoding for `signal-persona-spirit::SpiritRequest`;
+- typed CLI request decoding for `signal-persona-spirit::SpiritRequest`
+  from a raw NOTA argument or a NOTA request file path;
 - CLI daemon-client mode that requires `PERSONA_SPIRIT_SOCKET` and performs
   only NOTA request decoding, signal-frame submission, and NOTA reply encoding;
 - provisional classifier for `State` statements that preserves the raw quote as
@@ -224,11 +228,11 @@ Not implemented:
 - subscription event delivery;
 - filesystem intent projection.
 
-`persona-spirit` is therefore not ready to fully replace the ad-hoc intent-log
-files. It can be used for daemon-backed typed capture and query experiments,
-but file logs remain the canonical intent record until classification,
-intent-log projection/cutover, live subscription delivery, and spirit-to-mind
-owner-Mutate forwarding are implemented.
+`persona-spirit` can now replace manual file editing for typed capture/query
+experiments when an agent supplies a complete `Entry` record to `spirit`.
+The old `intent/*.nota` files remain canonical until existing records are
+imported, the workspace cutover is declared, and the remaining intent-log
+semantics are covered by the daemon.
 
 The next implementation step is subscription event delivery or spirit-to-mind
 owner-Mutate forwarding. Spirit-to-mind owner variants are not needed for the

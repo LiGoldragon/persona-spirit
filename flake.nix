@@ -38,9 +38,20 @@
           strictDeps = true;
         };
         cargoArtifacts = craneLib.buildDepsOnly commonArguments;
+        package = craneLib.buildPackage (commonArguments // { inherit cargoArtifacts; });
       in
       {
-        packages.default = craneLib.buildPackage (commonArguments // { inherit cargoArtifacts; });
+        packages.default = package;
+        apps = {
+          spirit = flake-utils.lib.mkApp {
+            drv = package;
+            name = "spirit";
+          };
+          persona-spirit-daemon = flake-utils.lib.mkApp {
+            drv = package;
+            name = "persona-spirit-daemon";
+          };
+        };
         checks = {
           build = craneLib.cargoBuild (commonArguments // { inherit cargoArtifacts; });
           test = craneLib.cargoTest (commonArguments // { inherit cargoArtifacts; });

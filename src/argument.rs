@@ -11,9 +11,7 @@ impl SingleArgument {
         I: IntoIterator<Item = String>,
     {
         let mut iterator = arguments.into_iter();
-        let program = iterator
-            .next()
-            .unwrap_or_else(|| "persona-spirit".to_string());
+        let program = iterator.next().unwrap_or_else(|| "spirit".to_string());
         let values: Vec<String> = iterator.collect();
         Self::from_program_and_values(program, values)
     }

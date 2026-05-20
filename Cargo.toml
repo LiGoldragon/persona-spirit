@@ -13,8 +13,8 @@ name = "persona_spirit"
 path = "src/lib.rs"
 
 [[bin]]
-name = "persona-spirit"
-path = "src/bin/persona-spirit.rs"
+name = "spirit"
+path = "src/bin/spirit.rs"
 
 [[bin]]
 name = "persona-spirit-daemon"

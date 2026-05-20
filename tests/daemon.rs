@@ -1,4 +1,6 @@
+use std::fs;
 use std::os::unix::net::UnixStream;
+use std::process::Command;
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -399,7 +401,7 @@ fn persona_spirit_client_can_send_nota_request_to_running_daemon() {
         .expect("daemon binds");
     let handle = thread::spawn(move || daemon.serve_count(1));
     let argument = SingleArgument::from_arguments([
-        "persona-spirit".to_string(),
+        "spirit".to_string(),
         "(Record (workspace Decision \"client socket\" \"daemon context\" Maximum \"2026-05-19T18:13:52Z\" \"daemon quote\"))"
             .to_string(),
     ])
@@ -417,4 +419,44 @@ fn persona_spirit_client_can_send_nota_request_to_running_daemon() {
         .join()
         .expect("daemon thread exits")
         .expect("daemon served client request");
+}
+
+#[test]
+fn spirit_binary_can_send_request_file_to_running_daemon() {
+    let fixture = DaemonFixture::new("spirit-binary-file");
+    let daemon = DaemonRuntime::from_configuration(fixture.configuration())
+        .bind()
+        .expect("daemon binds");
+    let handle = thread::spawn(move || daemon.serve_count(1));
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock after epoch")
+        .as_nanos();
+    let mut request_path = std::env::temp_dir();
+    request_path.push(format!("persona-spirit-cli-request-{nanos}.nota"));
+    fs::write(
+        &request_path,
+        "(Record (workspace Decision \"binary file\" \"daemon context\" Maximum \"2026-05-20T15:42:00+02:00\" \"daemon quote\"))",
+    )
+    .expect("request file written");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_spirit"))
+        .env("PERSONA_SPIRIT_SOCKET", fixture.ordinary_socket.as_path())
+        .arg(&request_path)
+        .output()
+        .expect("spirit binary runs");
+
+    handle
+        .join()
+        .expect("daemon thread exits")
+        .expect("daemon served client request");
+    assert!(
+        output.status.success(),
+        "spirit stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "(RecordAccepted ((1 workspace Decision \"binary file\" Maximum)))"
+    );
 }
