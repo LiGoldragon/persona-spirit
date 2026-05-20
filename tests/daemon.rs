@@ -14,11 +14,13 @@ use persona_spirit::{
     SpiritFrameCodec, SpiritSignalClient, StorePath,
 };
 use signal_core::{
-    ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Operation, Reply, Request,
-    RequestPayload, SessionEpoch, SignalVerb,
+    ExchangeIdentifier as OwnerExchangeIdentifier, ExchangeLane as OwnerExchangeLane,
+    LaneSequence as OwnerLaneSequence, RequestPayload as OwnerRequestPayload,
+    SessionEpoch as OwnerSessionEpoch,
 };
+use signal_frame::{ExchangeIdentifier, ExchangeLane, LaneSequence, RequestPayload, SessionEpoch};
 use signal_persona_spirit::{
-    Certainty, Context, Entry, Frame, FrameBody, Kind, ObservationMode, Quote, RecordObservation,
+    Certainty, Context, Entry, Frame, FrameBody, Kind, Observation, ObservationMode, Quote,
     RecordQuery, SpiritReply, SpiritRequest, Summary, Timestamp, Topic,
 };
 
@@ -79,12 +81,10 @@ fn entry(summary: &str) -> Entry {
 }
 
 fn observe_all() -> SpiritRequest {
-    SpiritRequest::RecordObservation(RecordObservation {
-        query: RecordQuery {
-            topic: None,
-            mode: ObservationMode::SummaryOnly,
-        },
-    })
+    SpiritRequest::Observe(Observation::Records(RecordQuery {
+        topic: None,
+        mode: ObservationMode::SummaryOnly,
+    }))
 }
 
 fn exchange() -> ExchangeIdentifier {
@@ -92,6 +92,14 @@ fn exchange() -> ExchangeIdentifier {
         SessionEpoch::new(0),
         ExchangeLane::Connector,
         LaneSequence::first(),
+    )
+}
+
+fn owner_exchange() -> OwnerExchangeIdentifier {
+    OwnerExchangeIdentifier::new(
+        OwnerSessionEpoch::new(0),
+        OwnerExchangeLane::Connector,
+        OwnerLaneSequence::first(),
     )
 }
 
@@ -130,7 +138,7 @@ fn persona_spirit_daemon_serves_signal_frames_through_actor_root() {
 
     let client = fixture.client();
     let accepted = client
-        .submit(SpiritRequest::Entry(entry("daemon accepted")))
+        .submit(SpiritRequest::Record(entry("daemon accepted")))
         .expect("entry accepted through signal frame");
     assert_eq!(
         accepted,
@@ -259,43 +267,6 @@ fn persona_spirit_daemon_configuration_controls_bootstrap_policy_source() {
 }
 
 #[test]
-fn persona_spirit_daemon_rejects_verb_payload_mismatch_before_actor_execution() {
-    let fixture = DaemonFixture::new("verb-mismatch");
-    let mut daemon = DaemonRuntime::from_configuration(fixture.configuration())
-        .bind()
-        .expect("daemon binds");
-    let socket = fixture.ordinary_socket.clone();
-    let handle = thread::spawn(move || {
-        let served = daemon.serve_one().expect("daemon serves rejected request");
-        daemon.shutdown().expect("daemon shuts down");
-        served
-    });
-
-    let codec = SpiritFrameCodec::default();
-    let mut stream = UnixStream::connect(socket.as_path()).expect("client connects");
-    let frame = Frame::new(FrameBody::Request {
-        exchange: exchange(),
-        request: Request::from_operations(NonEmpty::single(Operation::new(
-            SignalVerb::Match,
-            SpiritRequest::Entry(entry("wrong verb")),
-        ))),
-    });
-    codec
-        .write_frame(&mut stream, &frame)
-        .expect("request frame writes");
-    let reply_frame = codec.read_frame(&mut stream).expect("reply frame reads");
-    let reply = codec
-        .reply_from_frame(reply_frame)
-        .expect("reply frame decodes");
-
-    assert!(matches!(reply, Reply::Rejected { .. }));
-    assert!(matches!(
-        handle.join().expect("daemon thread exits").reply(),
-        Reply::Rejected { .. }
-    ));
-}
-
-#[test]
 fn persona_spirit_ordinary_socket_rejects_owner_signal_frames() {
     let fixture = DaemonFixture::new("ordinary-rejects-owner");
     let mut daemon = DaemonRuntime::from_configuration(fixture.configuration())
@@ -311,7 +282,7 @@ fn persona_spirit_ordinary_socket_rejects_owner_signal_frames() {
     let codec = OwnerSpiritFrameCodec::default();
     let mut stream = UnixStream::connect(socket.as_path()).expect("client connects");
     let frame = OwnerFrame::new(OwnerFrameBody::Request {
-        exchange: exchange(),
+        exchange: owner_exchange(),
         request: OwnerSpiritRequest::StartOrder(StartOrder {
             generation: Generation::new(1),
         })
@@ -348,7 +319,7 @@ fn persona_spirit_owner_socket_rejects_ordinary_signal_frames() {
     let mut stream = UnixStream::connect(socket.as_path()).expect("client connects");
     let frame = Frame::new(FrameBody::Request {
         exchange: exchange(),
-        request: SpiritRequest::Entry(entry("wrong socket")).into_request(),
+        request: SpiritRequest::Record(entry("wrong socket")).into_request(),
     });
     codec
         .write_frame(&mut stream, &frame)
@@ -382,7 +353,7 @@ fn persona_spirit_client_can_send_nota_request_to_running_daemon() {
     let handle = thread::spawn(move || daemon.serve_count(1));
     let argument = SingleArgument::from_arguments([
         "persona-spirit".to_string(),
-        "(Entry (workspace Decision \"client socket\" \"daemon context\" Maximum \"2026-05-19T18:13:52Z\" \"daemon quote\"))"
+        "(Record (workspace Decision \"client socket\" \"daemon context\" Maximum \"2026-05-19T18:13:52Z\" \"daemon quote\"))"
             .to_string(),
     ])
     .expect("single request argument");

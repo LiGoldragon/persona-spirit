@@ -113,14 +113,13 @@ impl ReplyTextEncoder {
 impl UnimplementedPolicy {
     pub fn reason_for(self, operation: OperationKind) -> UnimplementedReason {
         match operation {
-            OperationKind::Statement
-            | OperationKind::StateObservation
-            | OperationKind::QuestionPending
-            | OperationKind::SubscribeState
-            | OperationKind::StateSubscriptionRetraction
-            | OperationKind::SubscribeRecords
-            | OperationKind::RecordSubscriptionRetraction => self.not_built,
-            OperationKind::Entry | OperationKind::RecordObservation => self.integration_missing,
+            OperationKind::State
+            | OperationKind::Observe
+            | OperationKind::Watch
+            | OperationKind::Unwatch
+            | OperationKind::Tap
+            | OperationKind::Untap => self.not_built,
+            OperationKind::Record => self.integration_missing,
         }
     }
 }

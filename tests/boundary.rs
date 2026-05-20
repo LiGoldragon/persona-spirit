@@ -32,11 +32,11 @@ impl StoreFixture {
 fn persona_spirit_binary_accepts_exactly_one_argument() {
     let argument = SingleArgument::from_arguments([
         "persona-spirit".to_string(),
-        "(Statement \"capture this intent\")".to_string(),
+        "(State \"capture this intent\")".to_string(),
     ])
     .expect("single argument accepted");
 
-    assert_eq!(argument.as_str(), "(Statement \"capture this intent\")");
+    assert_eq!(argument.as_str(), "(State \"capture this intent\")");
 }
 
 #[test]
@@ -56,8 +56,8 @@ fn persona_spirit_binary_rejects_missing_argument() {
 fn persona_spirit_binary_rejects_extra_argument() {
     let error = SingleArgument::from_arguments([
         "persona-spirit".to_string(),
-        "(Statement \"one\")".to_string(),
-        "(Statement \"two\")".to_string(),
+        "(State \"one\")".to_string(),
+        "(State \"two\")".to_string(),
     ])
     .unwrap_err();
 
@@ -89,18 +89,18 @@ fn persona_spirit_binary_rejects_flag_style_argument() {
 fn persona_spirit_client_type_checks_statement_without_inventing_storage_behavior() {
     let fixture = StoreFixture::new("statement");
     let reply = fixture
-        .client("(Statement (\"capture this intent\"))")
+        .client("(State (\"capture this intent\"))")
         .reply_text()
         .expect("request type checked");
 
-    assert_eq!(reply, "(RequestUnimplemented (Statement NotBuiltYet))");
+    assert_eq!(reply, "(RequestUnimplemented (State NotBuiltYet))");
 }
 
 #[test]
 fn persona_spirit_client_asserts_entry_and_mints_record_identifier() {
     let fixture = StoreFixture::new("assert-entry");
     let reply = fixture
-        .client("(Entry (workspace Decision \"summary only\" \"current implementation context\" Maximum \"2026-05-19T13:08:11Z\" \"first statement\"))")
+        .client("(Record (workspace Decision \"summary only\" \"current implementation context\" Maximum \"2026-05-19T13:08:11Z\" \"first statement\"))")
         .reply_text()
         .expect("entry persisted");
 
@@ -114,16 +114,16 @@ fn persona_spirit_client_asserts_entry_and_mints_record_identifier() {
 fn persona_spirit_client_persists_entries_for_later_summary_observation() {
     let fixture = StoreFixture::new("summary-observation");
     fixture
-        .client("(Entry (workspace Decision \"first summary\" \"current implementation context\" Maximum \"2026-05-19T13:08:11Z\" \"first statement\"))")
+        .client("(Record (workspace Decision \"first summary\" \"current implementation context\" Maximum \"2026-05-19T13:08:11Z\" \"first statement\"))")
         .reply_text()
         .expect("first entry persisted");
     fixture
-        .client("(Entry (workspace Correction \"second summary\" \"current implementation context\" Medium \"2026-05-19T13:12:00Z\" \"second statement\"))")
+        .client("(Record (workspace Correction \"second summary\" \"current implementation context\" Medium \"2026-05-19T13:12:00Z\" \"second statement\"))")
         .reply_text()
         .expect("second entry persisted");
 
     let reply = fixture
-        .client("(RecordObservation ((None SummaryOnly)))")
+        .client("(Observe (Records (None SummaryOnly)))")
         .reply_text()
         .expect("records observed");
 
@@ -137,7 +137,7 @@ fn persona_spirit_client_persists_entries_for_later_summary_observation() {
 fn persona_spirit_client_observes_default_psyche_state() {
     let fixture = StoreFixture::new("state-observation");
     let reply = fixture
-        .client("(StateObservation ())")
+        .client("(Observe (State ()))")
         .reply_text()
         .expect("state observed");
 
@@ -148,7 +148,7 @@ fn persona_spirit_client_observes_default_psyche_state() {
 fn persona_spirit_client_observes_empty_pending_questions() {
     let fixture = StoreFixture::new("question-observation");
     let reply = fixture
-        .client("(QuestionPending ())")
+        .client("(Observe (Questions ()))")
         .reply_text()
         .expect("questions observed");
 
@@ -159,11 +159,11 @@ fn persona_spirit_client_observes_empty_pending_questions() {
 fn persona_spirit_client_opens_and_retracts_state_subscription() {
     let fixture = StoreFixture::new("state-subscription");
     let opened = fixture
-        .client("(SubscribeState ())")
+        .client("(Watch (State ()))")
         .reply_text()
         .expect("state subscription opened");
     let retracted = fixture
-        .client("(StateSubscriptionRetraction (1))")
+        .client("(Unwatch (State (1)))")
         .reply_text()
         .expect("state subscription retracted");
 
@@ -175,16 +175,16 @@ fn persona_spirit_client_opens_and_retracts_state_subscription() {
 fn persona_spirit_client_opens_record_subscription_with_summary_snapshot() {
     let fixture = StoreFixture::new("record-subscription");
     fixture
-        .client("(Entry (workspace Decision \"subscription summary\" \"workspace context\" Maximum \"2026-05-19T13:08:11Z\" \"workspace quote\"))")
+        .client("(Record (workspace Decision \"subscription summary\" \"workspace context\" Maximum \"2026-05-19T13:08:11Z\" \"workspace quote\"))")
         .reply_text()
         .expect("entry persisted");
 
     let opened = fixture
-        .client("(SubscribeRecords (None SummaryOnly))")
+        .client("(Watch (Records (None SummaryOnly)))")
         .reply_text()
         .expect("record subscription opened");
     let retracted = fixture
-        .client("(RecordSubscriptionRetraction (1))")
+        .client("(Unwatch (Records (1)))")
         .reply_text()
         .expect("record subscription retracted");
 
@@ -199,16 +199,16 @@ fn persona_spirit_client_opens_record_subscription_with_summary_snapshot() {
 fn persona_spirit_client_filters_record_observation_by_topic() {
     let fixture = StoreFixture::new("topic-filter");
     fixture
-        .client("(Entry (workspace Decision \"workspace summary\" \"workspace context\" Maximum \"2026-05-19T13:08:11Z\" \"workspace quote\"))")
+        .client("(Record (workspace Decision \"workspace summary\" \"workspace context\" Maximum \"2026-05-19T13:08:11Z\" \"workspace quote\"))")
         .reply_text()
         .expect("workspace entry persisted");
     fixture
-        .client("(Entry (naming Correction \"naming summary\" \"naming context\" Maximum \"2026-05-19T13:12:00Z\" \"naming quote\"))")
+        .client("(Record (naming Correction \"naming summary\" \"naming context\" Maximum \"2026-05-19T13:12:00Z\" \"naming quote\"))")
         .reply_text()
         .expect("naming entry persisted");
 
     let reply = fixture
-        .client("(RecordObservation (((Some naming) SummaryOnly)))")
+        .client("(Observe (Records ((Some naming) SummaryOnly)))")
         .reply_text()
         .expect("records observed");
 
@@ -222,12 +222,12 @@ fn persona_spirit_client_filters_record_observation_by_topic() {
 fn persona_spirit_client_returns_provenance_only_when_requested() {
     let fixture = StoreFixture::new("provenance");
     fixture
-        .client("(Entry (workspace Decision \"summary only\" \"current implementation context\" Maximum \"2026-05-19T13:08:11Z\" \"first statement\"))")
+        .client("(Record (workspace Decision \"summary only\" \"current implementation context\" Maximum \"2026-05-19T13:08:11Z\" \"first statement\"))")
         .reply_text()
         .expect("entry persisted");
 
     let reply = fixture
-        .client("(RecordObservation ((None WithProvenance)))")
+        .client("(Observe (Records (None WithProvenance)))")
         .reply_text()
         .expect("provenance observed");
 
@@ -241,16 +241,16 @@ fn persona_spirit_client_returns_provenance_only_when_requested() {
 fn persona_spirit_client_repeated_entries_remain_distinct_records() {
     let fixture = StoreFixture::new("repetition");
     fixture
-        .client("(Entry (naming Correction \"drop ancestor prefixes\" \"first context\" Maximum \"2026-05-19T13:08:11Z\" \"first wording\"))")
+        .client("(Record (naming Correction \"drop ancestor prefixes\" \"first context\" Maximum \"2026-05-19T13:08:11Z\" \"first wording\"))")
         .reply_text()
         .expect("first entry persisted");
     fixture
-        .client("(Entry (naming Correction \"drop ancestor prefixes\" \"second context\" Maximum \"2026-05-19T13:12:00Z\" \"second wording\"))")
+        .client("(Record (naming Correction \"drop ancestor prefixes\" \"second context\" Maximum \"2026-05-19T13:12:00Z\" \"second wording\"))")
         .reply_text()
         .expect("second entry persisted");
 
     let reply = fixture
-        .client("(RecordObservation (((Some naming) SummaryOnly)))")
+        .client("(Observe (Records ((Some naming) SummaryOnly)))")
         .reply_text()
         .expect("records observed");
 

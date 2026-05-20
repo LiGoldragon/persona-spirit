@@ -1,7 +1,7 @@
 use kameo::actor::{Actor, ActorRef};
 use kameo::error::{Infallible, SendError};
 use kameo::message::{Context, Message};
-use signal_persona_spirit::SpiritRequest;
+use signal_persona_spirit::{Observation, SpiritRequest, Subscription, SubscriptionToken};
 
 use crate::{Error, Result};
 
@@ -50,20 +50,26 @@ impl DispatchPhase {
     async fn route(&self, request: SpiritRequest, mut trace: ActorTrace) -> Result<PipelineReply> {
         trace.record(TraceNode::DISPATCH_PHASE, TraceAction::MessageReceived);
         match request {
-            SpiritRequest::Entry(entry) => self.capture_entry(entry, trace).await,
-            SpiritRequest::RecordObservation(observation) => {
-                self.observe_records(observation, trace).await
+            SpiritRequest::Record(entry) => self.capture_entry(entry, trace).await,
+            SpiritRequest::Observe(Observation::Records(query)) => {
+                self.observe_records(query, trace).await
             }
-            SpiritRequest::StateObservation(_observation) => self.observe_state(trace).await,
-            SpiritRequest::QuestionPending(_pending) => self.observe_questions(trace).await,
-            SpiritRequest::SubscribeState(_subscription) => self.subscribe_state(trace).await,
-            SpiritRequest::SubscribeRecords(subscription) => {
+            SpiritRequest::Observe(Observation::State(_observation)) => {
+                self.observe_state(trace).await
+            }
+            SpiritRequest::Observe(Observation::Questions(_pending)) => {
+                self.observe_questions(trace).await
+            }
+            SpiritRequest::Watch(Subscription::State(_subscription)) => {
+                self.subscribe_state(trace).await
+            }
+            SpiritRequest::Watch(Subscription::Records(subscription)) => {
                 self.subscribe_records(subscription, trace).await
             }
-            SpiritRequest::StateSubscriptionRetraction(token) => {
+            SpiritRequest::Unwatch(SubscriptionToken::State(token)) => {
                 self.retract_state_subscription(token, trace).await
             }
-            SpiritRequest::RecordSubscriptionRetraction(token) => {
+            SpiritRequest::Unwatch(SubscriptionToken::Records(token)) => {
                 self.retract_record_subscription(token, trace).await
             }
             other => self
@@ -90,11 +96,14 @@ impl DispatchPhase {
 
     async fn observe_records(
         &self,
-        observation: signal_persona_spirit::RecordObservation,
+        query: signal_persona_spirit::RecordQuery,
         trace: ActorTrace,
     ) -> Result<PipelineReply> {
         self.store
-            .ask(store::ObserveRecords { observation, trace })
+            .ask(store::ObserveRecords {
+                observation: signal_persona_spirit::RecordObservation { query },
+                trace,
+            })
             .await
             .map_err(Self::pipeline_send_error)
     }

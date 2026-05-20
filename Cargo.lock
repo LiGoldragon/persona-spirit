@@ -295,6 +295,7 @@ dependencies = [
  "sema",
  "sema-engine",
  "signal-core",
+ "signal-frame",
  "signal-persona-spirit",
  "thiserror",
  "tokio",
@@ -461,7 +462,7 @@ dependencies = [
 [[package]]
 name = "signal-core"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-core.git#5762bba19a118cedc9fc7edcb1237f9a53d444aa"
+source = "git+https://github.com/LiGoldragon/signal-core.git#96a08db42a5a511feb877275fde47b63577c6d53"
 dependencies = [
  "nota-codec",
  "rkyv",
@@ -472,7 +473,28 @@ dependencies = [
 [[package]]
 name = "signal-core-macros"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-core.git#5762bba19a118cedc9fc7edcb1237f9a53d444aa"
+source = "git+https://github.com/LiGoldragon/signal-core.git#96a08db42a5a511feb877275fde47b63577c6d53"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "signal-frame"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#381e083be601e1f951859fb2b0849c48eafa5b7f"
+dependencies = [
+ "nota-codec",
+ "rkyv",
+ "signal-frame-macros",
+ "thiserror",
+]
+
+[[package]]
+name = "signal-frame-macros"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#381e083be601e1f951859fb2b0849c48eafa5b7f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -482,11 +504,22 @@ dependencies = [
 [[package]]
 name = "signal-persona-spirit"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#521add08379cbd1ea99b5e42fc8d9f3391b77328"
+source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#33ab226051e0d6daa61b9688ffb55ff800aff517"
 dependencies = [
  "nota-codec",
  "rkyv",
- "signal-core",
+ "signal-frame",
+ "signal-sema",
+ "thiserror",
+]
+
+[[package]]
+name = "signal-sema"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/signal-sema.git?branch=main#f141791060997df37d8602b7187ca334bdcdc440"
+dependencies = [
+ "nota-codec",
+ "rkyv",
  "thiserror",
 ]
 

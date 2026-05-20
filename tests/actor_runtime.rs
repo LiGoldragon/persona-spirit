@@ -50,7 +50,7 @@ async fn persona_spirit_entry_assertion_runs_through_actor_planes() {
     let runtime = fixture.runtime().await;
 
     let reply = runtime
-        .submit_text("(Entry (workspace Decision \"actor path\" \"actor context\" Maximum \"2026-05-19T18:13:52Z\" \"actor quote\"))")
+        .submit_text("(Record (workspace Decision \"actor path\" \"actor context\" Maximum \"2026-05-19T18:13:52Z\" \"actor quote\"))")
         .await
         .expect("entry accepted");
 
@@ -83,11 +83,11 @@ async fn persona_spirit_record_observation_uses_read_plane_without_write_plane()
     let runtime = fixture.runtime().await;
 
     runtime
-        .submit_text("(Entry (workspace Decision \"summary\" \"context\" Maximum \"2026-05-19T18:13:52Z\" \"quote\"))")
+        .submit_text("(Record (workspace Decision \"summary\" \"context\" Maximum \"2026-05-19T18:13:52Z\" \"quote\"))")
         .await
         .expect("entry accepted");
     let reply = runtime
-        .submit_text("(RecordObservation ((None SummaryOnly)))")
+        .submit_text("(Observe (Records (None SummaryOnly)))")
         .await
         .expect("records observed");
 
@@ -111,7 +111,7 @@ async fn persona_spirit_state_observation_uses_state_plane() {
     let runtime = fixture.runtime().await;
 
     let reply = runtime
-        .submit_text("(StateObservation ())")
+        .submit_text("(Observe (State ()))")
         .await
         .expect("state observed");
 
@@ -129,7 +129,7 @@ async fn persona_spirit_question_observation_uses_state_plane() {
     let runtime = fixture.runtime().await;
 
     let reply = runtime
-        .submit_text("(QuestionPending ())")
+        .submit_text("(Observe (Questions ()))")
         .await
         .expect("questions observed");
 
@@ -146,7 +146,7 @@ async fn persona_spirit_state_subscription_uses_subscription_plane_after_state_s
     let runtime = fixture.runtime().await;
 
     let reply = runtime
-        .submit_text("(SubscribeState ())")
+        .submit_text("(Watch (State ()))")
         .await
         .expect("state subscription opened");
 
@@ -174,11 +174,11 @@ async fn persona_spirit_record_subscription_uses_read_plane_then_subscription_pl
     let runtime = fixture.runtime().await;
 
     runtime
-        .submit_text("(Entry (workspace Decision \"subscription path\" \"context\" Maximum \"2026-05-19T18:13:52Z\" \"quote\"))")
+        .submit_text("(Record (workspace Decision \"subscription path\" \"context\" Maximum \"2026-05-19T18:13:52Z\" \"quote\"))")
         .await
         .expect("entry accepted");
     let reply = runtime
-        .submit_text("(SubscribeRecords (None SummaryOnly))")
+        .submit_text("(Watch (Records (None SummaryOnly)))")
         .await
         .expect("record subscription opened");
 
@@ -206,19 +206,19 @@ async fn persona_spirit_subscription_retractions_use_subscription_plane() {
     let runtime = fixture.runtime().await;
 
     runtime
-        .submit_text("(SubscribeState ())")
+        .submit_text("(Watch (State ()))")
         .await
         .expect("state subscription opened");
     runtime
-        .submit_text("(SubscribeRecords (None SummaryOnly))")
+        .submit_text("(Watch (Records (None SummaryOnly)))")
         .await
         .expect("record subscription opened");
     let state_reply = runtime
-        .submit_text("(StateSubscriptionRetraction (1))")
+        .submit_text("(Unwatch (State (1)))")
         .await
         .expect("state subscription retracted");
     let record_reply = runtime
-        .submit_text("(RecordSubscriptionRetraction (1))")
+        .submit_text("(Unwatch (Records (1)))")
         .await
         .expect("record subscription retracted");
 
@@ -370,14 +370,11 @@ async fn persona_spirit_unimplemented_statement_uses_reply_shaper_not_store() {
     let runtime = fixture.runtime().await;
 
     let reply = runtime
-        .submit_text("(Statement (\"capture this intent\"))")
+        .submit_text("(State (\"capture this intent\"))")
         .await
         .expect("statement type checked");
 
-    assert_eq!(
-        reply.text(),
-        "(RequestUnimplemented (Statement NotBuiltYet))"
-    );
+    assert_eq!(reply.text(), "(RequestUnimplemented (State NotBuiltYet))");
     assert!(reply.trace().contains(TraceNode::REPLY_SHAPER));
     assert!(!reply.trace().contains(TraceNode::RECORD_STORE));
 
@@ -390,14 +387,14 @@ async fn persona_spirit_shutdown_releases_store_for_restart() {
     let first_runtime = fixture.runtime().await;
 
     first_runtime
-        .submit_text("(Entry (workspace Decision \"restart survives\" \"context\" Maximum \"2026-05-19T18:13:52Z\" \"quote\"))")
+        .submit_text("(Record (workspace Decision \"restart survives\" \"context\" Maximum \"2026-05-19T18:13:52Z\" \"quote\"))")
         .await
         .expect("entry accepted");
     first_runtime.stop().await.expect("first runtime stops");
 
     let second_runtime = fixture.runtime().await;
     let reply = second_runtime
-        .submit_text("(RecordObservation ((None SummaryOnly)))")
+        .submit_text("(Observe (Records (None SummaryOnly)))")
         .await
         .expect("records observed after restart");
 

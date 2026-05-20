@@ -36,9 +36,7 @@ pub enum Error {
     UnexpectedFrame { expected: &'static str, got: String },
 
     #[error("persona-spirit request rejected before execution: {reason}")]
-    RequestRejected {
-        reason: signal_core::RequestRejectionReason,
-    },
+    RequestRejected { reason: String },
 
     #[error("persona-spirit store error: {reason}")]
     SpiritStore { reason: String },
@@ -74,7 +72,7 @@ impl Error {
         }
     }
 
-    pub fn signal_frame(error: signal_core::FrameError) -> Self {
+    pub fn signal_frame(error: impl std::fmt::Display) -> Self {
         Self::SignalFrame {
             reason: error.to_string(),
         }

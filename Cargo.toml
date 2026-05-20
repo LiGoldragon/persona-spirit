@@ -28,6 +28,7 @@ rkyv                        = { version = "0.8", default-features = false, featu
 sema                        = { git = "https://github.com/LiGoldragon/sema.git" }
 sema-engine                 = { git = "https://github.com/LiGoldragon/sema-engine.git", branch = "main" }
 signal-core                 = { git = "https://github.com/LiGoldragon/signal-core.git" }
+signal-frame                = { git = "https://github.com/LiGoldragon/signal-frame.git", branch = "main" }
 signal-persona-spirit       = { git = "https://github.com/LiGoldragon/signal-persona-spirit.git", branch = "main" }
 thiserror                   = "2"
 tokio                       = { version = "1", default-features = false, features = ["macros", "rt-multi-thread"] }

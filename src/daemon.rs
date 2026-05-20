@@ -10,8 +10,14 @@ use owner_signal_persona_spirit::{
     Frame as OwnerFrame, FrameBody as OwnerFrameBody, OwnerSpiritReply, OwnerSpiritRequest,
 };
 use signal_core::{
+    ExchangeIdentifier as OwnerExchangeIdentifier, ExchangeLane as OwnerExchangeLane,
+    LaneSequence as OwnerLaneSequence, NonEmpty as OwnerNonEmpty, Reply as OwnerReply,
+    RequestPayload as OwnerRequestPayload, SessionEpoch as OwnerSessionEpoch, SignalVerb,
+    SubReply as OwnerSubReply,
+};
+use signal_frame::{
     ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, RequestPayload, SessionEpoch,
-    SignalVerb, SubReply,
+    SubReply,
 };
 use signal_persona_spirit::{Frame, FrameBody, SpiritReply, SpiritRequest};
 
@@ -83,12 +89,12 @@ pub struct OwnerSpiritSignalClient {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReceivedRequest {
     exchange: ExchangeIdentifier,
-    request: signal_core::Request<SpiritRequest>,
+    request: signal_frame::Request<SpiritRequest>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReceivedOwnerRequest {
-    exchange: ExchangeIdentifier,
+    exchange: OwnerExchangeIdentifier,
     request: signal_core::Request<OwnerSpiritRequest>,
 }
 
@@ -99,7 +105,7 @@ pub struct ServedExchange {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServedOwnerExchange {
-    reply: Reply<OwnerSpiritReply>,
+    reply: OwnerReply<OwnerSpiritReply>,
 }
 
 impl DaemonConfiguration {
@@ -321,8 +327,8 @@ impl OwnerSpiritFrameCodec {
 
     pub fn reply_frame(
         &self,
-        exchange: ExchangeIdentifier,
-        reply: Reply<OwnerSpiritReply>,
+        exchange: OwnerExchangeIdentifier,
+        reply: OwnerReply<OwnerSpiritReply>,
     ) -> OwnerFrame {
         OwnerFrame::new(OwnerFrameBody::Reply { exchange, reply })
     }
@@ -339,7 +345,7 @@ impl OwnerSpiritFrameCodec {
         }
     }
 
-    pub fn reply_from_frame(&self, frame: OwnerFrame) -> Result<Reply<OwnerSpiritReply>> {
+    pub fn reply_from_frame(&self, frame: OwnerFrame) -> Result<OwnerReply<OwnerSpiritReply>> {
         match frame.into_body() {
             OwnerFrameBody::Reply { reply, .. } => Ok(reply),
             other => Err(Error::UnexpectedFrame {
@@ -349,11 +355,11 @@ impl OwnerSpiritFrameCodec {
         }
     }
 
-    fn exchange(&self) -> ExchangeIdentifier {
-        ExchangeIdentifier::new(
-            SessionEpoch::new(0),
-            ExchangeLane::Connector,
-            LaneSequence::first(),
+    fn exchange(&self) -> OwnerExchangeIdentifier {
+        OwnerExchangeIdentifier::new(
+            OwnerSessionEpoch::new(0),
+            OwnerExchangeLane::Connector,
+            OwnerLaneSequence::first(),
         )
     }
 }
@@ -524,7 +530,7 @@ impl BoundDaemon {
 
     fn reply_to_request(
         &self,
-        request: signal_core::Request<SpiritRequest>,
+        request: signal_frame::Request<SpiritRequest>,
     ) -> Result<Reply<SpiritReply>> {
         OrdinaryExchangeHandler::new(self.root.clone(), self.runtime.clone())
             .reply_to_request(request)
@@ -533,7 +539,7 @@ impl BoundDaemon {
     fn reply_to_owner_request(
         &self,
         request: signal_core::Request<OwnerSpiritRequest>,
-    ) -> Result<Reply<OwnerSpiritReply>> {
+    ) -> Result<OwnerReply<OwnerSpiritReply>> {
         OwnerExchangeHandler::new(self.root.clone(), self.runtime.clone()).reply_to_request(request)
     }
 }
@@ -642,28 +648,19 @@ impl OrdinaryExchangeHandler {
 
     fn reply_to_request(
         &self,
-        request: signal_core::Request<SpiritRequest>,
+        request: signal_frame::Request<SpiritRequest>,
     ) -> Result<Reply<SpiritReply>> {
-        match request.into_checked() {
-            Ok(checked) => {
-                let replies = checked
-                    .operations
-                    .into_iter()
-                    .map(|operation| self.reply_to_operation(operation.verb, operation.payload))
-                    .collect::<Result<Vec<_>>>()?;
-                Ok(Reply::completed(
-                    NonEmpty::try_from_vec(replies).expect("checked request is non-empty"),
-                ))
-            }
-            Err((reason, _request)) => Ok(Reply::rejected(reason)),
-        }
+        let replies = request
+            .payloads
+            .into_iter()
+            .map(|request| self.reply_to_operation(request))
+            .collect::<Result<Vec<_>>>()?;
+        Ok(Reply::committed(
+            NonEmpty::try_from_vec(replies).expect("request is non-empty"),
+        ))
     }
 
-    fn reply_to_operation(
-        &self,
-        verb: SignalVerb,
-        request: SpiritRequest,
-    ) -> Result<SubReply<SpiritReply>> {
+    fn reply_to_operation(&self, request: SpiritRequest) -> Result<SubReply<SpiritReply>> {
         let reply = self
             .runtime
             .block_on(async {
@@ -672,10 +669,7 @@ impl OrdinaryExchangeHandler {
                     .await
             })
             .map_err(|error| Error::actor_runtime(error.to_string()))?;
-        Ok(SubReply::Ok {
-            verb,
-            payload: reply.into_reply(),
-        })
+        Ok(SubReply::Ok(reply.into_reply()))
     }
 }
 
@@ -690,7 +684,7 @@ impl OwnerExchangeHandler {
     fn reply_to_request(
         &self,
         request: signal_core::Request<OwnerSpiritRequest>,
-    ) -> Result<Reply<OwnerSpiritReply>> {
+    ) -> Result<OwnerReply<OwnerSpiritReply>> {
         match request.into_checked() {
             Ok(checked) => {
                 let replies = checked
@@ -698,11 +692,11 @@ impl OwnerExchangeHandler {
                     .into_iter()
                     .map(|operation| self.reply_to_operation(operation.verb, operation.payload))
                     .collect::<Result<Vec<_>>>()?;
-                Ok(Reply::completed(
-                    NonEmpty::try_from_vec(replies).expect("checked request is non-empty"),
+                Ok(OwnerReply::completed(
+                    OwnerNonEmpty::try_from_vec(replies).expect("checked request is non-empty"),
                 ))
             }
-            Err((reason, _request)) => Ok(Reply::rejected(reason)),
+            Err((reason, _request)) => Ok(OwnerReply::rejected(reason)),
         }
     }
 
@@ -710,7 +704,7 @@ impl OwnerExchangeHandler {
         &self,
         verb: SignalVerb,
         request: OwnerSpiritRequest,
-    ) -> Result<SubReply<OwnerSpiritReply>> {
+    ) -> Result<OwnerSubReply<OwnerSpiritReply>> {
         let reply = self
             .runtime
             .block_on(async {
@@ -719,7 +713,7 @@ impl OwnerExchangeHandler {
                     .await
             })
             .map_err(|error| Error::actor_runtime(error.to_string()))?;
-        Ok(SubReply::Ok {
+        Ok(OwnerSubReply::Ok {
             verb,
             payload: reply.into_reply(),
         })
@@ -745,13 +739,15 @@ impl SpiritSignalClient {
     fn reply_payload(&self, reply: Reply<SpiritReply>) -> Result<SpiritReply> {
         match reply {
             Reply::Accepted { per_operation, .. } => match per_operation.into_head() {
-                SubReply::Ok { payload, .. } => Ok(payload),
+                SubReply::Ok(payload) => Ok(payload),
                 other => Err(Error::UnexpectedFrame {
                     expected: "accepted operation reply",
                     got: format!("{other:?}"),
                 }),
             },
-            Reply::Rejected { reason } => Err(Error::RequestRejected { reason }),
+            Reply::Rejected { reason } => Err(Error::RequestRejected {
+                reason: reason.to_string(),
+            }),
         }
     }
 }
@@ -772,16 +768,18 @@ impl OwnerSpiritSignalClient {
         self.reply_payload(self.codec.reply_from_frame(reply)?)
     }
 
-    fn reply_payload(&self, reply: Reply<OwnerSpiritReply>) -> Result<OwnerSpiritReply> {
+    fn reply_payload(&self, reply: OwnerReply<OwnerSpiritReply>) -> Result<OwnerSpiritReply> {
         match reply {
-            Reply::Accepted { per_operation, .. } => match per_operation.into_head() {
-                SubReply::Ok { payload, .. } => Ok(payload),
+            OwnerReply::Accepted { per_operation, .. } => match per_operation.into_head() {
+                OwnerSubReply::Ok { payload, .. } => Ok(payload),
                 other => Err(Error::UnexpectedFrame {
                     expected: "accepted owner operation reply",
                     got: format!("{other:?}"),
                 }),
             },
-            Reply::Rejected { reason } => Err(Error::RequestRejected { reason }),
+            OwnerReply::Rejected { reason } => Err(Error::RequestRejected {
+                reason: reason.to_string(),
+            }),
         }
     }
 }
@@ -797,11 +795,11 @@ impl ServedExchange {
 }
 
 impl ServedOwnerExchange {
-    fn new(reply: Reply<OwnerSpiritReply>) -> Self {
+    fn new(reply: OwnerReply<OwnerSpiritReply>) -> Self {
         Self { reply }
     }
 
-    pub fn reply(&self) -> &Reply<OwnerSpiritReply> {
+    pub fn reply(&self) -> &OwnerReply<OwnerSpiritReply> {
         &self.reply
     }
 }
