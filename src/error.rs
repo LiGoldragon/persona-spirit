@@ -8,6 +8,9 @@ pub enum Error {
     #[error("{program} accepts NOTA or signal-file input, not flag-style argument {argument}")]
     FlagArgument { program: String, argument: String },
 
+    #[error("persona-spirit requires PERSONA_SPIRIT_SOCKET to reach the daemon")]
+    MissingSpiritSocket,
+
     #[error("{surface} runtime is not implemented yet: {reason}")]
     RuntimeNotImplemented {
         surface: &'static str,

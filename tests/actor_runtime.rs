@@ -434,12 +434,15 @@ async fn persona_spirit_invalid_text_keeps_typed_decode_error() {
 }
 
 #[test]
-fn persona_spirit_command_line_path_uses_actor_runtime() {
+fn persona_spirit_command_line_path_does_not_use_actor_runtime_directly() {
     let source = std::fs::read_to_string(format!("{}/src/runtime.rs", env!("CARGO_MANIFEST_DIR")))
         .expect("runtime source is readable");
 
-    assert!(source.contains("SpiritActorRuntime::submit_text_blocking"));
-    assert!(!source.contains("SpiritRuntime::open"));
+    assert!(source.contains("SpiritRequestText::new"));
+    assert!(source.contains("SpiritSignalClient::new"));
+    assert!(source.contains("SpiritReplyText::new"));
+    assert!(!source.contains("SpiritActorRuntime"));
+    assert!(!source.contains("StoreLocation"));
 }
 
 #[test]

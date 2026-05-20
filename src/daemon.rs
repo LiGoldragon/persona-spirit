@@ -157,6 +157,12 @@ impl SocketPath {
         Self(value.into())
     }
 
+    pub fn from_environment() -> Result<Self> {
+        std::env::var("PERSONA_SPIRIT_SOCKET")
+            .map(Self::new)
+            .map_err(|_| Error::MissingSpiritSocket)
+    }
+
     pub fn as_path(&self) -> &Path {
         Path::new(&self.0)
     }

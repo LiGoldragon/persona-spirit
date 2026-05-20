@@ -45,8 +45,7 @@ downstream owner-Mutate audit once the runtime lands.
 
 ## Actor topology
 
-The one-shot CLI path starts and stops a Kameo actor tree per invocation. The
-daemon path keeps the same tree alive behind two typed Unix sockets:
+The daemon keeps the Kameo actor tree alive behind two typed Unix sockets:
 
 ```mermaid
 flowchart LR
@@ -97,10 +96,13 @@ ordinary socket reads length-prefixed `signal-persona-spirit::Frame` values,
 checks the `signal-frame::Request`, and submits each `SpiritRequest` directly to
 `SpiritRoot` through the dispatch plane. The owner socket reads
 length-prefixed `owner-signal-persona-spirit::Frame` values and submits each
-`OwnerSpiritRequest` directly to `OwnerPlane`. The NOTA decoder remains a
-CLI/text ingress actor only. The CLI can still run in raw one-shot mode, but it
-can also decode one NOTA request and forward it to a running ordinary daemon
-socket.
+`OwnerSpiritRequest` directly to `OwnerPlane`.
+
+The `persona-spirit` CLI is not a second runtime. It decodes its single NOTA
+argument into a `SpiritRequest`, sends that request to the daemon as a
+length-prefixed `signal-frame` exchange on `PERSONA_SPIRIT_SOCKET`, and encodes
+the daemon's `SpiritReply` back to NOTA. If no daemon socket is configured, the
+CLI fails instead of opening a store or running the actor tree in-process.
 
 ## Constraints
 
@@ -108,8 +110,9 @@ socket.
 |---|---|
 | The CLI binary accepts exactly one argument. | `tests/boundary.rs` checks missing and extra arguments. |
 | The daemon binary accepts exactly one argument. | `tests/boundary.rs` checks the shared argument parser. |
-| The CLI type-checks one `signal-persona-spirit::SpiritRequest`. | `tests/boundary.rs` checks valid `State`, `Record`, and `Observe` requests. |
-| The CLI request path uses the Kameo actor tree. | `persona_spirit_command_line_path_uses_actor_runtime` checks the CLI path delegates to `SpiritActorRuntime`. |
+| The CLI type-checks one `signal-persona-spirit::SpiritRequest`. | `tests/boundary.rs` checks valid `State`, `Record`, and `Observe` requests before daemon submission. |
+| The CLI requires a daemon socket instead of using an in-process store fallback. | `persona_spirit_binary_requires_socket_environment` runs the binary without `PERSONA_SPIRIT_SOCKET` and expects failure. |
+| The CLI path only translates NOTA to Signal frames and Signal replies to NOTA. | `persona_spirit_command_line_path_does_not_use_actor_runtime_directly` checks `runtime.rs` uses `SpiritRequestText`, `SpiritSignalClient`, and `SpiritReplyText`, and not `SpiritActorRuntime` or `StoreLocation`. |
 | Kameo is the only actor runtime dependency. | `persona_spirit_uses_kameo_as_only_actor_runtime` scans the manifest. |
 | Actor types are data-bearing, not public zero-sized actor nouns. | `persona_spirit_actor_types_are_data_bearing` checks each named actor has a struct body. |
 | Raw `State` statements route through a classifier actor before storage. | `persona_spirit_state_statement_uses_classifier_before_store` checks `DispatchPhase` → `ClassifierPlane` → `RecordStore` → `SemaWriter`. |
@@ -140,8 +143,8 @@ socket.
 | The owner socket rejects ordinary Signal frames. | `persona_spirit_owner_socket_rejects_ordinary_signal_frames` writes an ordinary frame to the owner socket and expects decode rejection. |
 | Daemon shutdown removes both socket paths. | `persona_spirit_daemon_serves_signal_frames_through_actor_root` checks both ordinary and owner sockets are removed after bounded serving. |
 | Signal-frame daemon ingress does not route through the NOTA decoder. | `persona_spirit_daemon_source_does_not_route_signal_frames_through_nota_decoder` checks the socket boundary calls `SubmitRequest`. |
-| The CLI can act as a daemon client without bypassing Signal. | `persona_spirit_client_can_send_nota_request_to_running_daemon` decodes NOTA then sends a Signal frame to the socket. |
-| No classifier or mind-forwarding behavior exists until its intent is clear. | Status section says this explicitly. |
+| The CLI acts as a daemon client without bypassing Signal. | `persona_spirit_client_can_send_nota_request_to_running_daemon` decodes NOTA then sends a Signal frame to the socket. |
+| No LLM classifier or mind-forwarding behavior exists until its intent is clear. | Status section says this explicitly. |
 
 ## Code Map
 
@@ -150,9 +153,9 @@ src/lib.rs                         — module entry
 src/argument.rs                    — one-argument boundary
 src/daemon.rs                      — daemon configuration, bootstrap-policy source selection, socket binding, ordinary/owner frame codecs, signal clients
 src/error.rs                       — typed error
-src/runtime.rs                     — CLI boundary that delegates into SpiritActorRuntime
+src/runtime.rs                     — CLI boundary that converts NOTA request text to signal-frame request traffic and typed replies back to NOTA
 src/store.rs                       — sema-engine backed entry store and record queries
-src/actors/root.rs                 — Kameo root and blocking one-shot runtime helper
+src/actors/root.rs                 — Kameo root and blocking actor-runtime helper
 src/actors/ingress.rs              — text ingress phase
 src/actors/owner.rs                — owner-signal lifecycle and identity actor
 src/actors/policy.rs               — bootstrap-policy parsing and reload actor
@@ -181,7 +184,8 @@ Implemented now:
 - daemon and CLI binary names;
 - one-argument boundary parser;
 - typed CLI request decoding for `signal-persona-spirit::SpiritRequest`;
-- Kameo actor tree for the CLI request path;
+- CLI daemon-client mode that requires `PERSONA_SPIRIT_SOCKET` and performs
+  only NOTA request decoding, signal-frame submission, and NOTA reply encoding;
 - provisional classifier for `State` statements that preserves the raw quote as
   a minimum-certainty `Clarification` record under topic `unclassified`;
 - `persona-spirit-daemon` typed configuration and ordinary/owner Unix socket
@@ -212,6 +216,12 @@ Not implemented:
 - owner-Mutate forwarding to mind;
 - subscription event delivery;
 - filesystem intent projection.
+
+`persona-spirit` is therefore not ready to fully replace the ad-hoc intent-log
+files. It can be used for daemon-backed typed capture and query experiments,
+but file logs remain the canonical intent record until classification,
+intent-log projection/cutover, live subscription delivery, and spirit-to-mind
+owner-Mutate forwarding are implemented.
 
 The next implementation step is subscription event delivery or spirit-to-mind
 owner-Mutate forwarding. Spirit-to-mind owner variants are not needed for the
