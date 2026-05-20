@@ -53,7 +53,7 @@ async fn persona_spirit_entry_assertion_runs_through_actor_planes() {
     let runtime = fixture.runtime().await;
 
     let reply = runtime
-        .submit_text("(Record (workspace Decision \"actor path\" \"actor context\" Maximum (2026 5 20) (14 30 0) \"actor quote\"))")
+        .submit_text("(Record (workspace Decision \"actor path\" \"actor context\" Maximum 2026-05-20 14:30:00 \"actor quote\"))")
         .await
         .expect("entry accepted");
 
@@ -130,7 +130,7 @@ async fn persona_spirit_record_observation_uses_read_plane_without_write_plane()
 
     runtime
         .submit_text(
-            "(Record (workspace Decision \"summary\" \"context\" Maximum (2026 5 20) (14 30 0) \"quote\"))",
+            "(Record (workspace Decision \"summary\" \"context\" Maximum 2026-05-20 14:30:00 \"quote\"))",
         )
         .await
         .expect("entry accepted");
@@ -250,7 +250,7 @@ async fn persona_spirit_record_subscription_uses_read_plane_then_subscription_pl
     let runtime = fixture.runtime().await;
 
     runtime
-        .submit_text("(Record (workspace Decision \"subscription path\" \"context\" Maximum (2026 5 20) (14 30 0) \"quote\"))")
+        .submit_text("(Record (workspace Decision \"subscription path\" \"context\" Maximum 2026-05-20 14:30:00 \"quote\"))")
         .await
         .expect("entry accepted");
     let reply = runtime
@@ -474,7 +474,7 @@ async fn persona_spirit_shutdown_releases_store_for_restart() {
     let first_runtime = fixture.runtime().await;
 
     first_runtime
-        .submit_text("(Record (workspace Decision \"restart survives\" \"context\" Maximum (2026 5 20) (14 30 0) \"quote\"))")
+        .submit_text("(Record (workspace Decision \"restart survives\" \"context\" Maximum 2026-05-20 14:30:00 \"quote\"))")
         .await
         .expect("entry accepted");
     first_runtime.stop().await.expect("first runtime stops");

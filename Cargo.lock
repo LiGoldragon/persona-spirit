@@ -249,7 +249,7 @@ dependencies = [
 [[package]]
 name = "nota-codec"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/nota-codec.git?branch=main#c5932f974cc211e58f616f10966b0b064b701ebb"
+source = "git+https://github.com/LiGoldragon/nota-codec.git?branch=main#c861cee597180b9ae707b6bac036695d6f926b5a"
 dependencies = [
  "camino",
  "nota-derive",
@@ -259,7 +259,7 @@ dependencies = [
 [[package]]
 name = "nota-derive"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/nota-derive.git?branch=main#1246636c10a56b5cb0aa8f148af0bfd96508ca14"
+source = "git+https://github.com/LiGoldragon/nota-derive.git?branch=main#8323149593b95d6e90c1fdde54e9aba58803337c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -515,7 +515,7 @@ dependencies = [
 [[package]]
 name = "signal-persona-spirit"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#77032047072a32b87c16736305f20648bfd4ed93"
+source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#370f68b6a22dc01e4477c739565b672d6fcda8ce"
 dependencies = [
  "nota-codec",
  "rkyv",

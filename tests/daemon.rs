@@ -449,7 +449,7 @@ fn persona_spirit_client_can_send_nota_request_to_running_daemon() {
     let handle = thread::spawn(move || daemon.serve_count(1));
     let argument = SingleArgument::from_arguments([
         "spirit".to_string(),
-        "(Record (workspace Decision \"client socket\" \"daemon context\" Maximum (2026 5 20) (14 30 0) \"daemon quote\"))"
+        "(Record (workspace Decision \"client socket\" \"daemon context\" Maximum 2026-05-20 14:30:00 \"daemon quote\"))"
             .to_string(),
     ])
     .expect("single request argument");
@@ -483,7 +483,7 @@ fn spirit_binary_can_send_request_file_to_running_daemon() {
     request_path.push(format!("persona-spirit-cli-request-{nanos}.nota"));
     fs::write(
         &request_path,
-        "(Record (workspace Decision \"binary file\" \"daemon context\" Maximum (2026 5 20) (14 30 0) \"daemon quote\"))",
+        "(Record (workspace Decision \"binary file\" \"daemon context\" Maximum 2026-05-20 14:30:00 \"daemon quote\"))",
     )
     .expect("request file written");
 

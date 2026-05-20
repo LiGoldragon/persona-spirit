@@ -53,8 +53,9 @@ Contract records stay in `signal-persona-spirit` and
   `PolicyPlane`; it does not silently fall back to the embedded seed.
 - `Entry` assertions persist one top-level record in the local sema-engine
   store and return `RecordAccepted`.
-- `Entry` records carry split `date` and `time` fields. Opaque epoch
-  timestamp fields are rejected at decode time.
+- `Entry` records carry bare `YYYY-MM-DD` and `HH:MM:SS` fields. Opaque
+  epoch timestamp fields and parenthesized numeric date/time records are
+  rejected at decode time.
 - `Entry` assertions pass through `RecordStore` and the sema-writer trace
   plane; queries pass through the sema-reader trace plane.
 - `Observation::State` and `Observation::Questions` pass through
