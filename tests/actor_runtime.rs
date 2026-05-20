@@ -53,7 +53,7 @@ async fn persona_spirit_entry_assertion_runs_through_actor_planes() {
     let runtime = fixture.runtime().await;
 
     let reply = runtime
-        .submit_text("(Record (workspace Decision \"actor path\" \"actor context\" Maximum 2026-05-20 14:30:00 \"actor quote\"))")
+        .submit_text("(Record (workspace Decision \"actor path\" \"actor context\" Maximum \"actor quote\"))")
         .await
         .expect("entry accepted");
 
@@ -67,6 +67,7 @@ async fn persona_spirit_entry_assertion_runs_through_actor_planes() {
         TraceNode::NOTA_DECODER,
         TraceNode::DISPATCH_PHASE,
         TraceNode::SIGNAL_EXECUTOR,
+        TraceNode::CLOCK_PLANE,
         TraceNode::RECORD_STORE,
         TraceNode::SEMA_WRITER,
         TraceNode::SEMA_OBSERVER,
@@ -94,8 +95,6 @@ async fn persona_spirit_ordinary_request_path_uses_signal_executor_and_sema_obse
             summary: signal_persona_spirit::Summary::new("executor path"),
             context: signal_persona_spirit::Context::new("actor context"),
             certainty: signal_persona_spirit::Certainty::Maximum,
-            date: signal_persona_spirit::Date::new(2026, 5, 20),
-            time: signal_persona_spirit::Time::new(14, 30, 0),
             quote: signal_persona_spirit::Quote::new("actor quote"),
         }))
         .await
@@ -111,9 +110,15 @@ async fn persona_spirit_ordinary_request_path_uses_signal_executor_and_sema_obse
             .trace()
             .contains_action(TraceNode::SEMA_OBSERVER, TraceAction::ObservationProjected)
     );
+    assert!(
+        reply
+            .trace()
+            .contains_action(TraceNode::CLOCK_PLANE, TraceAction::EntryStamped)
+    );
     assert!(reply.trace().contains_ordered(&[
         TraceNode::DISPATCH_PHASE,
         TraceNode::SIGNAL_EXECUTOR,
+        TraceNode::CLOCK_PLANE,
         TraceNode::RECORD_STORE,
         TraceNode::SEMA_WRITER,
         TraceNode::SEMA_OBSERVER,
@@ -129,9 +134,7 @@ async fn persona_spirit_record_observation_uses_read_plane_without_write_plane()
     let runtime = fixture.runtime().await;
 
     runtime
-        .submit_text(
-            "(Record (workspace Decision \"summary\" \"context\" Maximum 2026-05-20 14:30:00 \"quote\"))",
-        )
+        .submit_text("(Record (workspace Decision \"summary\" \"context\" Maximum \"quote\"))")
         .await
         .expect("entry accepted");
     let reply = runtime
@@ -250,7 +253,9 @@ async fn persona_spirit_record_subscription_uses_read_plane_then_subscription_pl
     let runtime = fixture.runtime().await;
 
     runtime
-        .submit_text("(Record (workspace Decision \"subscription path\" \"context\" Maximum 2026-05-20 14:30:00 \"quote\"))")
+        .submit_text(
+            "(Record (workspace Decision \"subscription path\" \"context\" Maximum \"quote\"))",
+        )
         .await
         .expect("entry accepted");
     let reply = runtime
@@ -456,6 +461,7 @@ async fn persona_spirit_state_statement_uses_classifier_before_store() {
     assert!(reply.trace().contains_ordered(&[
         TraceNode::DISPATCH_PHASE,
         TraceNode::CLASSIFIER_PLANE,
+        TraceNode::CLOCK_PLANE,
         TraceNode::RECORD_STORE,
         TraceNode::SEMA_WRITER,
         TraceNode::REPLY_TEXT_ENCODER,
@@ -474,7 +480,9 @@ async fn persona_spirit_shutdown_releases_store_for_restart() {
     let first_runtime = fixture.runtime().await;
 
     first_runtime
-        .submit_text("(Record (workspace Decision \"restart survives\" \"context\" Maximum 2026-05-20 14:30:00 \"quote\"))")
+        .submit_text(
+            "(Record (workspace Decision \"restart survives\" \"context\" Maximum \"quote\"))",
+        )
         .await
         .expect("entry accepted");
     first_runtime.stop().await.expect("first runtime stops");
@@ -550,6 +558,7 @@ fn persona_spirit_uses_kameo_as_only_actor_runtime() {
 fn persona_spirit_actor_types_are_data_bearing() {
     let actors = [
         ("src/actors/decoder.rs", "pub struct NotaDecoder {"),
+        ("src/actors/clock.rs", "pub struct ClockPlane {"),
         ("src/actors/classifier.rs", "pub struct ClassifierPlane {"),
         ("src/actors/dispatch.rs", "pub struct DispatchPhase {"),
         ("src/actors/ingress.rs", "pub struct IngressPhase {"),

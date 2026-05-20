@@ -10,6 +10,8 @@ as either a raw NOTA request or a path to a NOTA request file, sends the
 corresponding `signal-frame` request to the daemon named by
 `PERSONA_SPIRIT_SOCKET`, then renders the daemon's typed reply back to NOTA.
 It does not start an in-process actor tree or open a store by itself.
+Clients do not submit capture time; the daemon stamps records before storage
+and exposes that time only in provenance replies.
 
 The daemon actor tree persists `Record` operations, serves `Observe` reads,
 opens/retracts `Watch` subscriptions, provisionally classifies raw `State`

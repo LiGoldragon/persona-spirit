@@ -5,6 +5,7 @@ use kameo::message::{Context, Message};
 use crate::{Error, Result, StoreLocation};
 
 use super::classifier;
+use super::clock;
 use super::decoder;
 use super::dispatch;
 use super::ingress;
@@ -432,6 +433,9 @@ impl Actor for SpiritRoot {
         )
         .spawn()
         .await;
+        let clock = clock::ClockPlane::supervise(&actor_reference, clock::Arguments::default())
+            .spawn()
+            .await;
         let subscription = subscription::SubscriptionPlane::supervise(
             &actor_reference,
             subscription::Arguments::default(),
@@ -442,6 +446,7 @@ impl Actor for SpiritRoot {
             &actor_reference,
             dispatch::Arguments {
                 classifier,
+                clock,
                 store,
                 state,
                 subscription,

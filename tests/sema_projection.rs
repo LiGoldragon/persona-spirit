@@ -3,10 +3,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use persona_spirit::{Command, Effect, SpiritActorRuntime, StoreLocation};
 use signal_frame::SubscriptionTokenInner;
 use signal_persona_spirit::{
-    Certainty, Context, Date, Entry, Kind, Observation, ObservationMode, Quote, RecordQuery,
+    Certainty, Context, Entry, Kind, Observation, ObservationMode, Quote, RecordQuery,
     SpiritObserverFilter, SpiritObserverSubscriptionToken, SpiritReply, SpiritRequest,
     StateSubscriptionToken, Statement, StatementText, Subscription, SubscriptionToken, Summary,
-    Time, Topic,
+    Topic,
 };
 use signal_sema::{SemaObservation, SemaOperation, SemaOutcome};
 
@@ -44,8 +44,6 @@ fn entry(summary: &str) -> Entry {
         summary: Summary::new(summary),
         context: Context::new("projection context"),
         certainty: Certainty::Maximum,
-        date: Date::new(2026, 5, 20),
-        time: Time::new(14, 30, 0),
         quote: Quote::new("projection quote"),
     }
 }

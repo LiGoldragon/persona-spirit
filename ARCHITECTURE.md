@@ -55,6 +55,7 @@ flowchart LR
     ingress["IngressPhase"]
     decoder["NotaDecoder"]
     classifier["ClassifierPlane"]
+    clock["ClockPlane"]
     dispatch["DispatchPhase"]
     executor["SignalExecutor"]
     observer["SemaObserver"]
@@ -72,6 +73,7 @@ flowchart LR
     ingress --> decoder
     ingress --> dispatch
     dispatch --> classifier
+    dispatch --> clock
     dispatch --> executor
     executor --> observer
     dispatch --> state
@@ -87,11 +89,13 @@ flowchart LR
 `owner-signal-persona-spirit`; it is not reachable through the ordinary text
 ingress or dispatch path. `PolicyPlane` owns bootstrap-policy parsing and
 reload state. `ClassifierPlane` owns the current conservative statement-to-record
-policy. `DispatchPhase` is the boundary where ordinary operations enter
-`signal-executor`: it lowers contract operations into Spirit-local `Command`
-values, executes them through the Kameo planes, and publishes payloadless
-`signal-sema` observations after successful execution. `RecordStore` owns
-`SpiritStore`, which owns the sema-engine handle. It runs as the store plane.
+policy. `ClockPlane` owns daemon-side capture-time stamping; clients never
+submit capture time. `DispatchPhase` is the boundary where ordinary operations
+enter `signal-executor`: it lowers contract operations into Spirit-local
+`Command` values, executes them through the Kameo planes, and publishes
+payloadless `signal-sema` observations after successful execution. `RecordStore`
+owns `SpiritStore`, which owns the sema-engine handle. It runs as the store
+plane.
 `StatePlane` owns current psyche state and pending clarification questions.
 `SubscriptionPlane` owns subscription tokens and live stream registrations.
 Request decoding, dispatch,
@@ -135,9 +139,10 @@ running the actor tree in-process.
 | Actor types are data-bearing, not public zero-sized actor nouns. | `persona_spirit_actor_types_are_data_bearing` checks each named actor has a struct body. |
 | Raw `State` statements route through a classifier actor before storage. | `persona_spirit_state_statement_uses_classifier_before_store` checks `DispatchPhase` → `ClassifierPlane` → `RecordStore` → `SemaWriter`. |
 | The provisional classifier preserves the raw quote and marks uncertainty. | `persona_spirit_client_classifies_statement_as_provisional_record` checks `Clarification` / `Minimum` output. |
-| `Record` operations traverse root, ingress, decoder, dispatch, store, sema writer, and reply encoder. | `persona_spirit_entry_assertion_runs_through_actor_planes` checks `ActorTrace` ordering. |
+| `Record` operations traverse root, ingress, decoder, dispatch, daemon clock, store, sema writer, and reply encoder. | `persona_spirit_entry_assertion_runs_through_actor_planes` checks `ActorTrace` ordering. |
 | `Record` operations persist a top-level record. | `persona_spirit_client_asserts_entry_and_mints_record_identifier` checks `RecordAccepted`. |
-| `Entry` carries bare `YYYY-MM-DD` and `HH:MM:SS` fields, never an opaque epoch timestamp or parenthesized numeric date/time records. | `persona_spirit_client_asserts_entry_and_mints_record_identifier` uses the bare split fields; `persona_spirit_client_rejects_opaque_integer_timestamp_shape` rejects the old integer shape; `persona_spirit_client_rejects_parenthesized_date_time_shape` rejects the transitional record shape. |
+| Submitted `Entry` records carry no client-provided capture time. | `persona_spirit_client_asserts_entry_and_mints_record_identifier` submits topic, kind, summary, context, certainty, and quote only; `persona_spirit_client_rejects_opaque_integer_timestamp_shape` and `persona_spirit_client_rejects_parenthesized_date_time_shape` reject old timestamp-bearing shapes. |
+| The daemon stamps capture time before storage. | `persona_spirit_ordinary_request_path_uses_signal_executor_and_sema_observer` checks `ClockPlane` and `EntryStamped`; provenance replies include daemon-produced `Date` and `Time`. |
 | Spirit mints `RecordIdentifier`; agents never submit it. | `persona_spirit_client_asserts_entry_and_mints_record_identifier` sends no identifier and receives one. |
 | Repeated similar entries remain distinct records. | `persona_spirit_client_repeated_entries_remain_distinct_records` stores two matching summaries. |
 | Record observations use the read plane and not the write plane. | `persona_spirit_record_observation_uses_read_plane_without_write_plane` checks `SemaReader` without `SemaWriter`. |
@@ -181,6 +186,7 @@ src/actors/owner.rs                — owner-signal lifecycle and identity actor
 src/actors/policy.rs               — bootstrap-policy parsing and reload actor
 src/actors/decoder.rs              — strict NOTA request decoder actor
 src/actors/classifier.rs           — conservative statement-to-record classifier actor
+src/actors/clock.rs                — daemon-side capture-time stamping actor
 src/actors/dispatch.rs             — request dispatch actor; signal-executor lowering, command execution, and Sema observation publication
 src/actors/state.rs                — psyche-state and pending-question working-state actor
 src/actors/subscription.rs         — subscription token and stream registration actor

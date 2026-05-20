@@ -1,10 +1,8 @@
 use kameo::actor::{Actor, ActorRef};
 use kameo::message::{Context, Message};
-use signal_persona_spirit::{
-    Entry, RecordObservation, RecordSubscription, RecordSummary, SpiritReply,
-};
+use signal_persona_spirit::{RecordObservation, RecordSubscription, RecordSummary, SpiritReply};
 
-use crate::{Result, SpiritStore, StoreLocation};
+use crate::{Result, SpiritStore, StoreLocation, store::StampedEntry};
 
 use super::pipeline::PipelineReply;
 use super::trace::{ActorTrace, TraceAction, TraceNode};
@@ -19,7 +17,7 @@ pub struct Arguments {
 }
 
 pub struct CaptureEntry {
-    pub entry: Entry,
+    pub entry: StampedEntry,
     pub trace: ActorTrace,
 }
 
@@ -44,7 +42,7 @@ impl RecordStore {
         Self { store }
     }
 
-    fn capture_entry(&self, entry: Entry, mut trace: ActorTrace) -> Result<PipelineReply> {
+    fn capture_entry(&self, entry: StampedEntry, mut trace: ActorTrace) -> Result<PipelineReply> {
         trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReceived);
         trace.record(TraceNode::SEMA_WRITER, TraceAction::MessageReceived);
         let accepted = self.store.assert_entry(entry)?;

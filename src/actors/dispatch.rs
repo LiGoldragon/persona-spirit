@@ -14,9 +14,11 @@ use signal_persona_spirit::{
 };
 
 use crate::observation::{Command, Effect};
+use crate::store::StampedEntry;
 use crate::{Error, Result};
 
 use super::classifier;
+use super::clock;
 use super::pipeline::{FramePipelineReply, PipelineReply};
 use super::reply;
 use super::state;
@@ -26,6 +28,7 @@ use super::trace::{ActorTrace, TraceAction, TraceNode};
 
 pub struct DispatchPhase {
     classifier: ActorRef<classifier::ClassifierPlane>,
+    clock: ActorRef<clock::ClockPlane>,
     store: ActorRef<store::RecordStore>,
     state: ActorRef<state::StatePlane>,
     subscription: ActorRef<subscription::SubscriptionPlane>,
@@ -35,6 +38,7 @@ pub struct DispatchPhase {
 #[derive(Clone)]
 pub struct Arguments {
     pub classifier: ActorRef<classifier::ClassifierPlane>,
+    pub clock: ActorRef<clock::ClockPlane>,
     pub store: ActorRef<store::RecordStore>,
     pub state: ActorRef<state::StatePlane>,
     pub subscription: ActorRef<subscription::SubscriptionPlane>,
@@ -61,6 +65,7 @@ struct SpiritLowering;
 
 struct SpiritCommandExecutor {
     classifier: ActorRef<classifier::ClassifierPlane>,
+    clock: ActorRef<clock::ClockPlane>,
     store: ActorRef<store::RecordStore>,
     state: ActorRef<state::StatePlane>,
     subscription: ActorRef<subscription::SubscriptionPlane>,
@@ -75,6 +80,7 @@ struct SpiritObserverRecorder {
 impl DispatchPhase {
     fn new(
         classifier: ActorRef<classifier::ClassifierPlane>,
+        clock: ActorRef<clock::ClockPlane>,
         store: ActorRef<store::RecordStore>,
         state: ActorRef<state::StatePlane>,
         subscription: ActorRef<subscription::SubscriptionPlane>,
@@ -82,6 +88,7 @@ impl DispatchPhase {
     ) -> Self {
         Self {
             classifier,
+            clock,
             store,
             state,
             subscription,
@@ -104,6 +111,7 @@ impl DispatchPhase {
         trace.record(TraceNode::DISPATCH_PHASE, TraceAction::MessageReceived);
         let command_executor = SpiritCommandExecutor::new(
             self.classifier.clone(),
+            self.clock.clone(),
             self.store.clone(),
             self.state.clone(),
             self.subscription.clone(),
@@ -190,6 +198,7 @@ impl Lowering for SpiritLowering {
 impl SpiritCommandExecutor {
     fn new(
         classifier: ActorRef<classifier::ClassifierPlane>,
+        clock: ActorRef<clock::ClockPlane>,
         store: ActorRef<store::RecordStore>,
         state: ActorRef<state::StatePlane>,
         subscription: ActorRef<subscription::SubscriptionPlane>,
@@ -198,6 +207,7 @@ impl SpiritCommandExecutor {
     ) -> Self {
         Self {
             classifier,
+            clock,
             store,
             state,
             subscription,
@@ -248,6 +258,22 @@ impl SpiritCommandExecutor {
     }
 
     async fn capture_entry(&self, entry: signal_persona_spirit::Entry) -> Result<SpiritReply> {
+        let entry = self.stamp_entry(entry).await?;
+        self.capture_stamped_entry(entry).await
+    }
+
+    async fn stamp_entry(&self, entry: signal_persona_spirit::Entry) -> Result<StampedEntry> {
+        let trace = self.trace.snapshot();
+        let stamped = self
+            .clock
+            .ask(clock::StampEntry { entry, trace })
+            .await
+            .map_err(Self::clock_send_error)?;
+        self.trace.replace(stamped.trace);
+        Ok(stamped.entry)
+    }
+
+    async fn capture_stamped_entry(&self, entry: StampedEntry) -> Result<SpiritReply> {
         let trace = self.trace.snapshot();
         let pipeline = self
             .store
@@ -415,6 +441,10 @@ impl SpiritCommandExecutor {
         Error::actor_runtime(error.to_string())
     }
 
+    fn clock_send_error<Message>(error: SendError<Message, Infallible>) -> Error {
+        Error::actor_runtime(error.to_string())
+    }
+
     fn subscription_send_error<Message>(error: SendError<Message, Infallible>) -> Error {
         Error::actor_runtime(error.to_string())
     }
@@ -481,6 +511,7 @@ impl Actor for DispatchPhase {
     ) -> std::result::Result<Self, Self::Error> {
         Ok(Self::new(
             arguments.classifier,
+            arguments.clock,
             arguments.store,
             arguments.state,
             arguments.subscription,

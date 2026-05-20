@@ -6,8 +6,9 @@ use sema_engine::{
     TableReference,
 };
 use signal_persona_spirit::{
-    Entry, ObservationMode, RecordAccepted, RecordIdentifier, RecordObservation, RecordProvenance,
-    RecordProvenancesObserved, RecordSummary, RecordsObserved, SpiritReply, Topic,
+    Date, Entry, ObservationMode, Quote, RecordAccepted, RecordIdentifier, RecordObservation,
+    RecordProvenance, RecordProvenancesObserved, RecordSummary, RecordsObserved, SpiritReply, Time,
+    Topic,
 };
 
 use crate::{Result, error::Error};
@@ -31,12 +32,19 @@ pub struct SpiritStore {
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
 struct StoredRecord {
     identifier: RecordIdentifier,
-    entry: Entry,
+    entry: StampedEntry,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RecordIdentifierMint {
     next: u64,
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct StampedEntry {
+    entry: Entry,
+    date: Date,
+    time: Time,
 }
 
 impl StoreLocation {
@@ -69,7 +77,7 @@ impl SpiritStore {
         Ok(Self { engine, records })
     }
 
-    pub fn assert_entry(&self, entry: Entry) -> Result<RecordAccepted> {
+    pub fn assert_entry(&self, entry: StampedEntry) -> Result<RecordAccepted> {
         let stored = StoredRecord::new(self.next_identifier()?, entry);
         self.engine
             .assert(Assertion::new(self.records, stored.clone()))
@@ -111,7 +119,7 @@ impl SpiritStore {
             .into_iter()
             .filter(|record| {
                 topic
-                    .map(|expected| &record.entry.topic == expected)
+                    .map(|expected| &record.entry.entry.topic == expected)
                     .unwrap_or(true)
             })
             .collect())
@@ -130,28 +138,38 @@ impl SpiritStore {
 }
 
 impl StoredRecord {
-    fn new(identifier: RecordIdentifier, entry: Entry) -> Self {
+    fn new(identifier: RecordIdentifier, entry: StampedEntry) -> Self {
         Self { identifier, entry }
     }
 
     fn summary(&self) -> RecordSummary {
         RecordSummary {
             identifier: self.identifier,
-            topic: self.entry.topic.clone(),
-            kind: self.entry.kind,
-            summary: self.entry.summary.clone(),
-            certainty: self.entry.certainty,
+            topic: self.entry.entry.topic.clone(),
+            kind: self.entry.entry.kind,
+            summary: self.entry.entry.summary.clone(),
+            certainty: self.entry.entry.certainty,
         }
     }
 
     fn provenance(self) -> RecordProvenance {
         RecordProvenance {
             summary: self.summary(),
-            context: self.entry.context,
+            context: self.entry.entry.context,
             date: self.entry.date,
             time: self.entry.time,
-            quote: self.entry.quote,
+            quote: self.entry.entry.quote,
         }
+    }
+}
+
+impl StampedEntry {
+    pub fn new(entry: Entry, date: Date, time: Time) -> Self {
+        Self { entry, date, time }
+    }
+
+    pub fn quote(&self) -> &Quote {
+        &self.entry.quote
     }
 }
 

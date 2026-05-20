@@ -21,8 +21,8 @@ use signal_frame::{
     SubReply,
 };
 use signal_persona_spirit::{
-    Certainty, Context, Date, Entry, Frame, FrameBody, Kind, Observation, ObservationMode, Quote,
-    RecordQuery, SpiritReply, SpiritRequest, Statement, StatementText, Summary, Time, Topic,
+    Certainty, Context, Entry, Frame, FrameBody, Kind, Observation, ObservationMode, Quote,
+    RecordQuery, SpiritReply, SpiritRequest, Statement, StatementText, Summary, Topic,
 };
 
 #[derive(Debug, Clone)]
@@ -76,8 +76,6 @@ fn entry(summary: &str) -> Entry {
         summary: Summary::new(summary),
         context: Context::new("daemon context"),
         certainty: Certainty::Maximum,
-        date: Date::new(2026, 5, 20),
-        time: Time::new(14, 30, 0),
         quote: Quote::new("daemon quote"),
     }
 }
@@ -449,7 +447,7 @@ fn persona_spirit_client_can_send_nota_request_to_running_daemon() {
     let handle = thread::spawn(move || daemon.serve_count(1));
     let argument = SingleArgument::from_arguments([
         "spirit".to_string(),
-        "(Record (workspace Decision \"client socket\" \"daemon context\" Maximum 2026-05-20 14:30:00 \"daemon quote\"))"
+        "(Record (workspace Decision \"client socket\" \"daemon context\" Maximum \"daemon quote\"))"
             .to_string(),
     ])
     .expect("single request argument");
@@ -483,7 +481,7 @@ fn spirit_binary_can_send_request_file_to_running_daemon() {
     request_path.push(format!("persona-spirit-cli-request-{nanos}.nota"));
     fs::write(
         &request_path,
-        "(Record (workspace Decision \"binary file\" \"daemon context\" Maximum 2026-05-20 14:30:00 \"daemon quote\"))",
+        "(Record (workspace Decision \"binary file\" \"daemon context\" Maximum \"daemon quote\"))",
     )
     .expect("request file written");
 

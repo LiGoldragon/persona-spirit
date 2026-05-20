@@ -8,6 +8,7 @@ impl TraceNode {
     pub const INGRESS_PHASE: Self = Self::new("IngressPhase");
     pub const NOTA_DECODER: Self = Self::new("NotaDecoder");
     pub const CLASSIFIER_PLANE: Self = Self::new("ClassifierPlane");
+    pub const CLOCK_PLANE: Self = Self::new("ClockPlane");
     pub const DISPATCH_PHASE: Self = Self::new("DispatchPhase");
     pub const OWNER_PLANE: Self = Self::new("OwnerPlane");
     pub const POLICY_PLANE: Self = Self::new("PolicyPlane");
@@ -38,6 +39,7 @@ pub enum TraceAction {
     OperationReceived,
     ObservationProjected,
     StatementClassified,
+    EntryStamped,
     RecordCommitted,
     RecordsRead,
     SubscriptionOpened,

@@ -1,4 +1,5 @@
 pub mod classifier;
+pub mod clock;
 pub mod decoder;
 pub mod dispatch;
 pub mod ingress;
