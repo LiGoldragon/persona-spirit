@@ -28,8 +28,9 @@ Contract records stay in `signal-persona-spirit` and
   embedded or configured bootstrap-policy source, then binds one ordinary
   socket for `signal-persona-spirit::Frame` values and one owner socket for
   `owner-signal-persona-spirit::Frame` values.
-- The CLI request path runs through `SpiritActorRuntime` and the Kameo actor
-  tree before it can produce a reply.
+- The CLI request path never opens `SpiritActorRuntime` directly. It decodes
+  NOTA into `SpiritRequest`, sends a Signal frame to the daemon, and renders
+  the daemon's Signal reply back to NOTA.
 - When a daemon socket is selected, the CLI decodes NOTA once and sends a
   Signal frame to the daemon rather than opening the store itself.
 - Signal-frame ingress submits typed requests directly to `SpiritRoot`; it does

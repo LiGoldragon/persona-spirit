@@ -56,7 +56,7 @@ impl PolicyPlane {
                 OwnerSpiritReply::BootstrapPolicyReloaded(BootstrapPolicyReloaded {})
             }
             Err(_reason) => OwnerSpiritReply::RequestUnimplemented(RequestUnimplemented {
-                operation: OperationKind::ReloadBootstrapPolicyOrder,
+                operation: OperationKind::Reload,
                 reason: UnimplementedReason::DependencyNotReady,
             }),
         };

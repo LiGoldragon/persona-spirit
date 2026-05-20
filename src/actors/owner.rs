@@ -2,9 +2,9 @@ use kameo::actor::{Actor, ActorRef};
 use kameo::error::{Infallible, SendError};
 use kameo::message::{Context, Message};
 use owner_signal_persona_spirit::{
-    DrainAndStopOrder, DrainedAndStopped, Generation, IdentityName, IdentityRegistered,
-    IdentityRetired, OperationKind, OwnerSpiritReply, OwnerSpiritRequest, RegisterIdentity,
-    RequestUnimplemented, RetireIdentity, Started, UnimplementedReason,
+    Drain, DrainedAndStopped, Generation, IdentityName, IdentityRegistered, IdentityRetired,
+    OperationKind, OwnerSpiritReply, OwnerSpiritRequest, Registration, RequestUnimplemented,
+    Retirement, Started, UnimplementedReason,
 };
 
 use super::policy;
@@ -54,13 +54,13 @@ impl OwnerPlane {
     ) -> OwnerPipelineReply {
         trace.record(TraceNode::OWNER_PLANE, TraceAction::MessageReceived);
         let reply = match request {
-            OwnerSpiritRequest::StartOrder(order) => self.start(order.generation),
-            OwnerSpiritRequest::DrainAndStopOrder(order) => self.drain_and_stop(order),
-            OwnerSpiritRequest::ReloadBootstrapPolicyOrder(_order) => {
+            OwnerSpiritRequest::Start(order) => self.start(order.generation),
+            OwnerSpiritRequest::Drain(order) => self.drain(order),
+            OwnerSpiritRequest::Reload(_order) => {
                 return self.reload_policy(trace).await;
             }
-            OwnerSpiritRequest::RegisterIdentity(order) => self.register_identity(order),
-            OwnerSpiritRequest::RetireIdentity(order) => self.retire_identity(order),
+            OwnerSpiritRequest::Register(order) => self.register_identity(order),
+            OwnerSpiritRequest::Retire(order) => self.retire_identity(order),
         };
         trace.record(TraceNode::OWNER_PLANE, TraceAction::MessageReplied);
         OwnerPipelineReply { reply, trace }
@@ -71,7 +71,7 @@ impl OwnerPlane {
         OwnerSpiritReply::Started(Started { generation })
     }
 
-    fn drain_and_stop(&mut self, _order: DrainAndStopOrder) -> OwnerSpiritReply {
+    fn drain(&mut self, _order: Drain) -> OwnerSpiritReply {
         self.lifecycle.generation = None;
         OwnerSpiritReply::DrainedAndStopped(DrainedAndStopped {})
     }
@@ -95,14 +95,14 @@ impl OwnerPlane {
         }
     }
 
-    fn register_identity(&mut self, order: RegisterIdentity) -> OwnerSpiritReply {
+    fn register_identity(&mut self, order: Registration) -> OwnerSpiritReply {
         if !self.identities.contains(&order.name) {
             self.identities.push(order.name.clone());
         }
         OwnerSpiritReply::IdentityRegistered(IdentityRegistered { name: order.name })
     }
 
-    fn retire_identity(&mut self, order: RetireIdentity) -> OwnerSpiritReply {
+    fn retire_identity(&mut self, order: Retirement) -> OwnerSpiritReply {
         self.identities.retain(|name| name != &order.name);
         OwnerSpiritReply::IdentityRetired(IdentityRetired { name: order.name })
     }
@@ -138,7 +138,7 @@ impl OwnerPlane {
         trace.record(TraceNode::OWNER_PLANE, TraceAction::MessageReplied);
         OwnerPipelineReply {
             reply: OwnerSpiritReply::RequestUnimplemented(RequestUnimplemented {
-                operation: OperationKind::ReloadBootstrapPolicyOrder,
+                operation: OperationKind::Reload,
                 reason: UnimplementedReason::DependencyNotReady,
             }),
             trace,

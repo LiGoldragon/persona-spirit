@@ -6,19 +6,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use nota_codec::{Encoder, NotaEncode};
 use owner_signal_persona_spirit::{
-    Frame as OwnerFrame, FrameBody as OwnerFrameBody, Generation, IdentityName, IdentityRegistered,
-    OwnerSpiritReply, OwnerSpiritRequest, RegisterIdentity, ReloadBootstrapPolicyOrder, StartOrder,
-    Started,
+    BootstrapPolicy, BootstrapPolicyReloaded, Frame as OwnerFrame, FrameBody as OwnerFrameBody,
+    Generation, IdentityName, IdentityRegistered, OwnerSpiritReply, OwnerSpiritRequest,
+    Registration, Start, Started,
 };
 use persona_spirit::{
     BootstrapPolicyPath, DaemonConfiguration, DaemonRuntime, OwnerSpiritFrameCodec,
     OwnerSpiritSignalClient, SingleArgument, SocketMode, SocketPath, SpiritClient,
     SpiritFrameCodec, SpiritSignalClient, StorePath,
-};
-use signal_core::{
-    ExchangeIdentifier as OwnerExchangeIdentifier, ExchangeLane as OwnerExchangeLane,
-    LaneSequence as OwnerLaneSequence, RequestPayload as OwnerRequestPayload,
-    SessionEpoch as OwnerSessionEpoch,
 };
 use signal_frame::{ExchangeIdentifier, ExchangeLane, LaneSequence, RequestPayload, SessionEpoch};
 use signal_persona_spirit::{
@@ -94,14 +89,6 @@ fn exchange() -> ExchangeIdentifier {
         SessionEpoch::new(0),
         ExchangeLane::Connector,
         LaneSequence::first(),
-    )
-}
-
-fn owner_exchange() -> OwnerExchangeIdentifier {
-    OwnerExchangeIdentifier::new(
-        OwnerSessionEpoch::new(0),
-        OwnerExchangeLane::Connector,
-        OwnerLaneSequence::first(),
     )
 }
 
@@ -241,7 +228,7 @@ fn persona_spirit_daemon_serves_owner_signal_frames_through_owner_plane() {
 
     let client = fixture.owner_client();
     let started = client
-        .submit(OwnerSpiritRequest::StartOrder(StartOrder {
+        .submit(OwnerSpiritRequest::Start(Start {
             generation: Generation::new(7),
         }))
         .expect("owner start accepted through owner socket");
@@ -253,7 +240,7 @@ fn persona_spirit_daemon_serves_owner_signal_frames_through_owner_plane() {
     );
 
     let registered = client
-        .submit(OwnerSpiritRequest::RegisterIdentity(RegisterIdentity {
+        .submit(OwnerSpiritRequest::Register(Registration {
             name: IdentityName::new("operator"),
         }))
         .expect("owner identity accepted through owner socket");
@@ -297,16 +284,12 @@ fn persona_spirit_daemon_configuration_controls_bootstrap_policy_source() {
 
     let reply = fixture
         .owner_client()
-        .submit(OwnerSpiritRequest::ReloadBootstrapPolicyOrder(
-            ReloadBootstrapPolicyOrder {},
-        ))
+        .submit(OwnerSpiritRequest::Reload(BootstrapPolicy {}))
         .expect("configured policy reloads through owner socket");
 
     assert_eq!(
         reply,
-        OwnerSpiritReply::BootstrapPolicyReloaded(
-            owner_signal_persona_spirit::BootstrapPolicyReloaded {}
-        )
+        OwnerSpiritReply::BootstrapPolicyReloaded(BootstrapPolicyReloaded {})
     );
     handle
         .join()
@@ -331,8 +314,8 @@ fn persona_spirit_ordinary_socket_rejects_owner_signal_frames() {
     let codec = OwnerSpiritFrameCodec::default();
     let mut stream = UnixStream::connect(socket.as_path()).expect("client connects");
     let frame = OwnerFrame::new(OwnerFrameBody::Request {
-        exchange: owner_exchange(),
-        request: OwnerSpiritRequest::StartOrder(StartOrder {
+        exchange: exchange(),
+        request: OwnerSpiritRequest::Start(Start {
             generation: Generation::new(1),
         })
         .into_request(),
