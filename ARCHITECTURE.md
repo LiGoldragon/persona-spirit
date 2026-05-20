@@ -119,6 +119,7 @@ running the actor tree in-process.
 | Spirit-local commands project to payloadless Sema operation labels. | `tests/sema_projection.rs` checks `Command::from_request` and `ToSemaOperation` through real actor-runtime requests. |
 | Spirit-local effects project to payloadless Sema outcome labels. | `tests/sema_projection.rs` checks `Effect::from_reply`, `ToSemaOutcome`, and `SemaObservation` after real actor-runtime replies. |
 | Sema observations do not carry Spirit payloads. | `tests/sema_projection.rs` expects only `SemaOperation` plus `SemaOutcome` for assert, match, subscribe, and retract paths. |
+| Accepted no-change paths still project through explicit Spirit-local commands. | `spirit_unimplemented_observer_operations_project_as_explicit_no_change_commands` checks valid-but-unimplemented `Tap` / `Untap` requests become `Subscribe` / `Retract` commands with `NoChange` outcomes. |
 | Kameo is the only actor runtime dependency. | `persona_spirit_uses_kameo_as_only_actor_runtime` scans the manifest. |
 | Actor types are data-bearing, not public zero-sized actor nouns. | `persona_spirit_actor_types_are_data_bearing` checks each named actor has a struct body. |
 | Raw `State` statements route through a classifier actor before storage. | `persona_spirit_state_statement_uses_classifier_before_store` checks `DispatchPhase` → `ClassifierPlane` → `RecordStore` → `SemaWriter`. |
@@ -135,7 +136,7 @@ running the actor tree in-process.
 | Subscription retractions use the subscription plane and return typed retraction acknowledgements. | `persona_spirit_subscription_retractions_use_subscription_plane` checks `StateSubscriptionRetracted` and `RecordSubscriptionRetracted`. |
 | Summary queries do not include provenance. | `persona_spirit_client_persists_entries_for_later_summary_observation` checks `RecordsObserved`. |
 | Provenance appears only when requested. | `persona_spirit_client_returns_provenance_only_when_requested` checks `RecordProvenancesObserved`. |
-| Valid unimplemented requests do not touch the store. | `persona_spirit_unimplemented_statement_uses_reply_shaper_not_store` checks `ReplyShaper` and absence of `RecordStore`. |
+| Valid unimplemented requests do not touch the store. | `persona_spirit_unimplemented_observer_request_uses_reply_shaper_not_store` checks `ReplyShaper` and absence of `RecordStore`, `SemaWriter`, and `SemaReader`. |
 | Invalid NOTA keeps a typed decode error through the actor path. | `persona_spirit_invalid_text_keeps_typed_decode_error` checks `Error::InvalidSpiritRequest`. |
 | Shutdown releases the store so a later runtime can reopen the same path. | `persona_spirit_shutdown_releases_store_for_restart` writes, stops, restarts, and reads. |
 | Owner lifecycle requests route through `OwnerPlane`, not the ordinary dispatch path. | `persona_spirit_owner_lifecycle_orders_use_owner_plane` checks `Started` / `DrainedAndStopped` replies and no dispatch/store trace. |

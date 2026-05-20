@@ -1,10 +1,12 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use persona_spirit::{Command, Effect, SpiritActorRuntime, StoreLocation};
+use signal_frame::SubscriptionTokenInner;
 use signal_persona_spirit::{
-    Certainty, Context, Entry, Kind, Observation, ObservationMode, Quote, RecordQuery, SpiritReply,
-    SpiritRequest, StateObservation, StateSubscription, StateSubscriptionToken, Statement,
-    StatementText, Subscription, SubscriptionToken, Summary, Timestamp, Topic,
+    Certainty, Context, Entry, Kind, Observation, ObservationMode, Quote, RecordQuery,
+    SpiritObserverFilter, SpiritObserverSubscriptionToken, SpiritReply, SpiritRequest,
+    StateObservation, StateSubscription, StateSubscriptionToken, Statement, StatementText,
+    Subscription, SubscriptionToken, Summary, Timestamp, Topic,
 };
 use signal_sema::{SemaObservation, SemaOperation, SemaOutcome};
 
@@ -179,6 +181,38 @@ async fn spirit_state_subscription_retraction_projects_to_retracted_observation(
     assert_eq!(
         observation_for(request, reply),
         SemaObservation::new(SemaOperation::Retract, SemaOutcome::Retracted)
+    );
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn spirit_unimplemented_observer_operations_project_as_explicit_no_change_commands() {
+    let fixture = RuntimeFixture::new("observer-no-change");
+    let runtime = fixture.runtime().await;
+
+    let tap_request = SpiritRequest::Tap(SpiritObserverFilter::All);
+    let tap_reply = runtime
+        .submit_request(tap_request.clone())
+        .await
+        .expect("tap handled as unimplemented operation")
+        .into_reply();
+    assert_eq!(
+        observation_for(tap_request, tap_reply),
+        SemaObservation::new(SemaOperation::Subscribe, SemaOutcome::NoChange)
+    );
+
+    let untap_request = SpiritRequest::Untap(SpiritObserverSubscriptionToken::new(
+        SubscriptionTokenInner::new(1),
+    ));
+    let untap_reply = runtime
+        .submit_request(untap_request.clone())
+        .await
+        .expect("untap handled as unimplemented operation")
+        .into_reply();
+    assert_eq!(
+        observation_for(untap_request, untap_reply),
+        SemaObservation::new(SemaOperation::Retract, SemaOutcome::NoChange)
     );
 
     runtime.stop().await.expect("runtime stops");

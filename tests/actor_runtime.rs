@@ -9,6 +9,11 @@ use owner_signal_persona_spirit::{
 use persona_spirit::{
     BootstrapPolicySource, Error, SpiritActorRuntime, StoreLocation, TraceAction, TraceNode,
 };
+use signal_persona_spirit::{
+    OperationKind as SpiritOperationKind, RequestUnimplemented as SpiritRequestUnimplemented,
+    SpiritObserverFilter, SpiritReply, SpiritRequest,
+    UnimplementedReason as SpiritUnimplementedReason,
+};
 
 #[derive(Debug, Clone)]
 struct SpiritRuntimeFixture {
@@ -136,6 +141,35 @@ async fn persona_spirit_question_observation_uses_state_plane() {
     assert_eq!(reply.text(), "(QuestionsObserved ([]))");
     assert!(reply.trace().contains(TraceNode::STATE_PLANE));
     assert!(!reply.trace().contains(TraceNode::RECORD_STORE));
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn persona_spirit_unimplemented_observer_request_uses_reply_shaper_not_store() {
+    let fixture = SpiritRuntimeFixture::new("unimplemented-observer");
+    let runtime = fixture.runtime().await;
+
+    let reply = runtime
+        .submit_request(SpiritRequest::Tap(SpiritObserverFilter::All))
+        .await
+        .expect("observer tap is handled as an unimplemented request");
+
+    assert_eq!(
+        reply.reply(),
+        &SpiritReply::RequestUnimplemented(SpiritRequestUnimplemented {
+            operation: SpiritOperationKind::Tap,
+            reason: SpiritUnimplementedReason::NotBuiltYet,
+        })
+    );
+    assert!(reply.trace().contains_ordered(&[
+        TraceNode::DISPATCH_PHASE,
+        TraceNode::REPLY_SHAPER,
+        TraceNode::SPIRIT_ROOT,
+    ]));
+    assert!(!reply.trace().contains(TraceNode::RECORD_STORE));
+    assert!(!reply.trace().contains(TraceNode::SEMA_WRITER));
+    assert!(!reply.trace().contains(TraceNode::SEMA_READER));
 
     runtime.stop().await.expect("runtime stops");
 }
