@@ -226,8 +226,11 @@ fn persona_spirit_client_opens_and_retracts_state_subscription() {
         .reply_text("(Unwatch (State (1)))")
         .expect("state subscription retracted");
 
-    assert_eq!(opened, "(StateSubscriptionOpened ((1) (Absent None)))");
-    assert_eq!(retracted, "(StateSubscriptionRetracted ((1)))");
+    assert_eq!(
+        opened,
+        "(SubscriptionOpened ((State (1)) (State (Absent None))))"
+    );
+    assert_eq!(retracted, "(SubscriptionRetracted ((State (1))))");
 }
 
 #[test]
@@ -246,9 +249,9 @@ fn persona_spirit_client_opens_record_subscription_with_summary_snapshot() {
 
     assert_eq!(
         opened,
-        "(RecordSubscriptionOpened ((1) [(1 workspace Decision \"subscription summary\" Maximum)]))"
+        "(SubscriptionOpened ((Records (1)) (Records [(1 workspace Decision \"subscription summary\" Maximum)])))"
     );
-    assert_eq!(retracted, "(RecordSubscriptionRetracted ((1)))");
+    assert_eq!(retracted, "(SubscriptionRetracted ((Records (1))))");
 }
 
 #[test]

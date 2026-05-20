@@ -9,9 +9,8 @@ use persona_spirit::{
     BootstrapPolicySource, Error, SpiritActorRuntime, StoreLocation, TraceAction, TraceNode,
 };
 use signal_persona_spirit::{
-    OperationKind as SpiritOperationKind, RequestUnimplemented as SpiritRequestUnimplemented,
-    SpiritObserverFilter, SpiritReply, SpiritRequest,
-    UnimplementedReason as SpiritUnimplementedReason,
+    RequestUnimplemented as SpiritRequestUnimplemented, SpiritObserverFilter, SpiritReply,
+    SpiritRequest, UnimplementedReason as SpiritUnimplementedReason,
 };
 
 #[derive(Debug, Clone)]
@@ -199,7 +198,6 @@ async fn persona_spirit_unimplemented_observer_request_uses_reply_shaper_not_sto
     assert_eq!(
         reply.reply(),
         &SpiritReply::RequestUnimplemented(SpiritRequestUnimplemented {
-            operation: SpiritOperationKind::Tap,
             reason: SpiritUnimplementedReason::NotBuiltYet,
         })
     );
@@ -227,7 +225,7 @@ async fn persona_spirit_state_subscription_uses_subscription_plane_after_state_s
 
     assert_eq!(
         reply.text(),
-        "(StateSubscriptionOpened ((1) (Absent None)))"
+        "(SubscriptionOpened ((State (1)) (State (Absent None))))"
     );
     assert!(reply.trace().contains_ordered(&[
         TraceNode::STATE_PLANE,
@@ -259,7 +257,7 @@ async fn persona_spirit_record_subscription_uses_read_plane_then_subscription_pl
 
     assert_eq!(
         reply.text(),
-        "(RecordSubscriptionOpened ((1) [(1 workspace Decision \"subscription path\" Maximum)]))"
+        "(SubscriptionOpened ((Records (1)) (Records [(1 workspace Decision \"subscription path\" Maximum)])))"
     );
     assert!(reply.trace().contains_ordered(&[
         TraceNode::RECORD_STORE,
@@ -297,8 +295,11 @@ async fn persona_spirit_subscription_retractions_use_subscription_plane() {
         .await
         .expect("record subscription retracted");
 
-    assert_eq!(state_reply.text(), "(StateSubscriptionRetracted ((1)))");
-    assert_eq!(record_reply.text(), "(RecordSubscriptionRetracted ((1)))");
+    assert_eq!(state_reply.text(), "(SubscriptionRetracted ((State (1))))");
+    assert_eq!(
+        record_reply.text(),
+        "(SubscriptionRetracted ((Records (1))))"
+    );
     assert!(state_reply.trace().contains_action(
         TraceNode::SUBSCRIPTION_PLANE,
         TraceAction::SubscriptionRetracted

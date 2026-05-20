@@ -57,7 +57,7 @@ impl ClassifierPlane {
 
     fn classify(&self, statement: Statement, mut trace: ActorTrace) -> ClassifiedEntry {
         trace.record(TraceNode::CLASSIFIER_PLANE, TraceAction::MessageReceived);
-        let text = statement.statement.as_str().to_string();
+        let text = statement.text.as_str().to_string();
         let entry = Entry {
             topic: self.policy.fallback_topic.clone(),
             kind: self.policy.fallback_kind,

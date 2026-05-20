@@ -91,7 +91,7 @@ async fn spirit_statement_classification_projects_to_asserted_observation() {
     let fixture = RuntimeFixture::new("statement");
     let runtime = fixture.runtime().await;
     let request = SpiritRequest::State(Statement {
-        statement: StatementText::new("capture this statement"),
+        text: StatementText::new("capture this statement"),
     });
     let runtime_reply = runtime
         .submit_request(request.clone())

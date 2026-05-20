@@ -6,12 +6,11 @@
 
 use signal_persona_spirit::{
     Observation, QuestionPending, QuestionsObserved, RecordAccepted, RecordObservation,
-    RecordProvenancesObserved, RecordQuery, RecordSubscription, RecordSubscriptionOpened,
-    RecordSubscriptionRetracted, RecordSubscriptionToken, RecordsObserved, RequestUnimplemented,
-    SpiritObserverFilter, SpiritObserverSubscriptionOpened, SpiritObserverSubscriptionToken,
-    SpiritReply, SpiritRequest, StateObservation, StateObserved, StateSubscription,
-    StateSubscriptionOpened, StateSubscriptionRetracted, StateSubscriptionToken, Statement,
-    Subscription, SubscriptionOpened, SubscriptionRetracted, SubscriptionToken,
+    RecordProvenancesObserved, RecordQuery, RecordSubscription, RecordSubscriptionToken,
+    RecordsObserved, RequestUnimplemented, SpiritObserverFilter, SpiritObserverSubscriptionOpened,
+    SpiritObserverSubscriptionToken, SpiritReply, SpiritRequest, StateObservation, StateObserved,
+    StateSubscription, StateSubscriptionToken, Statement, Subscription, SubscriptionOpened,
+    SubscriptionRetracted, SubscriptionToken,
 };
 use signal_sema::{SemaObservation, SemaOperation, SemaOutcome, ToSemaOperation, ToSemaOutcome};
 
@@ -37,11 +36,7 @@ pub enum Effect {
     RecordsObserved(RecordsObserved),
     RecordProvenancesObserved(RecordProvenancesObserved),
     QuestionsObserved(QuestionsObserved),
-    StateSubscriptionOpened(StateSubscriptionOpened),
-    RecordSubscriptionOpened(RecordSubscriptionOpened),
     SubscriptionOpened(SubscriptionOpened),
-    StateSubscriptionRetracted(StateSubscriptionRetracted),
-    RecordSubscriptionRetracted(RecordSubscriptionRetracted),
     SubscriptionRetracted(SubscriptionRetracted),
     ObserverSubscriptionOpened(SpiritObserverSubscriptionOpened),
     RequestUnimplemented(RequestUnimplemented),
@@ -89,17 +84,7 @@ impl Effect {
                 Self::RecordProvenancesObserved(payload)
             }
             SpiritReply::QuestionsObserved(payload) => Self::QuestionsObserved(payload),
-            SpiritReply::StateSubscriptionOpened(payload) => Self::StateSubscriptionOpened(payload),
-            SpiritReply::RecordSubscriptionOpened(payload) => {
-                Self::RecordSubscriptionOpened(payload)
-            }
             SpiritReply::SubscriptionOpened(payload) => Self::SubscriptionOpened(payload),
-            SpiritReply::StateSubscriptionRetracted(payload) => {
-                Self::StateSubscriptionRetracted(payload)
-            }
-            SpiritReply::RecordSubscriptionRetracted(payload) => {
-                Self::RecordSubscriptionRetracted(payload)
-            }
             SpiritReply::SubscriptionRetracted(payload) => Self::SubscriptionRetracted(payload),
             SpiritReply::ObserverSubscriptionOpened(payload) => {
                 Self::ObserverSubscriptionOpened(payload)
@@ -121,17 +106,7 @@ impl Effect {
                 SpiritReply::RecordProvenancesObserved(payload)
             }
             Self::QuestionsObserved(payload) => SpiritReply::QuestionsObserved(payload),
-            Self::StateSubscriptionOpened(payload) => SpiritReply::StateSubscriptionOpened(payload),
-            Self::RecordSubscriptionOpened(payload) => {
-                SpiritReply::RecordSubscriptionOpened(payload)
-            }
             Self::SubscriptionOpened(payload) => SpiritReply::SubscriptionOpened(payload),
-            Self::StateSubscriptionRetracted(payload) => {
-                SpiritReply::StateSubscriptionRetracted(payload)
-            }
-            Self::RecordSubscriptionRetracted(payload) => {
-                SpiritReply::RecordSubscriptionRetracted(payload)
-            }
             Self::SubscriptionRetracted(payload) => SpiritReply::SubscriptionRetracted(payload),
             Self::ObserverSubscriptionOpened(payload) => {
                 SpiritReply::ObserverSubscriptionOpened(payload)
@@ -166,13 +141,10 @@ impl ToSemaOutcome for Effect {
             | Self::RecordsObserved(_)
             | Self::RecordProvenancesObserved(_)
             | Self::QuestionsObserved(_) => SemaOutcome::Matched,
-            Self::StateSubscriptionOpened(_)
-            | Self::RecordSubscriptionOpened(_)
-            | Self::SubscriptionOpened(_)
-            | Self::ObserverSubscriptionOpened(_) => SemaOutcome::Subscribed,
-            Self::StateSubscriptionRetracted(_)
-            | Self::RecordSubscriptionRetracted(_)
-            | Self::SubscriptionRetracted(_) => SemaOutcome::Retracted,
+            Self::SubscriptionOpened(_) | Self::ObserverSubscriptionOpened(_) => {
+                SemaOutcome::Subscribed
+            }
+            Self::SubscriptionRetracted(_) => SemaOutcome::Retracted,
             Self::RequestUnimplemented(_) => SemaOutcome::NoChange,
         }
     }

@@ -245,7 +245,7 @@ fn persona_spirit_daemon_classifies_state_frames_through_actor_root() {
     let client = fixture.client();
     let accepted = client
         .submit(SpiritRequest::State(Statement {
-            statement: StatementText::new("daemon raw intent"),
+            text: StatementText::new("daemon raw intent"),
         }))
         .expect("statement accepted through signal frame");
     assert_eq!(

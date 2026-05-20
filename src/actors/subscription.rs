@@ -3,9 +3,9 @@ use std::collections::BTreeMap;
 use kameo::actor::{Actor, ActorRef};
 use kameo::message::{Context, Message};
 use signal_persona_spirit::{
-    RecordSubscription, RecordSubscriptionOpened, RecordSubscriptionRetracted,
-    RecordSubscriptionToken, RecordSummary, SpiritReply, State, StateSubscriptionOpened,
-    StateSubscriptionRetracted, StateSubscriptionToken,
+    RecordSubscription, RecordSubscriptionToken, RecordSummary, SpiritReply, State,
+    StateSubscriptionToken, SubscriptionOpened, SubscriptionRetracted, SubscriptionSnapshot,
+    SubscriptionToken,
 };
 
 use super::pipeline::PipelineReply;
@@ -80,7 +80,10 @@ impl SubscriptionPlane {
         );
         trace.record(TraceNode::SUBSCRIPTION_PLANE, TraceAction::MessageReplied);
         PipelineReply::new(
-            SpiritReply::StateSubscriptionOpened(StateSubscriptionOpened { token, snapshot }),
+            SpiritReply::SubscriptionOpened(SubscriptionOpened {
+                token: SubscriptionToken::State(token),
+                snapshot: SubscriptionSnapshot::State(snapshot),
+            }),
             trace,
         )
     }
@@ -103,7 +106,10 @@ impl SubscriptionPlane {
         );
         trace.record(TraceNode::SUBSCRIPTION_PLANE, TraceAction::MessageReplied);
         PipelineReply::new(
-            SpiritReply::RecordSubscriptionOpened(RecordSubscriptionOpened { token, snapshot }),
+            SpiritReply::SubscriptionOpened(SubscriptionOpened {
+                token: SubscriptionToken::Records(token),
+                snapshot: SubscriptionSnapshot::Records(snapshot),
+            }),
             trace,
         )
     }
@@ -121,7 +127,9 @@ impl SubscriptionPlane {
         );
         trace.record(TraceNode::SUBSCRIPTION_PLANE, TraceAction::MessageReplied);
         PipelineReply::new(
-            SpiritReply::StateSubscriptionRetracted(StateSubscriptionRetracted { token }),
+            SpiritReply::SubscriptionRetracted(SubscriptionRetracted {
+                token: SubscriptionToken::State(token),
+            }),
             trace,
         )
     }
@@ -139,7 +147,9 @@ impl SubscriptionPlane {
         );
         trace.record(TraceNode::SUBSCRIPTION_PLANE, TraceAction::MessageReplied);
         PipelineReply::new(
-            SpiritReply::RecordSubscriptionRetracted(RecordSubscriptionRetracted { token }),
+            SpiritReply::SubscriptionRetracted(SubscriptionRetracted {
+                token: SubscriptionToken::Records(token),
+            }),
             trace,
         )
     }

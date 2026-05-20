@@ -84,7 +84,6 @@ impl ReplyShaper {
     ) -> PipelineReply {
         trace.record(TraceNode::REPLY_SHAPER, TraceAction::MessageReceived);
         let reply = SpiritReply::RequestUnimplemented(RequestUnimplemented {
-            operation,
             reason: self.policy.reason_for(operation),
         });
         trace.record(TraceNode::REPLY_SHAPER, TraceAction::MessageReplied);

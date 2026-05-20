@@ -148,9 +148,8 @@ impl SharedTrace {
 }
 
 impl SpiritLowering {
-    fn unimplemented_reply(operation: &SpiritRequest) -> SpiritReply {
+    fn unimplemented_reply(_operation: &SpiritRequest) -> SpiritReply {
         SpiritReply::RequestUnimplemented(RequestUnimplemented {
-            operation: operation.operation_kind(),
             reason: UnimplementedReason::IntegrationNotLanded,
         })
     }
