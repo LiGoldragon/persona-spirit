@@ -1,0 +1,185 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use persona_spirit::{Command, Effect, SpiritActorRuntime, StoreLocation};
+use signal_persona_spirit::{
+    Certainty, Context, Entry, Kind, Observation, ObservationMode, Quote, RecordQuery, SpiritReply,
+    SpiritRequest, StateObservation, StateSubscription, StateSubscriptionToken, Statement,
+    StatementText, Subscription, SubscriptionToken, Summary, Timestamp, Topic,
+};
+use signal_sema::{SemaObservation, SemaOperation, SemaOutcome};
+
+#[derive(Debug, Clone)]
+struct RuntimeFixture {
+    location: StoreLocation,
+}
+
+impl RuntimeFixture {
+    fn new(test_name: &str) -> Self {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock after epoch")
+            .as_nanos();
+        let mut path = std::env::temp_dir();
+        path.push(format!(
+            "persona-spirit-sema-projection-{test_name}-{nanos}.redb"
+        ));
+        Self {
+            location: StoreLocation::new(path),
+        }
+    }
+
+    async fn runtime(&self) -> SpiritActorRuntime {
+        SpiritActorRuntime::start(self.location.clone())
+            .await
+            .expect("actor runtime starts")
+    }
+}
+
+fn entry(summary: &str) -> Entry {
+    Entry {
+        topic: Topic::new("workspace"),
+        kind: Kind::Decision,
+        summary: Summary::new(summary),
+        context: Context::new("projection context"),
+        certainty: Certainty::Maximum,
+        timestamp: Timestamp::new("2026-05-20T14:30:30+02:00"),
+        quote: Quote::new("projection quote"),
+    }
+}
+
+fn observation_for(request: SpiritRequest, reply: SpiritReply) -> SemaObservation {
+    let command = Command::from_request(request).expect("ordinary request projects to command");
+    let effect = Effect::from_reply(reply);
+    effect.sema_observation_for(&command)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn spirit_record_assertion_projects_to_asserted_observation() {
+    let fixture = RuntimeFixture::new("record-assertion");
+    let runtime = fixture.runtime().await;
+    let request = SpiritRequest::Record(entry("asserted projection"));
+    let reply = runtime
+        .submit_request(request.clone())
+        .await
+        .expect("record accepted")
+        .into_reply();
+
+    assert_eq!(
+        observation_for(request, reply),
+        SemaObservation::new(SemaOperation::Assert, SemaOutcome::Asserted)
+    );
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn spirit_statement_classification_projects_to_asserted_observation() {
+    let fixture = RuntimeFixture::new("statement");
+    let runtime = fixture.runtime().await;
+    let request = SpiritRequest::State(Statement {
+        statement: StatementText::new("capture this statement"),
+    });
+    let reply = runtime
+        .submit_request(request.clone())
+        .await
+        .expect("statement classified")
+        .into_reply();
+
+    assert_eq!(
+        observation_for(request, reply),
+        SemaObservation::new(SemaOperation::Assert, SemaOutcome::Asserted)
+    );
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn spirit_record_query_projects_to_matched_observation() {
+    let fixture = RuntimeFixture::new("record-query");
+    let runtime = fixture.runtime().await;
+    runtime
+        .submit_request(SpiritRequest::Record(entry("matched projection")))
+        .await
+        .expect("record accepted");
+    let request = SpiritRequest::Observe(Observation::Records(RecordQuery {
+        topic: None,
+        mode: ObservationMode::SummaryOnly,
+    }));
+    let reply = runtime
+        .submit_request(request.clone())
+        .await
+        .expect("records observed")
+        .into_reply();
+
+    assert_eq!(
+        observation_for(request, reply),
+        SemaObservation::new(SemaOperation::Match, SemaOutcome::Matched)
+    );
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn spirit_state_query_projects_to_matched_observation() {
+    let fixture = RuntimeFixture::new("state-query");
+    let runtime = fixture.runtime().await;
+    let request = SpiritRequest::Observe(Observation::State(StateObservation {}));
+    let reply = runtime
+        .submit_request(request.clone())
+        .await
+        .expect("state observed")
+        .into_reply();
+
+    assert_eq!(
+        observation_for(request, reply),
+        SemaObservation::new(SemaOperation::Match, SemaOutcome::Matched)
+    );
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn spirit_state_subscription_projects_to_subscribed_observation() {
+    let fixture = RuntimeFixture::new("state-subscription");
+    let runtime = fixture.runtime().await;
+    let request = SpiritRequest::Watch(Subscription::State(StateSubscription {}));
+    let reply = runtime
+        .submit_request(request.clone())
+        .await
+        .expect("subscription opened")
+        .into_reply();
+
+    assert_eq!(
+        observation_for(request, reply),
+        SemaObservation::new(SemaOperation::Subscribe, SemaOutcome::Subscribed)
+    );
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn spirit_state_subscription_retraction_projects_to_retracted_observation() {
+    let fixture = RuntimeFixture::new("state-retraction");
+    let runtime = fixture.runtime().await;
+    runtime
+        .submit_request(SpiritRequest::Watch(Subscription::State(
+            StateSubscription {},
+        )))
+        .await
+        .expect("subscription opened");
+    let request = SpiritRequest::Unwatch(SubscriptionToken::State(StateSubscriptionToken {
+        identifier: 1,
+    }));
+    let reply = runtime
+        .submit_request(request.clone())
+        .await
+        .expect("subscription retracted")
+        .into_reply();
+
+    assert_eq!(
+        observation_for(request, reply),
+        SemaObservation::new(SemaOperation::Retract, SemaOutcome::Retracted)
+    );
+
+    runtime.stop().await.expect("runtime stops");
+}

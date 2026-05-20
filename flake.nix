@@ -56,6 +56,10 @@
             inherit cargoArtifacts;
             cargoTestExtraArgs = "--test daemon";
           });
+          test-sema-projection = craneLib.cargoTest (commonArguments // {
+            inherit cargoArtifacts;
+            cargoTestExtraArgs = "--test sema_projection";
+          });
           doc = craneLib.cargoDoc (commonArguments // {
             inherit cargoArtifacts;
             RUSTDOCFLAGS = "-D warnings";

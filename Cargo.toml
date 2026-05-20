@@ -30,6 +30,7 @@ sema-engine                 = { git = "https://github.com/LiGoldragon/sema-engin
 signal-core                 = { git = "https://github.com/LiGoldragon/signal-core.git" }
 signal-frame                = { git = "https://github.com/LiGoldragon/signal-frame.git", branch = "main" }
 signal-persona-spirit       = { git = "https://github.com/LiGoldragon/signal-persona-spirit.git", branch = "main" }
+signal-sema                 = { git = "https://github.com/LiGoldragon/signal-sema.git", branch = "main" }
 thiserror                   = "2"
 tokio                       = { version = "1", default-features = false, features = ["macros", "rt-multi-thread"] }
 

@@ -2,6 +2,7 @@ pub mod actors;
 pub mod argument;
 pub mod daemon;
 pub mod error;
+pub mod observation;
 pub mod runtime;
 pub mod store;
 
@@ -15,5 +16,6 @@ pub use daemon::{
     SpiritFrameCodec, SpiritSignalClient, StorePath,
 };
 pub use error::{Error, Result};
+pub use observation::{Command, Effect};
 pub use runtime::{SpiritClient, SpiritReplyText, SpiritRequestText};
 pub use store::{SpiritStore, StoreLocation};

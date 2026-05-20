@@ -113,6 +113,9 @@ CLI fails instead of opening a store or running the actor tree in-process.
 | The CLI type-checks one `signal-persona-spirit::SpiritRequest`. | `tests/boundary.rs` checks valid `State`, `Record`, and `Observe` requests before daemon submission. |
 | The CLI requires a daemon socket instead of using an in-process store fallback. | `persona_spirit_binary_requires_socket_environment` runs the binary without `PERSONA_SPIRIT_SOCKET` and expects failure. |
 | The CLI path only translates NOTA to Signal frames and Signal replies to NOTA. | `persona_spirit_command_line_path_does_not_use_actor_runtime_directly` checks `runtime.rs` uses `SpiritRequestText`, `SpiritSignalClient`, and `SpiritReplyText`, and not `SpiritActorRuntime` or `StoreLocation`. |
+| Spirit-local commands project to payloadless Sema operation labels. | `tests/sema_projection.rs` checks `Command::from_request` and `ToSemaOperation` through real actor-runtime requests. |
+| Spirit-local effects project to payloadless Sema outcome labels. | `tests/sema_projection.rs` checks `Effect::from_reply`, `ToSemaOutcome`, and `SemaObservation` after real actor-runtime replies. |
+| Sema observations do not carry Spirit payloads. | `tests/sema_projection.rs` expects only `SemaOperation` plus `SemaOutcome` for assert, match, subscribe, and retract paths. |
 | Kameo is the only actor runtime dependency. | `persona_spirit_uses_kameo_as_only_actor_runtime` scans the manifest. |
 | Actor types are data-bearing, not public zero-sized actor nouns. | `persona_spirit_actor_types_are_data_bearing` checks each named actor has a struct body. |
 | Raw `State` statements route through a classifier actor before storage. | `persona_spirit_state_statement_uses_classifier_before_store` checks `DispatchPhase` → `ClassifierPlane` → `RecordStore` → `SemaWriter`. |
@@ -153,6 +156,7 @@ src/lib.rs                         — module entry
 src/argument.rs                    — one-argument boundary
 src/daemon.rs                      — daemon configuration, bootstrap-policy source selection, socket binding, ordinary/owner frame codecs, signal clients
 src/error.rs                       — typed error
+src/observation.rs                 — Spirit-local Command/Effect to payloadless signal-sema observation projection
 src/runtime.rs                     — CLI boundary that converts NOTA request text to signal-frame request traffic and typed replies back to NOTA
 src/store.rs                       — sema-engine backed entry store and record queries
 src/actors/root.rs                 — Kameo root and blocking actor-runtime helper
@@ -174,6 +178,7 @@ bootstrap-policy.nota              — first policy seed
 tests/boundary.rs                  — argument-boundary witnesses
 tests/actor_runtime.rs             — actor-path and architectural-truth witnesses
 tests/daemon.rs                    — socket, signal-frame, and daemon-boundary witnesses
+tests/sema_projection.rs           — command/effect projection to SemaObservation through the real actor runtime
 ```
 
 ## Status
@@ -209,6 +214,8 @@ Implemented now:
   owner-signal reload acknowledgement through `PolicyPlane`;
 - typed `RequestUnimplemented` NOTA replies for behavior not built yet;
 - dependency on the ordinary and owner spirit contracts.
+- local `Command` / `Effect` projection into payloadless
+  `signal-sema::SemaObservation` labels, tested through the actor runtime.
 
 Not implemented:
 

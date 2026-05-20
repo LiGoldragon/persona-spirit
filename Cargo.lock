@@ -297,6 +297,7 @@ dependencies = [
  "signal-core",
  "signal-frame",
  "signal-persona-spirit",
+ "signal-sema",
  "thiserror",
  "tokio",
 ]
@@ -504,7 +505,7 @@ dependencies = [
 [[package]]
 name = "signal-persona-spirit"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#33ab226051e0d6daa61b9688ffb55ff800aff517"
+source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#da8876d15a130724dbe987244bcb8e93571e2fa5"
 dependencies = [
  "nota-codec",
  "rkyv",
@@ -516,7 +517,7 @@ dependencies = [
 [[package]]
 name = "signal-sema"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-sema.git?branch=main#f141791060997df37d8602b7187ca334bdcdc440"
+source = "git+https://github.com/LiGoldragon/signal-sema.git?branch=main#f4d3fe51b6052e289381a437221eb1dac899b64d"
 dependencies = [
  "nota-codec",
  "rkyv",
