@@ -91,7 +91,7 @@ expected actor path for each constraint.
 
 The daemon socket path does not pretend RKYV Signal traffic is text. The
 ordinary socket reads length-prefixed `signal-persona-spirit::Frame` values,
-checks the `signal-core::Request`, and submits each `SpiritRequest` directly to
+checks the `signal-frame::Request`, and submits each `SpiritRequest` directly to
 `SpiritRoot` through the dispatch plane. The owner socket reads
 length-prefixed `owner-signal-persona-spirit::Frame` values and submits each
 `OwnerSpiritRequest` directly to `OwnerPlane`. The NOTA decoder remains a
@@ -134,7 +134,7 @@ socket.
 | The ordinary socket rejects owner Signal frames. | `persona_spirit_ordinary_socket_rejects_owner_signal_frames` writes an owner frame to the ordinary socket and expects decode rejection. |
 | The owner socket rejects ordinary Signal frames. | `persona_spirit_owner_socket_rejects_ordinary_signal_frames` writes an ordinary frame to the owner socket and expects decode rejection. |
 | Daemon shutdown removes both socket paths. | `persona_spirit_daemon_serves_signal_frames_through_actor_root` checks both ordinary and owner sockets are removed after bounded serving. |
-| The daemon rejects verb/payload mismatch before actor execution. | `persona_spirit_daemon_rejects_verb_payload_mismatch_before_actor_execution` constructs a bad `signal-core::Request`. |
+| The daemon rejects verb/payload mismatch before actor execution. | `persona_spirit_daemon_rejects_verb_payload_mismatch_before_actor_execution` constructs a bad `signal-frame::Request`. |
 | Signal-frame daemon ingress does not route through the NOTA decoder. | `persona_spirit_daemon_source_does_not_route_signal_frames_through_nota_decoder` checks the socket boundary calls `SubmitRequest`. |
 | The CLI can act as a daemon client without bypassing Signal. | `persona_spirit_client_can_send_nota_request_to_running_daemon` decodes NOTA then sends a Signal frame to the socket. |
 | No classifier or mind-forwarding behavior exists until its intent is clear. | Status section says this explicitly. |
