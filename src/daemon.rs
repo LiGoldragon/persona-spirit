@@ -7,13 +7,16 @@ use std::thread;
 
 use nota_codec::{Decoder, NotaDecode, NotaTransparent};
 use owner_signal_persona_spirit::{
-    Frame as OwnerFrame, FrameBody as OwnerFrameBody, OwnerSpiritReply, OwnerSpiritRequest,
+    Frame as OwnerFrame, FrameBody as OwnerFrameBody, Operation as OwnerOperation,
+    Reply as OwnerReply,
 };
 use signal_frame::{
     ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, RequestPayload, SessionEpoch,
     SubReply,
 };
-use signal_persona_spirit::{Frame, FrameBody, SpiritReply, SpiritRequest};
+use signal_persona_spirit::{
+    Frame, FrameBody, Operation as WorkingOperation, Reply as WorkingReply,
+};
 
 use crate::{
     Error, Result, StoreLocation,
@@ -83,23 +86,23 @@ pub struct OwnerSpiritSignalClient {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReceivedRequest {
     exchange: ExchangeIdentifier,
-    request: signal_frame::Request<SpiritRequest>,
+    request: signal_frame::Request<WorkingOperation>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReceivedOwnerRequest {
     exchange: ExchangeIdentifier,
-    request: signal_frame::Request<OwnerSpiritRequest>,
+    request: signal_frame::Request<OwnerOperation>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServedExchange {
-    reply: Reply<SpiritReply>,
+    reply: Reply<WorkingReply>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServedOwnerExchange {
-    reply: Reply<OwnerSpiritReply>,
+    reply: Reply<OwnerReply>,
 }
 
 impl DaemonConfiguration {
@@ -241,14 +244,14 @@ impl SpiritFrameCodec {
         stream.flush().map_err(Error::input_output)
     }
 
-    pub fn request_frame(&self, request: SpiritRequest) -> Frame {
+    pub fn request_frame(&self, request: WorkingOperation) -> Frame {
         Frame::new(FrameBody::Request {
             exchange: self.exchange(),
             request: request.into_request(),
         })
     }
 
-    pub fn reply_frame(&self, exchange: ExchangeIdentifier, reply: Reply<SpiritReply>) -> Frame {
+    pub fn reply_frame(&self, exchange: ExchangeIdentifier, reply: Reply<WorkingReply>) -> Frame {
         Frame::new(FrameBody::Reply { exchange, reply })
     }
 
@@ -262,7 +265,7 @@ impl SpiritFrameCodec {
         }
     }
 
-    pub fn reply_from_frame(&self, frame: Frame) -> Result<Reply<SpiritReply>> {
+    pub fn reply_from_frame(&self, frame: Frame) -> Result<Reply<WorkingReply>> {
         match frame.into_body() {
             FrameBody::Reply { reply, .. } => Ok(reply),
             other => Err(Error::UnexpectedFrame {
@@ -318,7 +321,7 @@ impl OwnerSpiritFrameCodec {
         stream.flush().map_err(Error::input_output)
     }
 
-    pub fn request_frame(&self, request: OwnerSpiritRequest) -> OwnerFrame {
+    pub fn request_frame(&self, request: OwnerOperation) -> OwnerFrame {
         OwnerFrame::new(OwnerFrameBody::Request {
             exchange: self.exchange(),
             request: request.into_request(),
@@ -328,7 +331,7 @@ impl OwnerSpiritFrameCodec {
     pub fn reply_frame(
         &self,
         exchange: ExchangeIdentifier,
-        reply: Reply<OwnerSpiritReply>,
+        reply: Reply<OwnerReply>,
     ) -> OwnerFrame {
         OwnerFrame::new(OwnerFrameBody::Reply { exchange, reply })
     }
@@ -345,7 +348,7 @@ impl OwnerSpiritFrameCodec {
         }
     }
 
-    pub fn reply_from_frame(&self, frame: OwnerFrame) -> Result<Reply<OwnerSpiritReply>> {
+    pub fn reply_from_frame(&self, frame: OwnerFrame) -> Result<Reply<OwnerReply>> {
         match frame.into_body() {
             OwnerFrameBody::Reply { reply, .. } => Ok(reply),
             other => Err(Error::UnexpectedFrame {
@@ -530,16 +533,16 @@ impl BoundDaemon {
 
     fn reply_to_request(
         &self,
-        request: signal_frame::Request<SpiritRequest>,
-    ) -> Result<Reply<SpiritReply>> {
+        request: signal_frame::Request<WorkingOperation>,
+    ) -> Result<Reply<WorkingReply>> {
         OrdinaryExchangeHandler::new(self.root.clone(), self.runtime.clone())
             .reply_to_request(request)
     }
 
     fn reply_to_owner_request(
         &self,
-        request: signal_frame::Request<OwnerSpiritRequest>,
-    ) -> Result<Reply<OwnerSpiritReply>> {
+        request: signal_frame::Request<OwnerOperation>,
+    ) -> Result<Reply<OwnerReply>> {
         OwnerExchangeHandler::new(self.root.clone(), self.runtime.clone()).reply_to_request(request)
     }
 }
@@ -648,8 +651,8 @@ impl OrdinaryExchangeHandler {
 
     fn reply_to_request(
         &self,
-        request: signal_frame::Request<SpiritRequest>,
-    ) -> Result<Reply<SpiritReply>> {
+        request: signal_frame::Request<WorkingOperation>,
+    ) -> Result<Reply<WorkingReply>> {
         let reply = self
             .runtime
             .block_on(async {
@@ -672,8 +675,8 @@ impl OwnerExchangeHandler {
 
     fn reply_to_request(
         &self,
-        request: signal_frame::Request<OwnerSpiritRequest>,
-    ) -> Result<Reply<OwnerSpiritReply>> {
+        request: signal_frame::Request<OwnerOperation>,
+    ) -> Result<Reply<OwnerReply>> {
         let replies = request
             .payloads
             .into_iter()
@@ -684,10 +687,7 @@ impl OwnerExchangeHandler {
         ))
     }
 
-    fn reply_to_operation(
-        &self,
-        request: OwnerSpiritRequest,
-    ) -> Result<SubReply<OwnerSpiritReply>> {
+    fn reply_to_operation(&self, request: OwnerOperation) -> Result<SubReply<OwnerReply>> {
         let reply = self
             .runtime
             .block_on(async {
@@ -708,7 +708,7 @@ impl SpiritSignalClient {
         }
     }
 
-    pub fn submit(&self, request: SpiritRequest) -> Result<SpiritReply> {
+    pub fn submit(&self, request: WorkingOperation) -> Result<WorkingReply> {
         let mut stream = UnixStream::connect(self.socket.as_path()).map_err(Error::input_output)?;
         let frame = self.codec.request_frame(request);
         self.codec.write_frame(&mut stream, &frame)?;
@@ -716,7 +716,7 @@ impl SpiritSignalClient {
         self.reply_payload(self.codec.reply_from_frame(reply)?)
     }
 
-    fn reply_payload(&self, reply: Reply<SpiritReply>) -> Result<SpiritReply> {
+    fn reply_payload(&self, reply: Reply<WorkingReply>) -> Result<WorkingReply> {
         match reply {
             Reply::Accepted { per_operation, .. } => match per_operation.into_head() {
                 SubReply::Ok(payload) => Ok(payload),
@@ -740,7 +740,7 @@ impl OwnerSpiritSignalClient {
         }
     }
 
-    pub fn submit(&self, request: OwnerSpiritRequest) -> Result<OwnerSpiritReply> {
+    pub fn submit(&self, request: OwnerOperation) -> Result<OwnerReply> {
         let mut stream = UnixStream::connect(self.socket.as_path()).map_err(Error::input_output)?;
         let frame = self.codec.request_frame(request);
         self.codec.write_frame(&mut stream, &frame)?;
@@ -748,7 +748,7 @@ impl OwnerSpiritSignalClient {
         self.reply_payload(self.codec.reply_from_frame(reply)?)
     }
 
-    fn reply_payload(&self, reply: Reply<OwnerSpiritReply>) -> Result<OwnerSpiritReply> {
+    fn reply_payload(&self, reply: Reply<OwnerReply>) -> Result<OwnerReply> {
         match reply {
             Reply::Accepted { per_operation, .. } => match per_operation.into_head() {
                 SubReply::Ok(payload) => Ok(payload),
@@ -765,21 +765,21 @@ impl OwnerSpiritSignalClient {
 }
 
 impl ServedExchange {
-    fn new(reply: Reply<SpiritReply>) -> Self {
+    fn new(reply: Reply<WorkingReply>) -> Self {
         Self { reply }
     }
 
-    pub fn reply(&self) -> &Reply<SpiritReply> {
+    pub fn reply(&self) -> &Reply<WorkingReply> {
         &self.reply
     }
 }
 
 impl ServedOwnerExchange {
-    fn new(reply: Reply<OwnerSpiritReply>) -> Self {
+    fn new(reply: Reply<OwnerReply>) -> Self {
         Self { reply }
     }
 
-    pub fn reply(&self) -> &Reply<OwnerSpiritReply> {
+    pub fn reply(&self) -> &Reply<OwnerReply> {
         &self.reply
     }
 }

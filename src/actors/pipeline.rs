@@ -1,43 +1,43 @@
 use signal_frame::{Reply, SubReply};
-use signal_persona_spirit::{SpiritReply, SpiritRequest};
+use signal_persona_spirit::{Operation as WorkingOperation, Reply as WorkingReply};
 
 use super::trace::ActorTrace;
 use crate::{Error, Result};
 
 #[derive(Debug, kameo::Reply)]
 pub struct DecodedRequest {
-    request: SpiritRequest,
+    request: WorkingOperation,
     trace: ActorTrace,
 }
 
 #[derive(Debug, kameo::Reply)]
 pub struct PipelineReply {
-    reply: SpiritReply,
+    reply: WorkingReply,
     trace: ActorTrace,
 }
 
 #[derive(Debug, kameo::Reply)]
 pub struct FramePipelineReply {
-    reply: Reply<SpiritReply>,
+    reply: Reply<WorkingReply>,
     trace: ActorTrace,
 }
 
 impl DecodedRequest {
-    pub fn new(request: SpiritRequest, trace: ActorTrace) -> Self {
+    pub fn new(request: WorkingOperation, trace: ActorTrace) -> Self {
         Self { request, trace }
     }
 
-    pub fn into_parts(self) -> (SpiritRequest, ActorTrace) {
+    pub fn into_parts(self) -> (WorkingOperation, ActorTrace) {
         (self.request, self.trace)
     }
 }
 
 impl PipelineReply {
-    pub fn new(reply: SpiritReply, trace: ActorTrace) -> Self {
+    pub fn new(reply: WorkingReply, trace: ActorTrace) -> Self {
         Self { reply, trace }
     }
 
-    pub fn reply(&self) -> &SpiritReply {
+    pub fn reply(&self) -> &WorkingReply {
         &self.reply
     }
 
@@ -45,17 +45,17 @@ impl PipelineReply {
         &self.trace
     }
 
-    pub fn into_parts(self) -> (SpiritReply, ActorTrace) {
+    pub fn into_parts(self) -> (WorkingReply, ActorTrace) {
         (self.reply, self.trace)
     }
 }
 
 impl FramePipelineReply {
-    pub fn new(reply: Reply<SpiritReply>, trace: ActorTrace) -> Self {
+    pub fn new(reply: Reply<WorkingReply>, trace: ActorTrace) -> Self {
         Self { reply, trace }
     }
 
-    pub fn reply(&self) -> &Reply<SpiritReply> {
+    pub fn reply(&self) -> &Reply<WorkingReply> {
         &self.reply
     }
 
@@ -63,11 +63,11 @@ impl FramePipelineReply {
         &self.trace
     }
 
-    pub fn into_parts(self) -> (Reply<SpiritReply>, ActorTrace) {
+    pub fn into_parts(self) -> (Reply<WorkingReply>, ActorTrace) {
         (self.reply, self.trace)
     }
 
-    pub fn into_reply(self) -> Reply<SpiritReply> {
+    pub fn into_reply(self) -> Reply<WorkingReply> {
         self.reply
     }
 

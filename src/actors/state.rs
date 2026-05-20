@@ -1,7 +1,7 @@
 use kameo::actor::{Actor, ActorRef};
 use kameo::message::{Context, Message};
 use signal_persona_spirit::{
-    Presence, QuestionSummary, QuestionsObserved, SpiritReply, State, StateObserved,
+    Presence, QuestionSummary, QuestionsObserved, Reply as WorkingReply, State, StateObserved,
 };
 
 use super::pipeline::PipelineReply;
@@ -62,7 +62,7 @@ impl StatePlane {
         trace.record(TraceNode::STATE_PLANE, TraceAction::RecordsRead);
         trace.record(TraceNode::STATE_PLANE, TraceAction::MessageReplied);
         PipelineReply::new(
-            SpiritReply::StateObserved(StateObserved {
+            WorkingReply::StateObserved(StateObserved {
                 state: self.working.state.clone(),
             }),
             trace,
@@ -74,7 +74,7 @@ impl StatePlane {
         trace.record(TraceNode::STATE_PLANE, TraceAction::RecordsRead);
         trace.record(TraceNode::STATE_PLANE, TraceAction::MessageReplied);
         PipelineReply::new(
-            SpiritReply::QuestionsObserved(QuestionsObserved {
+            WorkingReply::QuestionsObserved(QuestionsObserved {
                 questions: self.working.questions.clone(),
             }),
             trace,

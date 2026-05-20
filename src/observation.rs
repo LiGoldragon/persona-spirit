@@ -5,10 +5,10 @@
 //! receives only payloadless classification labels.
 
 use signal_persona_spirit::{
-    Observation, QuestionsObserved, RecordAccepted, RecordObservation, RecordProvenancesObserved,
-    RecordQuery, RecordSubscription, RecordSubscriptionToken, RecordsObserved,
-    RequestUnimplemented, SpiritObserverFilter, SpiritObserverSubscriptionOpened,
-    SpiritObserverSubscriptionToken, SpiritReply, SpiritRequest, StateObserved,
+    Observation, ObserverFilter, ObserverSubscriptionOpened, ObserverSubscriptionToken,
+    Operation as WorkingOperation, QuestionsObserved, RecordAccepted, RecordObservation,
+    RecordProvenancesObserved, RecordQuery, RecordSubscription, RecordSubscriptionToken,
+    RecordsObserved, Reply as WorkingReply, RequestUnimplemented, StateObserved,
     StateSubscriptionToken, Statement, Subscription, SubscriptionOpened, SubscriptionRetracted,
     SubscriptionToken,
 };
@@ -25,8 +25,8 @@ pub enum Command {
     OpenRecordSubscription(RecordSubscription),
     CloseStateSubscription(StateSubscriptionToken),
     CloseRecordSubscription(RecordSubscriptionToken),
-    OpenObserverSubscription(SpiritObserverFilter),
-    CloseObserverSubscription(SpiritObserverSubscriptionToken),
+    OpenObserverSubscription(ObserverFilter),
+    CloseObserverSubscription(ObserverSubscriptionToken),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,52 +38,52 @@ pub enum Effect {
     QuestionsObserved(QuestionsObserved),
     SubscriptionOpened(SubscriptionOpened),
     SubscriptionRetracted(SubscriptionRetracted),
-    ObserverSubscriptionOpened(SpiritObserverSubscriptionOpened),
+    ObserverSubscriptionOpened(ObserverSubscriptionOpened),
     RequestUnimplemented(RequestUnimplemented),
 }
 
 impl Command {
-    pub fn from_request(request: SpiritRequest) -> Option<Self> {
+    pub fn from_request(request: WorkingOperation) -> Option<Self> {
         match request {
-            SpiritRequest::State(statement) => Some(Self::ClassifyStatement(statement)),
-            SpiritRequest::Record(entry) => Some(Self::AssertEntry(entry)),
-            SpiritRequest::Observe(Observation::Records(query)) => {
+            WorkingOperation::State(statement) => Some(Self::ClassifyStatement(statement)),
+            WorkingOperation::Record(entry) => Some(Self::AssertEntry(entry)),
+            WorkingOperation::Observe(Observation::Records(query)) => {
                 Some(Self::ReadRecords(RecordObservation { query }))
             }
-            SpiritRequest::Observe(Observation::State) => Some(Self::ReadState),
-            SpiritRequest::Observe(Observation::Questions) => Some(Self::ReadQuestions),
-            SpiritRequest::Watch(Subscription::State) => Some(Self::OpenStateSubscription),
-            SpiritRequest::Watch(Subscription::Records(subscription)) => {
+            WorkingOperation::Observe(Observation::State) => Some(Self::ReadState),
+            WorkingOperation::Observe(Observation::Questions) => Some(Self::ReadQuestions),
+            WorkingOperation::Watch(Subscription::State) => Some(Self::OpenStateSubscription),
+            WorkingOperation::Watch(Subscription::Records(subscription)) => {
                 Some(Self::OpenRecordSubscription(subscription))
             }
-            SpiritRequest::Unwatch(SubscriptionToken::State(token)) => {
+            WorkingOperation::Unwatch(SubscriptionToken::State(token)) => {
                 Some(Self::CloseStateSubscription(token))
             }
-            SpiritRequest::Unwatch(SubscriptionToken::Records(token)) => {
+            WorkingOperation::Unwatch(SubscriptionToken::Records(token)) => {
                 Some(Self::CloseRecordSubscription(token))
             }
-            SpiritRequest::Tap(filter) => Some(Self::OpenObserverSubscription(filter)),
-            SpiritRequest::Untap(token) => Some(Self::CloseObserverSubscription(token)),
+            WorkingOperation::Tap(filter) => Some(Self::OpenObserverSubscription(filter)),
+            WorkingOperation::Untap(token) => Some(Self::CloseObserverSubscription(token)),
         }
     }
 }
 
 impl Effect {
-    pub fn from_reply(reply: SpiritReply) -> Self {
+    pub fn from_reply(reply: WorkingReply) -> Self {
         match reply {
-            SpiritReply::RecordAccepted(payload) => Self::RecordAccepted(payload),
-            SpiritReply::StateObserved(payload) => Self::StateObserved(payload),
-            SpiritReply::RecordsObserved(payload) => Self::RecordsObserved(payload),
-            SpiritReply::RecordProvenancesObserved(payload) => {
+            WorkingReply::RecordAccepted(payload) => Self::RecordAccepted(payload),
+            WorkingReply::StateObserved(payload) => Self::StateObserved(payload),
+            WorkingReply::RecordsObserved(payload) => Self::RecordsObserved(payload),
+            WorkingReply::RecordProvenancesObserved(payload) => {
                 Self::RecordProvenancesObserved(payload)
             }
-            SpiritReply::QuestionsObserved(payload) => Self::QuestionsObserved(payload),
-            SpiritReply::SubscriptionOpened(payload) => Self::SubscriptionOpened(payload),
-            SpiritReply::SubscriptionRetracted(payload) => Self::SubscriptionRetracted(payload),
-            SpiritReply::ObserverSubscriptionOpened(payload) => {
+            WorkingReply::QuestionsObserved(payload) => Self::QuestionsObserved(payload),
+            WorkingReply::SubscriptionOpened(payload) => Self::SubscriptionOpened(payload),
+            WorkingReply::SubscriptionRetracted(payload) => Self::SubscriptionRetracted(payload),
+            WorkingReply::ObserverSubscriptionOpened(payload) => {
                 Self::ObserverSubscriptionOpened(payload)
             }
-            SpiritReply::RequestUnimplemented(payload) => Self::RequestUnimplemented(payload),
+            WorkingReply::RequestUnimplemented(payload) => Self::RequestUnimplemented(payload),
         }
     }
 
@@ -91,21 +91,21 @@ impl Effect {
         SemaObservation::from_projection(command, self)
     }
 
-    pub fn into_reply(self) -> SpiritReply {
+    pub fn into_reply(self) -> WorkingReply {
         match self {
-            Self::RecordAccepted(payload) => SpiritReply::RecordAccepted(payload),
-            Self::StateObserved(payload) => SpiritReply::StateObserved(payload),
-            Self::RecordsObserved(payload) => SpiritReply::RecordsObserved(payload),
+            Self::RecordAccepted(payload) => WorkingReply::RecordAccepted(payload),
+            Self::StateObserved(payload) => WorkingReply::StateObserved(payload),
+            Self::RecordsObserved(payload) => WorkingReply::RecordsObserved(payload),
             Self::RecordProvenancesObserved(payload) => {
-                SpiritReply::RecordProvenancesObserved(payload)
+                WorkingReply::RecordProvenancesObserved(payload)
             }
-            Self::QuestionsObserved(payload) => SpiritReply::QuestionsObserved(payload),
-            Self::SubscriptionOpened(payload) => SpiritReply::SubscriptionOpened(payload),
-            Self::SubscriptionRetracted(payload) => SpiritReply::SubscriptionRetracted(payload),
+            Self::QuestionsObserved(payload) => WorkingReply::QuestionsObserved(payload),
+            Self::SubscriptionOpened(payload) => WorkingReply::SubscriptionOpened(payload),
+            Self::SubscriptionRetracted(payload) => WorkingReply::SubscriptionRetracted(payload),
             Self::ObserverSubscriptionOpened(payload) => {
-                SpiritReply::ObserverSubscriptionOpened(payload)
+                WorkingReply::ObserverSubscriptionOpened(payload)
             }
-            Self::RequestUnimplemented(payload) => SpiritReply::RequestUnimplemented(payload),
+            Self::RequestUnimplemented(payload) => WorkingReply::RequestUnimplemented(payload),
         }
     }
 }

@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use kameo::actor::{Actor, ActorRef};
 use kameo::message::{Context, Message};
 use signal_persona_spirit::{
-    RecordSubscription, RecordSubscriptionToken, RecordSummary, SpiritReply, State,
+    RecordSubscription, RecordSubscriptionToken, RecordSummary, Reply as WorkingReply, State,
     StateSubscriptionToken, SubscriptionOpened, SubscriptionRetracted, SubscriptionSnapshot,
     SubscriptionToken,
 };
@@ -80,7 +80,7 @@ impl SubscriptionPlane {
         );
         trace.record(TraceNode::SUBSCRIPTION_PLANE, TraceAction::MessageReplied);
         PipelineReply::new(
-            SpiritReply::SubscriptionOpened(SubscriptionOpened {
+            WorkingReply::SubscriptionOpened(SubscriptionOpened {
                 token: SubscriptionToken::State(token),
                 snapshot: SubscriptionSnapshot::State(snapshot),
             }),
@@ -106,7 +106,7 @@ impl SubscriptionPlane {
         );
         trace.record(TraceNode::SUBSCRIPTION_PLANE, TraceAction::MessageReplied);
         PipelineReply::new(
-            SpiritReply::SubscriptionOpened(SubscriptionOpened {
+            WorkingReply::SubscriptionOpened(SubscriptionOpened {
                 token: SubscriptionToken::Records(token),
                 snapshot: SubscriptionSnapshot::Records(snapshot),
             }),
@@ -127,7 +127,7 @@ impl SubscriptionPlane {
         );
         trace.record(TraceNode::SUBSCRIPTION_PLANE, TraceAction::MessageReplied);
         PipelineReply::new(
-            SpiritReply::SubscriptionRetracted(SubscriptionRetracted {
+            WorkingReply::SubscriptionRetracted(SubscriptionRetracted {
                 token: SubscriptionToken::State(token),
             }),
             trace,
@@ -147,7 +147,7 @@ impl SubscriptionPlane {
         );
         trace.record(TraceNode::SUBSCRIPTION_PLANE, TraceAction::MessageReplied);
         PipelineReply::new(
-            SpiritReply::SubscriptionRetracted(SubscriptionRetracted {
+            WorkingReply::SubscriptionRetracted(SubscriptionRetracted {
                 token: SubscriptionToken::Records(token),
             }),
             trace,

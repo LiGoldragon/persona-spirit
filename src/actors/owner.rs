@@ -3,8 +3,8 @@ use kameo::error::{Infallible, SendError};
 use kameo::message::{Context, Message};
 use owner_signal_persona_spirit::{
     Drain, DrainedAndStopped, Generation, IdentityName, IdentityRegistered, IdentityRetired,
-    OwnerSpiritReply, OwnerSpiritRequest, Registration, RequestUnimplemented, Retirement, Started,
-    UnimplementedReason,
+    Operation as OwnerOperation, Registration, Reply as OwnerReply, RequestUnimplemented,
+    Retirement, Started, UnimplementedReason,
 };
 
 use super::policy;
@@ -28,13 +28,13 @@ pub struct Arguments {
 }
 
 pub struct RouteOwnerRequest {
-    pub request: OwnerSpiritRequest,
+    pub request: OwnerOperation,
     pub trace: ActorTrace,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, kameo::Reply)]
 pub struct OwnerPipelineReply {
-    pub reply: OwnerSpiritReply,
+    pub reply: OwnerReply,
     pub trace: ActorTrace,
 }
 
@@ -49,31 +49,31 @@ impl OwnerPlane {
 
     async fn route(
         &mut self,
-        request: OwnerSpiritRequest,
+        request: OwnerOperation,
         mut trace: ActorTrace,
     ) -> OwnerPipelineReply {
         trace.record(TraceNode::OWNER_PLANE, TraceAction::MessageReceived);
         let reply = match request {
-            OwnerSpiritRequest::Start(order) => self.start(order.generation),
-            OwnerSpiritRequest::Drain(order) => self.drain(order),
-            OwnerSpiritRequest::Reload(_order) => {
+            OwnerOperation::Start(order) => self.start(order.generation),
+            OwnerOperation::Drain(order) => self.drain(order),
+            OwnerOperation::Reload(_order) => {
                 return self.reload_policy(trace).await;
             }
-            OwnerSpiritRequest::Register(order) => self.register_identity(order),
-            OwnerSpiritRequest::Retire(order) => self.retire_identity(order),
+            OwnerOperation::Register(order) => self.register_identity(order),
+            OwnerOperation::Retire(order) => self.retire_identity(order),
         };
         trace.record(TraceNode::OWNER_PLANE, TraceAction::MessageReplied);
         OwnerPipelineReply { reply, trace }
     }
 
-    fn start(&mut self, generation: Generation) -> OwnerSpiritReply {
+    fn start(&mut self, generation: Generation) -> OwnerReply {
         self.lifecycle.generation = Some(generation);
-        OwnerSpiritReply::Started(Started { generation })
+        OwnerReply::Started(Started { generation })
     }
 
-    fn drain(&mut self, _order: Drain) -> OwnerSpiritReply {
+    fn drain(&mut self, _order: Drain) -> OwnerReply {
         self.lifecycle.generation = None;
-        OwnerSpiritReply::DrainedAndStopped(DrainedAndStopped {})
+        OwnerReply::DrainedAndStopped(DrainedAndStopped {})
     }
 
     async fn reload_policy(&self, trace: ActorTrace) -> OwnerPipelineReply {
@@ -95,16 +95,16 @@ impl OwnerPlane {
         }
     }
 
-    fn register_identity(&mut self, order: Registration) -> OwnerSpiritReply {
+    fn register_identity(&mut self, order: Registration) -> OwnerReply {
         if !self.identities.contains(&order.name) {
             self.identities.push(order.name.clone());
         }
-        OwnerSpiritReply::IdentityRegistered(IdentityRegistered { name: order.name })
+        OwnerReply::IdentityRegistered(IdentityRegistered { name: order.name })
     }
 
-    fn retire_identity(&mut self, order: Retirement) -> OwnerSpiritReply {
+    fn retire_identity(&mut self, order: Retirement) -> OwnerReply {
         self.identities.retain(|name| name != &order.name);
-        OwnerSpiritReply::IdentityRetired(IdentityRetired { name: order.name })
+        OwnerReply::IdentityRetired(IdentityRetired { name: order.name })
     }
 }
 
@@ -137,7 +137,7 @@ impl OwnerPlane {
         let mut trace = ActorTrace::new();
         trace.record(TraceNode::OWNER_PLANE, TraceAction::MessageReplied);
         OwnerPipelineReply {
-            reply: OwnerSpiritReply::RequestUnimplemented(RequestUnimplemented {
+            reply: OwnerReply::RequestUnimplemented(RequestUnimplemented {
                 reason: UnimplementedReason::DependencyNotReady,
             }),
             trace,

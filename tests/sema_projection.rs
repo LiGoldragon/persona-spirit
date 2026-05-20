@@ -3,10 +3,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use persona_spirit::{Command, Effect, SpiritActorRuntime, StoreLocation};
 use signal_frame::SubscriptionTokenInner;
 use signal_persona_spirit::{
-    Certainty, Context, Entry, Kind, Observation, ObservationMode, Quote, RecordQuery,
-    SpiritObserverFilter, SpiritObserverSubscriptionToken, SpiritReply, SpiritRequest,
-    StateSubscriptionToken, Statement, StatementText, Subscription, SubscriptionToken, Summary,
-    Topic,
+    Certainty, Context, Entry, Kind, Observation, ObservationMode, ObserverFilter,
+    ObserverSubscriptionToken, Operation as WorkingOperation, Quote, RecordQuery,
+    Reply as WorkingReply, StateSubscriptionToken, Statement, StatementText, Subscription,
+    SubscriptionToken, Summary, Topic,
 };
 use signal_sema::{SemaObservation, SemaOperation, SemaOutcome};
 
@@ -48,7 +48,7 @@ fn entry(summary: &str) -> Entry {
     }
 }
 
-fn observation_for(request: SpiritRequest, reply: SpiritReply) -> SemaObservation {
+fn observation_for(request: WorkingOperation, reply: WorkingReply) -> SemaObservation {
     let command = Command::from_request(request).expect("ordinary request projects to command");
     let effect = Effect::from_reply(reply);
     effect.sema_observation_for(&command)
@@ -69,7 +69,7 @@ fn assert_runtime_projection_trace(trace: &persona_spirit::ActorTrace) {
 async fn spirit_record_assertion_projects_to_asserted_observation() {
     let fixture = RuntimeFixture::new("record-assertion");
     let runtime = fixture.runtime().await;
-    let request = SpiritRequest::Record(entry("asserted projection"));
+    let request = WorkingOperation::Record(entry("asserted projection"));
     let runtime_reply = runtime
         .submit_request(request.clone())
         .await
@@ -89,7 +89,7 @@ async fn spirit_record_assertion_projects_to_asserted_observation() {
 async fn spirit_statement_classification_projects_to_asserted_observation() {
     let fixture = RuntimeFixture::new("statement");
     let runtime = fixture.runtime().await;
-    let request = SpiritRequest::State(Statement {
+    let request = WorkingOperation::State(Statement {
         text: StatementText::new("capture this statement"),
     });
     let runtime_reply = runtime
@@ -112,10 +112,10 @@ async fn spirit_record_query_projects_to_matched_observation() {
     let fixture = RuntimeFixture::new("record-query");
     let runtime = fixture.runtime().await;
     runtime
-        .submit_request(SpiritRequest::Record(entry("matched projection")))
+        .submit_request(WorkingOperation::Record(entry("matched projection")))
         .await
         .expect("record accepted");
-    let request = SpiritRequest::Observe(Observation::Records(RecordQuery {
+    let request = WorkingOperation::Observe(Observation::Records(RecordQuery {
         topic: None,
         mode: ObservationMode::SummaryOnly,
     }));
@@ -138,7 +138,7 @@ async fn spirit_record_query_projects_to_matched_observation() {
 async fn spirit_state_query_projects_to_matched_observation() {
     let fixture = RuntimeFixture::new("state-query");
     let runtime = fixture.runtime().await;
-    let request = SpiritRequest::Observe(Observation::State);
+    let request = WorkingOperation::Observe(Observation::State);
     let runtime_reply = runtime
         .submit_request(request.clone())
         .await
@@ -158,7 +158,7 @@ async fn spirit_state_query_projects_to_matched_observation() {
 async fn spirit_state_subscription_projects_to_subscribed_observation() {
     let fixture = RuntimeFixture::new("state-subscription");
     let runtime = fixture.runtime().await;
-    let request = SpiritRequest::Watch(Subscription::State);
+    let request = WorkingOperation::Watch(Subscription::State);
     let runtime_reply = runtime
         .submit_request(request.clone())
         .await
@@ -179,10 +179,10 @@ async fn spirit_state_subscription_retraction_projects_to_retracted_observation(
     let fixture = RuntimeFixture::new("state-retraction");
     let runtime = fixture.runtime().await;
     runtime
-        .submit_request(SpiritRequest::Watch(Subscription::State))
+        .submit_request(WorkingOperation::Watch(Subscription::State))
         .await
         .expect("subscription opened");
-    let request = SpiritRequest::Unwatch(SubscriptionToken::State(StateSubscriptionToken {
+    let request = WorkingOperation::Unwatch(SubscriptionToken::State(StateSubscriptionToken {
         identifier: 1,
     }));
     let runtime_reply = runtime
@@ -205,7 +205,7 @@ async fn spirit_unimplemented_observer_operations_project_as_explicit_no_change_
     let fixture = RuntimeFixture::new("observer-no-change");
     let runtime = fixture.runtime().await;
 
-    let tap_request = SpiritRequest::Tap(SpiritObserverFilter::All);
+    let tap_request = WorkingOperation::Tap(ObserverFilter::All);
     let tap_runtime_reply = runtime
         .submit_request(tap_request.clone())
         .await
@@ -217,7 +217,7 @@ async fn spirit_unimplemented_observer_operations_project_as_explicit_no_change_
         SemaObservation::new(SemaOperation::Subscribe, SemaOutcome::NoChange)
     );
 
-    let untap_request = SpiritRequest::Untap(SpiritObserverSubscriptionToken::new(
+    let untap_request = WorkingOperation::Untap(ObserverSubscriptionToken::new(
         SubscriptionTokenInner::new(1),
     ));
     let untap_runtime_reply = runtime

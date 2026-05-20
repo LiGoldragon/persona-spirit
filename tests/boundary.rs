@@ -394,7 +394,7 @@ fn persona_spirit_owner_request_text_decodes_owner_contract_only() {
 
     assert!(matches!(
         owner,
-        owner_signal_persona_spirit::OwnerSpiritRequest::Register(_)
+        owner_signal_persona_spirit::Operation::Register(_)
     ));
     assert!(ordinary.is_err());
 }

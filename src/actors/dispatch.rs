@@ -9,8 +9,8 @@ use signal_executor::{
 };
 use signal_frame::{NonEmpty, Request};
 use signal_persona_spirit::{
-    EffectEmitted, OperationKind, OperationReceived, RecordObservation, RequestUnimplemented,
-    SpiritReply, SpiritRequest, UnimplementedReason,
+    EffectEmitted, Operation as WorkingOperation, OperationKind, OperationReceived,
+    RecordObservation, Reply as WorkingReply, RequestUnimplemented, UnimplementedReason,
 };
 
 use crate::observation::{Command, Effect};
@@ -46,12 +46,12 @@ pub struct Arguments {
 }
 
 pub struct RouteRequest {
-    pub request: SpiritRequest,
+    pub request: WorkingOperation,
     pub trace: ActorTrace,
 }
 
 pub struct RouteFrameRequest {
-    pub request: Request<SpiritRequest>,
+    pub request: Request<WorkingOperation>,
     pub trace: ActorTrace,
 }
 
@@ -96,7 +96,7 @@ impl DispatchPhase {
         }
     }
 
-    async fn route(&self, request: SpiritRequest, trace: ActorTrace) -> Result<PipelineReply> {
+    async fn route(&self, request: WorkingOperation, trace: ActorTrace) -> Result<PipelineReply> {
         self.route_frame(Request::from_payload(request), trace)
             .await?
             .into_single_pipeline_reply()
@@ -104,7 +104,7 @@ impl DispatchPhase {
 
     async fn route_frame(
         &self,
-        request: Request<SpiritRequest>,
+        request: Request<WorkingOperation>,
         trace: ActorTrace,
     ) -> Result<FramePipelineReply> {
         let trace = SharedTrace::new(trace);
@@ -156,23 +156,23 @@ impl SharedTrace {
 }
 
 impl SpiritLowering {
-    fn unimplemented_reply(_operation: &SpiritRequest) -> SpiritReply {
-        SpiritReply::RequestUnimplemented(RequestUnimplemented {
+    fn unimplemented_reply(_operation: &WorkingOperation) -> WorkingReply {
+        WorkingReply::RequestUnimplemented(RequestUnimplemented {
             reason: UnimplementedReason::IntegrationNotLanded,
         })
     }
 }
 
 impl Lowering for SpiritLowering {
-    type Operation = SpiritRequest;
-    type Reply = SpiritReply;
+    type Operation = WorkingOperation;
+    type Reply = WorkingReply;
     type Command = Command;
     type ComponentEffect = Effect;
 
     fn lower(
         &self,
         operation: &Self::Operation,
-    ) -> std::result::Result<OperationPlan<Command>, SpiritReply> {
+    ) -> std::result::Result<OperationPlan<Command>, WorkingReply> {
         Command::from_request(operation.clone())
             .map(OperationPlan::single)
             .ok_or_else(|| Self::unimplemented_reply(operation))
@@ -182,7 +182,7 @@ impl Lowering for SpiritLowering {
         &self,
         _operation: &Self::Operation,
         effects: &OperationEffects<Command, Effect>,
-    ) -> SpiritReply {
+    ) -> WorkingReply {
         // Spirit currently lowers each operation to a one-command plan.
         // If an operation grows a multi-command pipeline, the final
         // command effect is the canonical reply by convention.
@@ -257,7 +257,7 @@ impl SpiritCommandExecutor {
         Ok(CommandEffect::new(command, Effect::from_reply(reply)))
     }
 
-    async fn capture_entry(&self, entry: signal_persona_spirit::Entry) -> Result<SpiritReply> {
+    async fn capture_entry(&self, entry: signal_persona_spirit::Entry) -> Result<WorkingReply> {
         let entry = self.stamp_entry(entry).await?;
         self.capture_stamped_entry(entry).await
     }
@@ -273,7 +273,7 @@ impl SpiritCommandExecutor {
         Ok(stamped.entry)
     }
 
-    async fn capture_stamped_entry(&self, entry: StampedEntry) -> Result<SpiritReply> {
+    async fn capture_stamped_entry(&self, entry: StampedEntry) -> Result<WorkingReply> {
         let trace = self.trace.snapshot();
         let pipeline = self
             .store
@@ -288,7 +288,7 @@ impl SpiritCommandExecutor {
     async fn classify_statement(
         &self,
         statement: signal_persona_spirit::Statement,
-    ) -> Result<SpiritReply> {
+    ) -> Result<WorkingReply> {
         let trace = self.trace.snapshot();
         let classified = self
             .classifier
@@ -299,7 +299,7 @@ impl SpiritCommandExecutor {
         self.capture_entry(classified.entry).await
     }
 
-    async fn observe_records(&self, observation: RecordObservation) -> Result<SpiritReply> {
+    async fn observe_records(&self, observation: RecordObservation) -> Result<WorkingReply> {
         let trace = self.trace.snapshot();
         let pipeline = self
             .store
@@ -311,7 +311,7 @@ impl SpiritCommandExecutor {
         Ok(reply)
     }
 
-    async fn observe_state(&self) -> Result<SpiritReply> {
+    async fn observe_state(&self) -> Result<WorkingReply> {
         let trace = self.trace.snapshot();
         let pipeline = self
             .state
@@ -323,7 +323,7 @@ impl SpiritCommandExecutor {
         Ok(reply)
     }
 
-    async fn observe_questions(&self) -> Result<SpiritReply> {
+    async fn observe_questions(&self) -> Result<WorkingReply> {
         let trace = self.trace.snapshot();
         let pipeline = self
             .state
@@ -335,7 +335,7 @@ impl SpiritCommandExecutor {
         Ok(reply)
     }
 
-    async fn subscribe_state(&self) -> Result<SpiritReply> {
+    async fn subscribe_state(&self) -> Result<WorkingReply> {
         let trace = self.trace.snapshot();
         let snapshot = self
             .state
@@ -359,7 +359,7 @@ impl SpiritCommandExecutor {
     async fn subscribe_records(
         &self,
         subscription: signal_persona_spirit::RecordSubscription,
-    ) -> Result<SpiritReply> {
+    ) -> Result<WorkingReply> {
         let trace = self.trace.snapshot();
         let snapshot = self
             .store
@@ -387,7 +387,7 @@ impl SpiritCommandExecutor {
     async fn retract_state_subscription(
         &self,
         token: signal_persona_spirit::StateSubscriptionToken,
-    ) -> Result<SpiritReply> {
+    ) -> Result<WorkingReply> {
         let trace = self.trace.snapshot();
         let pipeline = self
             .subscription
@@ -402,7 +402,7 @@ impl SpiritCommandExecutor {
     async fn retract_record_subscription(
         &self,
         token: signal_persona_spirit::RecordSubscriptionToken,
-    ) -> Result<SpiritReply> {
+    ) -> Result<WorkingReply> {
         let trace = self.trace.snapshot();
         let pipeline = self
             .subscription
@@ -414,7 +414,7 @@ impl SpiritCommandExecutor {
         Ok(reply)
     }
 
-    async fn shape_unimplemented(&self, operation: OperationKind) -> Result<SpiritReply> {
+    async fn shape_unimplemented(&self, operation: OperationKind) -> Result<WorkingReply> {
         let trace = self.trace.snapshot();
         let pipeline = self
             .reply
@@ -483,10 +483,10 @@ impl SpiritObserverRecorder {
     }
 }
 
-impl ObserverChannel<SpiritRequest, CommandEffect<Command, Effect>> for SpiritObserverRecorder {
-    fn publish_operation_received(&self, operation: &SpiritRequest) {
+impl ObserverChannel<WorkingOperation, CommandEffect<Command, Effect>> for SpiritObserverRecorder {
+    fn publish_operation_received(&self, operation: &WorkingOperation) {
         let _event = OperationReceived {
-            operation: operation.operation_kind(),
+            operation: operation.kind(),
         };
         self.trace
             .record(TraceNode::SIGNAL_EXECUTOR, TraceAction::OperationReceived);

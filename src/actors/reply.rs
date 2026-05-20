@@ -3,7 +3,7 @@ use kameo::error::Infallible;
 use kameo::message::{Context, Message};
 use nota_codec::{Encoder, NotaEncode};
 use signal_persona_spirit::{
-    OperationKind, RequestUnimplemented, SpiritReply, UnimplementedReason,
+    OperationKind, Reply as WorkingReply, RequestUnimplemented, UnimplementedReason,
 };
 
 use crate::{Error, Result};
@@ -46,14 +46,14 @@ pub struct ShapeUnimplemented {
 }
 
 pub struct EncodeReply {
-    pub reply: SpiritReply,
+    pub reply: WorkingReply,
     pub trace: ActorTrace,
 }
 
 #[derive(Debug, kameo::Reply)]
 pub struct TextReply {
     text: String,
-    reply: SpiritReply,
+    reply: WorkingReply,
     trace: ActorTrace,
 }
 
@@ -83,7 +83,7 @@ impl ReplyShaper {
         mut trace: ActorTrace,
     ) -> PipelineReply {
         trace.record(TraceNode::REPLY_SHAPER, TraceAction::MessageReceived);
-        let reply = SpiritReply::RequestUnimplemented(RequestUnimplemented {
+        let reply = WorkingReply::RequestUnimplemented(RequestUnimplemented {
             reason: self.policy.reason_for(operation),
         });
         trace.record(TraceNode::REPLY_SHAPER, TraceAction::MessageReplied);
@@ -96,7 +96,7 @@ impl ReplyTextEncoder {
         Self { policy }
     }
 
-    fn encode_reply(&self, reply: SpiritReply, mut trace: ActorTrace) -> Result<TextReply> {
+    fn encode_reply(&self, reply: WorkingReply, mut trace: ActorTrace) -> Result<TextReply> {
         trace.record(TraceNode::REPLY_TEXT_ENCODER, TraceAction::MessageReceived);
         let mut encoder = Encoder::new();
         reply
@@ -124,7 +124,7 @@ impl UnimplementedPolicy {
 }
 
 impl TextReply {
-    pub fn new(text: String, reply: SpiritReply, trace: ActorTrace) -> Self {
+    pub fn new(text: String, reply: WorkingReply, trace: ActorTrace) -> Self {
         Self { text, reply, trace }
     }
 
@@ -132,7 +132,7 @@ impl TextReply {
         &self.text
     }
 
-    pub fn reply(&self) -> &SpiritReply {
+    pub fn reply(&self) -> &WorkingReply {
         &self.reply
     }
 

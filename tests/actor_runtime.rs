@@ -2,15 +2,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use owner_signal_persona_spirit::{
     BootstrapPolicy, BootstrapPolicyReloaded, Drain, DrainedAndStopped, Generation, IdentityName,
-    IdentityRegistered, IdentityRetired, OwnerSpiritReply, OwnerSpiritRequest, Registration,
-    RequestUnimplemented, Retirement, Start, Started, UnimplementedReason,
+    IdentityRegistered, IdentityRetired, Operation as OwnerOperation, Registration,
+    Reply as OwnerReply, RequestUnimplemented, Retirement, Start, Started, UnimplementedReason,
 };
 use persona_spirit::{
     BootstrapPolicySource, Error, SpiritActorRuntime, StoreLocation, TraceAction, TraceNode,
 };
 use signal_persona_spirit::{
-    RequestUnimplemented as SpiritRequestUnimplemented, SpiritObserverFilter, SpiritReply,
-    SpiritRequest, UnimplementedReason as SpiritUnimplementedReason,
+    ObserverFilter, Operation as WorkingOperation, Reply as WorkingReply,
+    RequestUnimplemented as SpiritRequestUnimplemented,
+    UnimplementedReason as SpiritUnimplementedReason,
 };
 
 #[derive(Debug, Clone)]
@@ -89,7 +90,7 @@ async fn persona_spirit_ordinary_request_path_uses_signal_executor_and_sema_obse
     let runtime = fixture.runtime().await;
 
     let reply = runtime
-        .submit_request(SpiritRequest::Record(signal_persona_spirit::Entry {
+        .submit_request(WorkingOperation::Record(signal_persona_spirit::Entry {
             topic: signal_persona_spirit::Topic::new("workspace"),
             kind: signal_persona_spirit::Kind::Decision,
             summary: signal_persona_spirit::Summary::new("executor path"),
@@ -197,13 +198,13 @@ async fn persona_spirit_unimplemented_observer_request_uses_reply_shaper_not_sto
     let runtime = fixture.runtime().await;
 
     let reply = runtime
-        .submit_request(SpiritRequest::Tap(SpiritObserverFilter::All))
+        .submit_request(WorkingOperation::Tap(ObserverFilter::All))
         .await
         .expect("observer tap is handled as an unimplemented request");
 
     assert_eq!(
         reply.reply(),
-        &SpiritReply::RequestUnimplemented(SpiritRequestUnimplemented {
+        &WorkingReply::RequestUnimplemented(SpiritRequestUnimplemented {
             reason: SpiritUnimplementedReason::NotBuiltYet,
         })
     );
@@ -326,25 +327,25 @@ async fn persona_spirit_owner_lifecycle_orders_use_owner_plane() {
     let runtime = fixture.runtime().await;
 
     let started = runtime
-        .submit_owner_request(OwnerSpiritRequest::Start(Start {
+        .submit_owner_request(OwnerOperation::Start(Start {
             generation: Generation::new(7),
         }))
         .await
         .expect("owner start accepted");
     let stopped = runtime
-        .submit_owner_request(OwnerSpiritRequest::Drain(Drain {}))
+        .submit_owner_request(OwnerOperation::Drain(Drain {}))
         .await
         .expect("owner drain accepted");
 
     assert_eq!(
         started.reply(),
-        &OwnerSpiritReply::Started(Started {
+        &OwnerReply::Started(Started {
             generation: Generation::new(7),
         })
     );
     assert_eq!(
         stopped.reply(),
-        &OwnerSpiritReply::DrainedAndStopped(DrainedAndStopped {})
+        &OwnerReply::DrainedAndStopped(DrainedAndStopped {})
     );
     assert!(started.trace().contains_ordered(&[
         TraceNode::SPIRIT_ROOT,
@@ -363,13 +364,13 @@ async fn persona_spirit_owner_identity_orders_use_owner_plane() {
     let runtime = fixture.runtime().await;
 
     let registered = runtime
-        .submit_owner_request(OwnerSpiritRequest::Register(Registration {
+        .submit_owner_request(OwnerOperation::Register(Registration {
             name: IdentityName::new("author"),
         }))
         .await
         .expect("identity registered");
     let retired = runtime
-        .submit_owner_request(OwnerSpiritRequest::Retire(Retirement {
+        .submit_owner_request(OwnerOperation::Retire(Retirement {
             name: IdentityName::new("author"),
         }))
         .await
@@ -377,13 +378,13 @@ async fn persona_spirit_owner_identity_orders_use_owner_plane() {
 
     assert_eq!(
         registered.reply(),
-        &OwnerSpiritReply::IdentityRegistered(IdentityRegistered {
+        &OwnerReply::IdentityRegistered(IdentityRegistered {
             name: IdentityName::new("author"),
         })
     );
     assert_eq!(
         retired.reply(),
-        &OwnerSpiritReply::IdentityRetired(IdentityRetired {
+        &OwnerReply::IdentityRetired(IdentityRetired {
             name: IdentityName::new("author"),
         })
     );
@@ -399,13 +400,13 @@ async fn persona_spirit_bootstrap_policy_reload_uses_policy_plane() {
     let runtime = fixture.runtime().await;
 
     let reply = runtime
-        .submit_owner_request(OwnerSpiritRequest::Reload(BootstrapPolicy {}))
+        .submit_owner_request(OwnerOperation::Reload(BootstrapPolicy {}))
         .await
         .expect("policy reload type checked");
 
     assert_eq!(
         reply.reply(),
-        &OwnerSpiritReply::BootstrapPolicyReloaded(BootstrapPolicyReloaded {})
+        &OwnerReply::BootstrapPolicyReloaded(BootstrapPolicyReloaded {})
     );
     assert!(reply.trace().contains_ordered(&[
         TraceNode::OWNER_PLANE,
@@ -427,13 +428,13 @@ async fn persona_spirit_bootstrap_policy_reload_reports_missing_policy_source() 
         .await;
 
     let reply = runtime
-        .submit_owner_request(OwnerSpiritRequest::Reload(BootstrapPolicy {}))
+        .submit_owner_request(OwnerOperation::Reload(BootstrapPolicy {}))
         .await
         .expect("policy reload type checked");
 
     assert_eq!(
         reply.reply(),
-        &OwnerSpiritReply::RequestUnimplemented(RequestUnimplemented {
+        &OwnerReply::RequestUnimplemented(RequestUnimplemented {
             reason: UnimplementedReason::DependencyNotReady,
         })
     );

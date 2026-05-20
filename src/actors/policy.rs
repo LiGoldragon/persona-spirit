@@ -5,7 +5,7 @@ use kameo::error::Infallible;
 use kameo::message::{Context, Message};
 use nota_codec::{Decoder, NotaDecode, NotaRecord};
 use owner_signal_persona_spirit::{
-    BootstrapPolicyReloaded, OwnerSpiritReply, RequestUnimplemented, UnimplementedReason,
+    BootstrapPolicyReloaded, Reply as OwnerReply, RequestUnimplemented, UnimplementedReason,
 };
 
 use super::trace::{ActorTrace, TraceAction, TraceNode};
@@ -37,7 +37,7 @@ pub struct ReloadBootstrapPolicy {
 
 #[derive(Debug, Clone, PartialEq, Eq, kameo::Reply)]
 pub struct PolicyPipelineReply {
-    pub reply: OwnerSpiritReply,
+    pub reply: OwnerReply,
     pub trace: ActorTrace,
 }
 
@@ -52,9 +52,9 @@ impl PolicyPlane {
         let reply = match BootstrapPolicy::from_source(&self.source) {
             Ok(policy) => {
                 self.policy = Some(policy);
-                OwnerSpiritReply::BootstrapPolicyReloaded(BootstrapPolicyReloaded {})
+                OwnerReply::BootstrapPolicyReloaded(BootstrapPolicyReloaded {})
             }
-            Err(_reason) => OwnerSpiritReply::RequestUnimplemented(RequestUnimplemented {
+            Err(_reason) => OwnerReply::RequestUnimplemented(RequestUnimplemented {
                 reason: UnimplementedReason::DependencyNotReady,
             }),
         };

@@ -2,7 +2,7 @@ use kameo::actor::{Actor, ActorRef};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
 use nota_codec::{Decoder, NotaDecode};
-use signal_persona_spirit::SpiritRequest;
+use signal_persona_spirit::Operation as WorkingOperation;
 
 use crate::{Error, Result};
 
@@ -38,7 +38,8 @@ impl NotaDecoder {
         trace.record(TraceNode::NOTA_DECODER, TraceAction::MessageReceived);
 
         let mut decoder = Decoder::new(text);
-        let request = SpiritRequest::decode(&mut decoder).map_err(Error::invalid_spirit_request)?;
+        let request =
+            WorkingOperation::decode(&mut decoder).map_err(Error::invalid_spirit_request)?;
         if self.strict_end {
             RequestEnd::new(&mut decoder).expect()?;
         }

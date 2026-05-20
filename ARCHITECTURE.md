@@ -105,10 +105,10 @@ expected actor path for each constraint.
 
 The daemon socket path does not pretend RKYV Signal traffic is text. The
 ordinary socket reads length-prefixed `signal-persona-spirit::Frame` values,
-checks the `signal-frame::Request`, and submits each `SpiritRequest` directly to
-`SpiritRoot` through the dispatch plane. The owner socket reads
+checks the `signal-frame::Request`, and submits each working-contract
+`Operation` directly to `SpiritRoot` through the dispatch plane. The owner socket reads
 length-prefixed `owner-signal-persona-spirit::Frame` values and submits each
-`OwnerSpiritRequest` directly to `OwnerPlane`.
+owner-contract `Operation` directly to `OwnerPlane`.
 
 The `spirit` CLI is not a second runtime. It resolves its single argument as
 either a raw NOTA request record (argument begins with `(`) or a path to a NOTA
@@ -217,8 +217,8 @@ Implemented now:
 - daemon binary and `spirit` CLI binary names;
 - one-argument boundary parser;
 - generated CLI head dispatch from the working and owner signal contracts;
-- typed CLI request decoding for `signal-persona-spirit::SpiritRequest` and
-  `owner-signal-persona-spirit::OwnerSpiritRequest` from a raw NOTA argument or
+- typed CLI request decoding for `signal-persona-spirit::Operation` and
+  `owner-signal-persona-spirit::Operation` from a raw NOTA argument or
   a NOTA request file path;
 - CLI daemon-client mode that requires the selected working or owner socket and
   performs only NOTA request decoding, signal-frame submission, and NOTA reply

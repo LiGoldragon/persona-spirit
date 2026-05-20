@@ -4,14 +4,14 @@ use crate::{
     Error, OwnerSpiritSignalClient, Result, SingleArgument, SocketPath, SpiritSignalClient,
 };
 use nota_codec::{Decoder, Encoder, NotaDecode, NotaEncode};
-use owner_signal_persona_spirit::{OwnerSpiritReply, OwnerSpiritRequest};
+use owner_signal_persona_spirit::{Operation as OwnerOperation, Reply as OwnerReply};
 use signal_frame::CommandLineSocket;
-use signal_persona_spirit::{SpiritReply, SpiritRequest};
+use signal_persona_spirit::{Operation as WorkingOperation, Reply as WorkingReply};
 
 signal_frame::signal_cli! {
     pub struct SpiritCommandLineDispatch {
-        working signal_persona_spirit::SpiritRequest;
-        owner owner_signal_persona_spirit::OwnerSpiritRequest;
+        working signal_persona_spirit::Operation;
+        owner owner_signal_persona_spirit::Operation;
     }
 }
 
@@ -171,9 +171,10 @@ impl SpiritRequestText {
         Self { text: text.into() }
     }
 
-    pub fn decode_request(&self) -> Result<SpiritRequest> {
+    pub fn decode_request(&self) -> Result<WorkingOperation> {
         let mut decoder = Decoder::new(&self.text);
-        let request = SpiritRequest::decode(&mut decoder).map_err(Error::invalid_spirit_request)?;
+        let request =
+            WorkingOperation::decode(&mut decoder).map_err(Error::invalid_spirit_request)?;
         SpiritRequestEnd::new(&mut decoder).expect()?;
         Ok(request)
     }
@@ -189,10 +190,10 @@ impl OwnerSpiritRequestText {
         Self { text: text.into() }
     }
 
-    pub fn decode_request(&self) -> Result<OwnerSpiritRequest> {
+    pub fn decode_request(&self) -> Result<OwnerOperation> {
         let mut decoder = Decoder::new(&self.text);
         let request =
-            OwnerSpiritRequest::decode(&mut decoder).map_err(Error::invalid_spirit_request)?;
+            OwnerOperation::decode(&mut decoder).map_err(Error::invalid_spirit_request)?;
         SpiritRequestEnd::new(&mut decoder).expect()?;
         Ok(request)
     }
@@ -200,11 +201,11 @@ impl OwnerSpiritRequestText {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SpiritReplyText {
-    reply: SpiritReply,
+    reply: WorkingReply,
 }
 
 impl SpiritReplyText {
-    pub fn new(reply: SpiritReply) -> Self {
+    pub fn new(reply: WorkingReply) -> Self {
         Self { reply }
     }
 
@@ -219,11 +220,11 @@ impl SpiritReplyText {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OwnerSpiritReplyText {
-    reply: OwnerSpiritReply,
+    reply: OwnerReply,
 }
 
 impl OwnerSpiritReplyText {
-    pub fn new(reply: OwnerSpiritReply) -> Self {
+    pub fn new(reply: OwnerReply) -> Self {
         Self { reply }
     }
 

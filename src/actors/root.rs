@@ -36,15 +36,15 @@ pub struct SubmitText {
 }
 
 pub struct SubmitRequest {
-    pub request: signal_persona_spirit::SpiritRequest,
+    pub request: signal_persona_spirit::Operation,
 }
 
 pub struct SubmitFrameRequest {
-    pub request: signal_frame::Request<signal_persona_spirit::SpiritRequest>,
+    pub request: signal_frame::Request<signal_persona_spirit::Operation>,
 }
 
 pub struct SubmitOwnerRequest {
-    pub request: owner_signal_persona_spirit::OwnerSpiritRequest,
+    pub request: owner_signal_persona_spirit::Operation,
 }
 
 #[derive(Debug, kameo::Reply)]
@@ -55,19 +55,19 @@ pub struct RootTextReply {
 
 #[derive(Debug, kameo::Reply)]
 pub struct RootOperationReply {
-    reply: signal_persona_spirit::SpiritReply,
+    reply: signal_persona_spirit::Reply,
     trace: ActorTrace,
 }
 
 #[derive(Debug, kameo::Reply)]
 pub struct RootFrameReply {
-    reply: signal_frame::Reply<signal_persona_spirit::SpiritReply>,
+    reply: signal_frame::Reply<signal_persona_spirit::Reply>,
     trace: ActorTrace,
 }
 
 #[derive(Debug, kameo::Reply)]
 pub struct RootOwnerReply {
-    reply: owner_signal_persona_spirit::OwnerSpiritReply,
+    reply: owner_signal_persona_spirit::Reply,
     trace: ActorTrace,
 }
 
@@ -140,7 +140,7 @@ impl SpiritRoot {
 
     async fn submit_request(
         &self,
-        request: signal_persona_spirit::SpiritRequest,
+        request: signal_persona_spirit::Operation,
     ) -> Result<RootOperationReply> {
         let mut trace = ActorTrace::new();
         trace.record(TraceNode::SPIRIT_ROOT, TraceAction::MessageReceived);
@@ -156,7 +156,7 @@ impl SpiritRoot {
 
     async fn submit_frame_request(
         &self,
-        request: signal_frame::Request<signal_persona_spirit::SpiritRequest>,
+        request: signal_frame::Request<signal_persona_spirit::Operation>,
     ) -> Result<RootFrameReply> {
         let mut trace = ActorTrace::new();
         trace.record(TraceNode::SPIRIT_ROOT, TraceAction::MessageReceived);
@@ -172,7 +172,7 @@ impl SpiritRoot {
 
     async fn submit_owner_request(
         &self,
-        request: owner_signal_persona_spirit::OwnerSpiritRequest,
+        request: owner_signal_persona_spirit::Operation,
     ) -> Result<RootOwnerReply> {
         let mut trace = ActorTrace::new();
         trace.record(TraceNode::SPIRIT_ROOT, TraceAction::MessageReceived);
@@ -239,11 +239,11 @@ impl RootTextReply {
 }
 
 impl RootOperationReply {
-    fn new(reply: signal_persona_spirit::SpiritReply, trace: ActorTrace) -> Self {
+    fn new(reply: signal_persona_spirit::Reply, trace: ActorTrace) -> Self {
         Self { reply, trace }
     }
 
-    pub fn reply(&self) -> &signal_persona_spirit::SpiritReply {
+    pub fn reply(&self) -> &signal_persona_spirit::Reply {
         &self.reply
     }
 
@@ -251,20 +251,17 @@ impl RootOperationReply {
         &self.trace
     }
 
-    pub fn into_reply(self) -> signal_persona_spirit::SpiritReply {
+    pub fn into_reply(self) -> signal_persona_spirit::Reply {
         self.reply
     }
 }
 
 impl RootFrameReply {
-    fn new(
-        reply: signal_frame::Reply<signal_persona_spirit::SpiritReply>,
-        trace: ActorTrace,
-    ) -> Self {
+    fn new(reply: signal_frame::Reply<signal_persona_spirit::Reply>, trace: ActorTrace) -> Self {
         Self { reply, trace }
     }
 
-    pub fn reply(&self) -> &signal_frame::Reply<signal_persona_spirit::SpiritReply> {
+    pub fn reply(&self) -> &signal_frame::Reply<signal_persona_spirit::Reply> {
         &self.reply
     }
 
@@ -272,17 +269,17 @@ impl RootFrameReply {
         &self.trace
     }
 
-    pub fn into_reply(self) -> signal_frame::Reply<signal_persona_spirit::SpiritReply> {
+    pub fn into_reply(self) -> signal_frame::Reply<signal_persona_spirit::Reply> {
         self.reply
     }
 }
 
 impl RootOwnerReply {
-    fn new(reply: owner_signal_persona_spirit::OwnerSpiritReply, trace: ActorTrace) -> Self {
+    fn new(reply: owner_signal_persona_spirit::Reply, trace: ActorTrace) -> Self {
         Self { reply, trace }
     }
 
-    pub fn reply(&self) -> &owner_signal_persona_spirit::OwnerSpiritReply {
+    pub fn reply(&self) -> &owner_signal_persona_spirit::Reply {
         &self.reply
     }
 
@@ -290,7 +287,7 @@ impl RootOwnerReply {
         &self.trace
     }
 
-    pub fn into_reply(self) -> owner_signal_persona_spirit::OwnerSpiritReply {
+    pub fn into_reply(self) -> owner_signal_persona_spirit::Reply {
         self.reply
     }
 }
@@ -326,7 +323,7 @@ impl SpiritActorRuntime {
 
     pub async fn submit_request(
         &self,
-        request: signal_persona_spirit::SpiritRequest,
+        request: signal_persona_spirit::Operation,
     ) -> Result<RootOperationReply> {
         self.root
             .ask(SubmitRequest { request })
@@ -336,7 +333,7 @@ impl SpiritActorRuntime {
 
     pub async fn submit_frame_request(
         &self,
-        request: signal_frame::Request<signal_persona_spirit::SpiritRequest>,
+        request: signal_frame::Request<signal_persona_spirit::Operation>,
     ) -> Result<RootFrameReply> {
         self.root
             .ask(SubmitFrameRequest { request })
@@ -346,7 +343,7 @@ impl SpiritActorRuntime {
 
     pub async fn submit_owner_request(
         &self,
-        request: owner_signal_persona_spirit::OwnerSpiritRequest,
+        request: owner_signal_persona_spirit::Operation,
     ) -> Result<RootOwnerReply> {
         self.root
             .ask(SubmitOwnerRequest { request })

@@ -7,8 +7,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use nota_codec::{Encoder, NotaEncode};
 use owner_signal_persona_spirit::{
     BootstrapPolicy, BootstrapPolicyReloaded, Frame as OwnerFrame, FrameBody as OwnerFrameBody,
-    Generation, IdentityName, IdentityRegistered, OwnerSpiritReply, OwnerSpiritRequest,
-    Registration, Start, Started,
+    Generation, IdentityName, IdentityRegistered, Operation as OwnerOperation, Registration,
+    Reply as OwnerReply, Start, Started,
 };
 use persona_spirit::{
     BootstrapPolicyPath, DaemonConfiguration, DaemonRuntime, OwnerSpiritFrameCodec,
@@ -21,8 +21,9 @@ use signal_frame::{
     SubReply,
 };
 use signal_persona_spirit::{
-    Certainty, Context, Entry, Frame, FrameBody, Kind, Observation, ObservationMode, Quote,
-    RecordQuery, SpiritReply, SpiritRequest, Statement, StatementText, Summary, Topic,
+    Certainty, Context, Entry, Frame, FrameBody, Kind, Observation, ObservationMode,
+    Operation as WorkingOperation, Quote, RecordQuery, Reply as WorkingReply, Statement,
+    StatementText, Summary, Topic,
 };
 
 #[derive(Debug, Clone)]
@@ -80,8 +81,8 @@ fn entry(summary: &str) -> Entry {
     }
 }
 
-fn observe_all() -> SpiritRequest {
-    SpiritRequest::Observe(Observation::Records(RecordQuery {
+fn observe_all() -> WorkingOperation {
+    WorkingOperation::Observe(Observation::Records(RecordQuery {
         topic: None,
         mode: ObservationMode::SummaryOnly,
     }))
@@ -130,11 +131,11 @@ fn persona_spirit_daemon_serves_signal_frames_through_actor_root() {
 
     let client = fixture.client();
     let accepted = client
-        .submit(SpiritRequest::Record(entry("daemon accepted")))
+        .submit(WorkingOperation::Record(entry("daemon accepted")))
         .expect("entry accepted through signal frame");
     assert_eq!(
         accepted,
-        SpiritReply::RecordAccepted(signal_persona_spirit::RecordAccepted {
+        WorkingReply::RecordAccepted(signal_persona_spirit::RecordAccepted {
             captured: signal_persona_spirit::RecordSummary {
                 identifier: signal_persona_spirit::RecordIdentifier::new(1),
                 topic: Topic::new("workspace"),
@@ -148,7 +149,7 @@ fn persona_spirit_daemon_serves_signal_frames_through_actor_root() {
     let observed = client.submit(observe_all()).expect("records observed");
     assert_eq!(
         observed,
-        SpiritReply::RecordsObserved(signal_persona_spirit::RecordsObserved {
+        WorkingReply::RecordsObserved(signal_persona_spirit::RecordsObserved {
             records: vec![signal_persona_spirit::RecordSummary {
                 identifier: signal_persona_spirit::RecordIdentifier::new(1),
                 topic: Topic::new("workspace"),
@@ -185,8 +186,8 @@ fn persona_spirit_daemon_rejects_multi_operation_batches_before_any_commit() {
 
     let codec = SpiritFrameCodec::default();
     let request = RequestBuilder::new()
-        .with(SpiritRequest::Record(entry("first batch entry")))
-        .with(SpiritRequest::Record(entry("second batch entry")))
+        .with(WorkingOperation::Record(entry("first batch entry")))
+        .with(WorkingOperation::Record(entry("second batch entry")))
         .build()
         .expect("non-empty multi operation request");
     let mut stream = UnixStream::connect(ordinary_socket.as_path()).expect("client connects");
@@ -222,7 +223,7 @@ fn persona_spirit_daemon_rejects_multi_operation_batches_before_any_commit() {
         .expect("records observed");
     assert_eq!(
         observed,
-        SpiritReply::RecordsObserved(signal_persona_spirit::RecordsObserved {
+        WorkingReply::RecordsObserved(signal_persona_spirit::RecordsObserved {
             records: Vec::new(),
         })
     );
@@ -243,13 +244,13 @@ fn persona_spirit_daemon_classifies_state_frames_through_actor_root() {
 
     let client = fixture.client();
     let accepted = client
-        .submit(SpiritRequest::State(Statement {
+        .submit(WorkingOperation::State(Statement {
             text: StatementText::new("daemon raw intent"),
         }))
         .expect("statement accepted through signal frame");
     assert_eq!(
         accepted,
-        SpiritReply::RecordAccepted(signal_persona_spirit::RecordAccepted {
+        WorkingReply::RecordAccepted(signal_persona_spirit::RecordAccepted {
             captured: signal_persona_spirit::RecordSummary {
                 identifier: signal_persona_spirit::RecordIdentifier::new(1),
                 topic: Topic::new("unclassified"),
@@ -263,7 +264,7 @@ fn persona_spirit_daemon_classifies_state_frames_through_actor_root() {
     let observed = client.submit(observe_all()).expect("records observed");
     assert_eq!(
         observed,
-        SpiritReply::RecordsObserved(signal_persona_spirit::RecordsObserved {
+        WorkingReply::RecordsObserved(signal_persona_spirit::RecordsObserved {
             records: vec![signal_persona_spirit::RecordSummary {
                 identifier: signal_persona_spirit::RecordIdentifier::new(1),
                 topic: Topic::new("unclassified"),
@@ -290,25 +291,25 @@ fn persona_spirit_daemon_serves_owner_signal_frames_through_owner_plane() {
 
     let client = fixture.owner_client();
     let started = client
-        .submit(OwnerSpiritRequest::Start(Start {
+        .submit(OwnerOperation::Start(Start {
             generation: Generation::new(7),
         }))
         .expect("owner start accepted through owner socket");
     assert_eq!(
         started,
-        OwnerSpiritReply::Started(Started {
+        OwnerReply::Started(Started {
             generation: Generation::new(7),
         })
     );
 
     let registered = client
-        .submit(OwnerSpiritRequest::Register(Registration {
+        .submit(OwnerOperation::Register(Registration {
             name: IdentityName::new("operator"),
         }))
         .expect("owner identity accepted through owner socket");
     assert_eq!(
         registered,
-        OwnerSpiritReply::IdentityRegistered(IdentityRegistered {
+        OwnerReply::IdentityRegistered(IdentityRegistered {
             name: IdentityName::new("operator"),
         })
     );
@@ -346,12 +347,12 @@ fn persona_spirit_daemon_configuration_controls_bootstrap_policy_source() {
 
     let reply = fixture
         .owner_client()
-        .submit(OwnerSpiritRequest::Reload(BootstrapPolicy {}))
+        .submit(OwnerOperation::Reload(BootstrapPolicy {}))
         .expect("configured policy reloads through owner socket");
 
     assert_eq!(
         reply,
-        OwnerSpiritReply::BootstrapPolicyReloaded(BootstrapPolicyReloaded {})
+        OwnerReply::BootstrapPolicyReloaded(BootstrapPolicyReloaded {})
     );
     handle
         .join()
@@ -377,7 +378,7 @@ fn persona_spirit_ordinary_socket_rejects_owner_signal_frames() {
     let mut stream = UnixStream::connect(socket.as_path()).expect("client connects");
     let frame = OwnerFrame::new(OwnerFrameBody::Request {
         exchange: exchange(),
-        request: OwnerSpiritRequest::Start(Start {
+        request: OwnerOperation::Start(Start {
             generation: Generation::new(1),
         })
         .into_request(),
@@ -413,7 +414,7 @@ fn persona_spirit_owner_socket_rejects_ordinary_signal_frames() {
     let mut stream = UnixStream::connect(socket.as_path()).expect("client connects");
     let frame = Frame::new(FrameBody::Request {
         exchange: exchange(),
-        request: SpiritRequest::Record(entry("wrong socket")).into_request(),
+        request: WorkingOperation::Record(entry("wrong socket")).into_request(),
     });
     codec
         .write_frame(&mut stream, &frame)

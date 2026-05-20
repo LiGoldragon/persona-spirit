@@ -7,8 +7,8 @@ use sema_engine::{
 };
 use signal_persona_spirit::{
     Date, Entry, ObservationMode, Quote, RecordAccepted, RecordIdentifier, RecordObservation,
-    RecordProvenance, RecordProvenancesObserved, RecordSummary, RecordsObserved, SpiritReply, Time,
-    Topic,
+    RecordProvenance, RecordProvenancesObserved, RecordSummary, RecordsObserved,
+    Reply as WorkingReply, Time, Topic,
 };
 
 use crate::{Result, error::Error};
@@ -87,13 +87,13 @@ impl SpiritStore {
         })
     }
 
-    pub fn observe_records(&self, observation: RecordObservation) -> Result<SpiritReply> {
+    pub fn observe_records(&self, observation: RecordObservation) -> Result<WorkingReply> {
         let records = self.records_for_topic(observation.query.topic.as_ref())?;
         match observation.query.mode {
-            ObservationMode::SummaryOnly => Ok(SpiritReply::RecordsObserved(RecordsObserved {
+            ObservationMode::SummaryOnly => Ok(WorkingReply::RecordsObserved(RecordsObserved {
                 records: records.iter().map(StoredRecord::summary).collect(),
             })),
-            ObservationMode::WithProvenance => Ok(SpiritReply::RecordProvenancesObserved(
+            ObservationMode::WithProvenance => Ok(WorkingReply::RecordProvenancesObserved(
                 RecordProvenancesObserved {
                     records: records.into_iter().map(StoredRecord::provenance).collect(),
                 },

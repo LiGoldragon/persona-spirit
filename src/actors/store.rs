@@ -1,6 +1,8 @@
 use kameo::actor::{Actor, ActorRef};
 use kameo::message::{Context, Message};
-use signal_persona_spirit::{RecordObservation, RecordSubscription, RecordSummary, SpiritReply};
+use signal_persona_spirit::{
+    RecordObservation, RecordSubscription, RecordSummary, Reply as WorkingReply,
+};
 
 use crate::{Result, SpiritStore, StoreLocation, store::StampedEntry};
 
@@ -49,7 +51,7 @@ impl RecordStore {
         trace.record(TraceNode::SEMA_WRITER, TraceAction::RecordCommitted);
         trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReplied);
         Ok(PipelineReply::new(
-            SpiritReply::RecordAccepted(accepted),
+            WorkingReply::RecordAccepted(accepted),
             trace,
         ))
     }
