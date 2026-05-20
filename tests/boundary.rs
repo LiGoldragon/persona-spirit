@@ -86,14 +86,17 @@ fn persona_spirit_binary_rejects_flag_style_argument() {
 }
 
 #[test]
-fn persona_spirit_client_type_checks_statement_without_inventing_storage_behavior() {
+fn persona_spirit_client_classifies_statement_as_provisional_record() {
     let fixture = StoreFixture::new("statement");
     let reply = fixture
         .client("(State (\"capture this intent\"))")
         .reply_text()
-        .expect("request type checked");
+        .expect("statement classified");
 
-    assert_eq!(reply, "(RequestUnimplemented (State NotBuiltYet))");
+    assert_eq!(
+        reply,
+        "(RecordAccepted ((1 unclassified Clarification \"capture this intent\" Minimum)))"
+    );
 }
 
 #[test]

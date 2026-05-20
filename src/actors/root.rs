@@ -4,6 +4,7 @@ use kameo::message::{Context, Message};
 
 use crate::{Error, Result, StoreLocation};
 
+use super::classifier;
 use super::decoder;
 use super::dispatch;
 use super::ingress;
@@ -361,6 +362,12 @@ impl Actor for SpiritRoot {
         let state = state::StatePlane::supervise(&actor_reference, state::Arguments::default())
             .spawn()
             .await;
+        let classifier = classifier::ClassifierPlane::supervise(
+            &actor_reference,
+            classifier::Arguments::default(),
+        )
+        .spawn()
+        .await;
         let subscription = subscription::SubscriptionPlane::supervise(
             &actor_reference,
             subscription::Arguments::default(),
@@ -370,6 +377,7 @@ impl Actor for SpiritRoot {
         let dispatch = dispatch::DispatchPhase::supervise(
             &actor_reference,
             dispatch::Arguments {
+                classifier,
                 store,
                 state,
                 subscription,

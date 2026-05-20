@@ -55,6 +55,7 @@ flowchart LR
     policy["PolicyPlane"]
     ingress["IngressPhase"]
     decoder["NotaDecoder"]
+    classifier["ClassifierPlane"]
     dispatch["DispatchPhase"]
     state["StatePlane"]
     subscription["SubscriptionPlane"]
@@ -69,6 +70,7 @@ flowchart LR
     root --> ingress
     ingress --> decoder
     ingress --> dispatch
+    dispatch --> classifier
     dispatch --> state
     dispatch --> subscription
     dispatch --> store
@@ -81,7 +83,8 @@ flowchart LR
 `OwnerPlane` handles owner-only lifecycle and identity requests carried by
 `owner-signal-persona-spirit`; it is not reachable through the ordinary text
 ingress or dispatch path. `PolicyPlane` owns bootstrap-policy parsing and
-reload state. `RecordStore` owns `SpiritStore`, which owns the sema-engine
+reload state. `ClassifierPlane` owns the current conservative statement-to-record
+policy. `RecordStore` owns `SpiritStore`, which owns the sema-engine
 handle. It runs as the store plane. `StatePlane` owns current psyche state and
 pending clarification questions. `SubscriptionPlane` owns subscription tokens
 and live stream registrations. Request decoding, dispatch,
@@ -109,6 +112,8 @@ socket.
 | The CLI request path uses the Kameo actor tree. | `persona_spirit_command_line_path_uses_actor_runtime` checks the CLI path delegates to `SpiritActorRuntime`. |
 | Kameo is the only actor runtime dependency. | `persona_spirit_uses_kameo_as_only_actor_runtime` scans the manifest. |
 | Actor types are data-bearing, not public zero-sized actor nouns. | `persona_spirit_actor_types_are_data_bearing` checks each named actor has a struct body. |
+| Raw `State` statements route through a classifier actor before storage. | `persona_spirit_state_statement_uses_classifier_before_store` checks `DispatchPhase` → `ClassifierPlane` → `RecordStore` → `SemaWriter`. |
+| The provisional classifier preserves the raw quote and marks uncertainty. | `persona_spirit_client_classifies_statement_as_provisional_record` checks `Clarification` / `Minimum` output. |
 | `Record` operations traverse root, ingress, decoder, dispatch, store, sema writer, and reply encoder. | `persona_spirit_entry_assertion_runs_through_actor_planes` checks `ActorTrace` ordering. |
 | `Record` operations persist a top-level record. | `persona_spirit_client_asserts_entry_and_mints_record_identifier` checks `RecordAccepted`. |
 | Spirit mints `RecordIdentifier`; agents never submit it. | `persona_spirit_client_asserts_entry_and_mints_record_identifier` sends no identifier and receives one. |
@@ -152,6 +157,7 @@ src/actors/ingress.rs              — text ingress phase
 src/actors/owner.rs                — owner-signal lifecycle and identity actor
 src/actors/policy.rs               — bootstrap-policy parsing and reload actor
 src/actors/decoder.rs              — strict NOTA request decoder actor
+src/actors/classifier.rs           — conservative statement-to-record classifier actor
 src/actors/dispatch.rs             — request dispatch actor
 src/actors/state.rs                — psyche-state and pending-question working-state actor
 src/actors/subscription.rs         — subscription token and stream registration actor
@@ -176,6 +182,8 @@ Implemented now:
 - one-argument boundary parser;
 - typed CLI request decoding for `signal-persona-spirit::SpiritRequest`;
 - Kameo actor tree for the CLI request path;
+- provisional classifier for `State` statements that preserves the raw quote as
+  a minimum-certainty `Clarification` record under topic `unclassified`;
 - `persona-spirit-daemon` typed configuration and ordinary/owner Unix socket
   binding;
 - length-prefixed RKYV ordinary Signal frame request/reply path over the
@@ -200,7 +208,7 @@ Implemented now:
 
 Not implemented:
 
-- intent classifier;
+- LLM-backed intent classification;
 - owner-Mutate forwarding to mind;
 - subscription event delivery;
 - filesystem intent projection.

@@ -7,7 +7,9 @@ length-prefixed `signal-persona-spirit` frames over `signal-frame`; the owner
 socket accepts `owner-signal-persona-spirit` frames over `signal-core`. The CLI
 can type-check one NOTA request or forward it to a running daemon. The actor
 tree persists `Record` operations, serves `Observe` reads, opens/retracts
-`Watch` subscriptions, and handles owner lifecycle/bootstrap-policy requests.
+`Watch` subscriptions, provisionally classifies raw `State` statements into
+minimum-certainty records, and handles owner lifecycle/bootstrap-policy
+requests.
 
-Not implemented yet: intent classification, spirit-to-mind owner-Mutate
+Not implemented yet: LLM-backed classification, spirit-to-mind owner-Mutate
 forwarding, and live subscription event delivery.

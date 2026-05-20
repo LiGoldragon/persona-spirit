@@ -5,6 +5,7 @@ use signal_persona_spirit::{Observation, SpiritRequest, Subscription, Subscripti
 
 use crate::{Error, Result};
 
+use super::classifier;
 use super::pipeline::PipelineReply;
 use super::reply;
 use super::state;
@@ -13,6 +14,7 @@ use super::subscription;
 use super::trace::{ActorTrace, TraceAction, TraceNode};
 
 pub struct DispatchPhase {
+    classifier: ActorRef<classifier::ClassifierPlane>,
     store: ActorRef<store::RecordStore>,
     state: ActorRef<state::StatePlane>,
     subscription: ActorRef<subscription::SubscriptionPlane>,
@@ -21,6 +23,7 @@ pub struct DispatchPhase {
 
 #[derive(Clone)]
 pub struct Arguments {
+    pub classifier: ActorRef<classifier::ClassifierPlane>,
     pub store: ActorRef<store::RecordStore>,
     pub state: ActorRef<state::StatePlane>,
     pub subscription: ActorRef<subscription::SubscriptionPlane>,
@@ -34,12 +37,14 @@ pub struct RouteRequest {
 
 impl DispatchPhase {
     fn new(
+        classifier: ActorRef<classifier::ClassifierPlane>,
         store: ActorRef<store::RecordStore>,
         state: ActorRef<state::StatePlane>,
         subscription: ActorRef<subscription::SubscriptionPlane>,
         reply: ActorRef<reply::ReplyShaper>,
     ) -> Self {
         Self {
+            classifier,
             store,
             state,
             subscription,
@@ -50,6 +55,7 @@ impl DispatchPhase {
     async fn route(&self, request: SpiritRequest, mut trace: ActorTrace) -> Result<PipelineReply> {
         trace.record(TraceNode::DISPATCH_PHASE, TraceAction::MessageReceived);
         match request {
+            SpiritRequest::State(statement) => self.classify_statement(statement, trace).await,
             SpiritRequest::Record(entry) => self.capture_entry(entry, trace).await,
             SpiritRequest::Observe(Observation::Records(query)) => {
                 self.observe_records(query, trace).await
@@ -92,6 +98,19 @@ impl DispatchPhase {
             .ask(store::CaptureEntry { entry, trace })
             .await
             .map_err(Self::pipeline_send_error)
+    }
+
+    async fn classify_statement(
+        &self,
+        statement: signal_persona_spirit::Statement,
+        trace: ActorTrace,
+    ) -> Result<PipelineReply> {
+        let classified = self
+            .classifier
+            .ask(classifier::ClassifyStatement { statement, trace })
+            .await
+            .map_err(Self::classifier_send_error)?;
+        self.capture_entry(classified.entry, classified.trace).await
     }
 
     async fn observe_records(
@@ -193,6 +212,10 @@ impl DispatchPhase {
         Error::actor_runtime(error.to_string())
     }
 
+    fn classifier_send_error<Message>(error: SendError<Message, Infallible>) -> Error {
+        Error::actor_runtime(error.to_string())
+    }
+
     fn subscription_send_error<Message>(error: SendError<Message, Infallible>) -> Error {
         Error::actor_runtime(error.to_string())
     }
@@ -207,6 +230,7 @@ impl Actor for DispatchPhase {
         _actor_reference: ActorRef<Self>,
     ) -> std::result::Result<Self, Self::Error> {
         Ok(Self::new(
+            arguments.classifier,
             arguments.store,
             arguments.state,
             arguments.subscription,

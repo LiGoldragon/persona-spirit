@@ -1,3 +1,4 @@
+pub mod classifier;
 pub mod decoder;
 pub mod dispatch;
 pub mod ingress;

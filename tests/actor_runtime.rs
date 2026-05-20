@@ -365,18 +365,30 @@ async fn persona_spirit_bootstrap_policy_reload_reports_missing_policy_source() 
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn persona_spirit_unimplemented_statement_uses_reply_shaper_not_store() {
-    let fixture = SpiritRuntimeFixture::new("reply-shaper");
+async fn persona_spirit_state_statement_uses_classifier_before_store() {
+    let fixture = SpiritRuntimeFixture::new("classifier");
     let runtime = fixture.runtime().await;
 
     let reply = runtime
         .submit_text("(State (\"capture this intent\"))")
         .await
-        .expect("statement type checked");
+        .expect("statement classified");
 
-    assert_eq!(reply.text(), "(RequestUnimplemented (State NotBuiltYet))");
-    assert!(reply.trace().contains(TraceNode::REPLY_SHAPER));
-    assert!(!reply.trace().contains(TraceNode::RECORD_STORE));
+    assert_eq!(
+        reply.text(),
+        "(RecordAccepted ((1 unclassified Clarification \"capture this intent\" Minimum)))"
+    );
+    assert!(reply.trace().contains_ordered(&[
+        TraceNode::DISPATCH_PHASE,
+        TraceNode::CLASSIFIER_PLANE,
+        TraceNode::RECORD_STORE,
+        TraceNode::SEMA_WRITER,
+        TraceNode::REPLY_TEXT_ENCODER,
+    ]));
+    assert!(reply.trace().contains_action(
+        TraceNode::CLASSIFIER_PLANE,
+        TraceAction::StatementClassified
+    ));
 
     runtime.stop().await.expect("runtime stops");
 }
@@ -444,6 +456,7 @@ fn persona_spirit_uses_kameo_as_only_actor_runtime() {
 fn persona_spirit_actor_types_are_data_bearing() {
     let actors = [
         ("src/actors/decoder.rs", "pub struct NotaDecoder {"),
+        ("src/actors/classifier.rs", "pub struct ClassifierPlane {"),
         ("src/actors/dispatch.rs", "pub struct DispatchPhase {"),
         ("src/actors/ingress.rs", "pub struct IngressPhase {"),
         ("src/actors/owner.rs", "pub struct OwnerPlane {"),
