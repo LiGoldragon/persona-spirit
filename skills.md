@@ -23,16 +23,25 @@ Contract records stay in `signal-persona-spirit` and
 ## Invariants
 
 - CLI and daemon binaries take exactly one argument.
-- The CLI decodes that argument as a `signal-persona-spirit::SpiritRequest`.
+- The CLI peeks the NOTA request head and routes it through generated
+  `signal-frame::signal_cli!` metadata from the working and owner contracts.
+- The CLI decodes that argument as either a
+  `signal-persona-spirit::SpiritRequest` or an
+  `owner-signal-persona-spirit::OwnerSpiritRequest`, depending on the
+  generated route decision.
 - The daemon decodes that argument as `DaemonConfiguration`, selects the
   embedded or configured bootstrap-policy source, then binds one ordinary
   socket for `signal-persona-spirit::Frame` values and one owner socket for
   `owner-signal-persona-spirit::Frame` values.
 - The CLI request path never opens `SpiritActorRuntime` directly. It decodes
-  NOTA into `SpiritRequest`, sends a Signal frame to the daemon, and renders
-  the daemon's Signal reply back to NOTA.
-- When a daemon socket is selected, the CLI decodes NOTA once and sends a
-  Signal frame to the daemon rather than opening the store itself.
+  NOTA into the selected working or owner request type, sends a Signal frame to
+  the selected daemon socket, and renders the daemon's Signal reply back to
+  NOTA.
+- When a daemon socket is selected, the CLI decodes NOTA once against that
+  socket's contract and sends a Signal frame to the daemon rather than opening
+  the store itself.
+- `PERSONA_SPIRIT_SOCKET` configures the working socket for working requests;
+  `PERSONA_SPIRIT_OWNER_SOCKET` configures the owner socket for owner requests.
 - Signal-frame ingress submits typed requests directly to `SpiritRoot`; it does
   not go back through the NOTA decoder actor.
 - Ordinary request execution passes through `signal-executor`: dispatch lowers
@@ -76,6 +85,9 @@ Contract records stay in `signal-persona-spirit` and
   `RecordStore`.
 - Valid but unimplemented CLI requests emit a typed NOTA
   `RequestUnimplemented`.
+- The flake exposes `packages.spirit` and `packages.persona-spirit-daemon`
+  separately so a profile can install the CLI without the daemon or the daemon
+  without relying on the default package.
 - Runtime code does not invent intent-classification behavior.
 - Spirit forwards authority to mind only through typed owner-signal contracts.
 - `persona-spirit-daemon` serves ordinary request/reply frames and owner

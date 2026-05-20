@@ -38,17 +38,37 @@
           strictDeps = true;
         };
         cargoArtifacts = craneLib.buildDepsOnly commonArguments;
-        package = craneLib.buildPackage (commonArguments // { inherit cargoArtifacts; });
+        fullPackage = craneLib.buildPackage (commonArguments // { inherit cargoArtifacts; });
+        spiritPackage = pkgs.runCommand "spirit" { } ''
+          mkdir -p "$out/bin"
+          ln -s "${fullPackage}/bin/spirit" "$out/bin/spirit"
+        '';
+        daemonPackage = pkgs.runCommand "persona-spirit-daemon" { } ''
+          mkdir -p "$out/bin"
+          ln -s "${fullPackage}/bin/persona-spirit-daemon" "$out/bin/persona-spirit-daemon"
+        '';
+        splitPackageWitness = pkgs.runCommand "test-split-packages" { } ''
+          test -x "${spiritPackage}/bin/spirit"
+          test ! -e "${spiritPackage}/bin/persona-spirit-daemon"
+          test -x "${daemonPackage}/bin/persona-spirit-daemon"
+          test ! -e "${daemonPackage}/bin/spirit"
+          touch "$out"
+        '';
       in
       {
-        packages.default = package;
+        packages = {
+          default = spiritPackage;
+          spirit = spiritPackage;
+          persona-spirit-daemon = daemonPackage;
+          full = fullPackage;
+        };
         apps = {
           spirit = flake-utils.lib.mkApp {
-            drv = package;
+            drv = spiritPackage;
             name = "spirit";
           };
           persona-spirit-daemon = flake-utils.lib.mkApp {
-            drv = package;
+            drv = daemonPackage;
             name = "persona-spirit-daemon";
           };
         };
@@ -71,6 +91,7 @@
             inherit cargoArtifacts;
             cargoTestExtraArgs = "--test sema_projection";
           });
+          test-split-packages = splitPackageWitness;
           doc = craneLib.cargoDoc (commonArguments // {
             inherit cargoArtifacts;
             RUSTDOCFLAGS = "-D warnings";

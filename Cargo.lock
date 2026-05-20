@@ -275,7 +275,7 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 [[package]]
 name = "owner-signal-persona-spirit"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/owner-signal-persona-spirit.git?branch=main#10ff8731f6d426777a285586f035fbaa77364f13"
+source = "git+https://github.com/LiGoldragon/owner-signal-persona-spirit.git?branch=main#f4d268efc9154c34ca5f60fe7ae22412a7364c2c"
 dependencies = [
  "nota-codec",
  "rkyv",
@@ -494,7 +494,7 @@ dependencies = [
 [[package]]
 name = "signal-frame"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#b375e20f32a5efb4e5e2cc8e18445b9369bdde09"
+source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#0b5b3ef5971156bd7077c1301dfb625db70dc618"
 dependencies = [
  "nota-codec",
  "rkyv",
@@ -505,7 +505,7 @@ dependencies = [
 [[package]]
 name = "signal-frame-macros"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#b375e20f32a5efb4e5e2cc8e18445b9369bdde09"
+source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#0b5b3ef5971156bd7077c1301dfb625db70dc618"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -515,7 +515,7 @@ dependencies = [
 [[package]]
 name = "signal-persona-spirit"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#0236583e577f9cf65b235ff10db04e6bb2e83c26"
+source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#a9b3527a9e3886fd093cae9b915823b128304cca"
 dependencies = [
  "nota-codec",
  "rkyv",

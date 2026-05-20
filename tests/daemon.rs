@@ -505,3 +505,36 @@ fn spirit_binary_can_send_request_file_to_running_daemon() {
         "(RecordAccepted ((1 workspace Decision \"binary file\" Maximum)))"
     );
 }
+
+#[test]
+fn spirit_binary_routes_owner_request_to_owner_socket() {
+    let fixture = DaemonFixture::new("spirit-binary-owner");
+    let daemon = DaemonRuntime::from_configuration(fixture.configuration())
+        .bind()
+        .expect("daemon binds");
+    let handle = thread::spawn(move || daemon.serve_owner_count(1));
+
+    let output = Command::new(env!("CARGO_BIN_EXE_spirit"))
+        .env(
+            "PERSONA_SPIRIT_OWNER_SOCKET",
+            fixture.owner_socket.as_path(),
+        )
+        .env_remove("PERSONA_SPIRIT_SOCKET")
+        .arg("(Register (operator))")
+        .output()
+        .expect("spirit binary runs");
+
+    handle
+        .join()
+        .expect("daemon thread exits")
+        .expect("daemon served owner client request");
+    assert!(
+        output.status.success(),
+        "spirit stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "(IdentityRegistered (operator))"
+    );
+}

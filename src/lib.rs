@@ -19,5 +19,9 @@ pub use daemon::{
 };
 pub use error::{Error, Result};
 pub use observation::{Command, Effect};
-pub use runtime::{SpiritClient, SpiritReplyText, SpiritRequestInput, SpiritRequestText};
+pub use runtime::{
+    OwnerSpiritReplyText, OwnerSpiritRequestText, SpiritClient, SpiritCommandLineDispatch,
+    SpiritCommandLineSockets, SpiritReplyText, SpiritRequestHead, SpiritRequestInput,
+    SpiritRequestText,
+};
 pub use store::{SpiritStore, StoreLocation};

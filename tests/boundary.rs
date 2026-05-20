@@ -3,9 +3,11 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use persona_spirit::{
-    DaemonConfiguration, DaemonRuntime, Error, SingleArgument, SocketMode, SocketPath,
-    SpiritClient, SpiritRequestInput, SpiritRequestText, StorePath,
+    DaemonConfiguration, DaemonRuntime, Error, OwnerSpiritRequestText, SingleArgument, SocketMode,
+    SocketPath, SpiritClient, SpiritCommandLineDispatch, SpiritRequestHead, SpiritRequestInput,
+    SpiritRequestText, StorePath,
 };
+use signal_frame::CommandLineSocket;
 
 #[derive(Debug, Clone)]
 struct StoreFixture {
@@ -123,6 +125,52 @@ fn persona_spirit_binary_requires_socket_environment() {
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("MissingSpiritSocket"));
+}
+
+#[test]
+fn persona_spirit_binary_requires_owner_socket_for_owner_requests() {
+    let output = Command::new(env!("CARGO_BIN_EXE_spirit"))
+        .env("PERSONA_SPIRIT_SOCKET", "/tmp/persona-spirit-unused.sock")
+        .env_remove("PERSONA_SPIRIT_OWNER_SOCKET")
+        .arg("(Register (operator))")
+        .output()
+        .expect("binary runs");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("MissingOwnerSpiritSocket"));
+}
+
+#[test]
+fn persona_spirit_generated_dispatch_routes_working_and_owner_heads() {
+    let dispatch = SpiritCommandLineDispatch::new();
+
+    assert_eq!(
+        dispatch.route_head("Record"),
+        Ok(CommandLineSocket::Working)
+    );
+    assert_eq!(
+        dispatch.route_head("Observe"),
+        Ok(CommandLineSocket::Working)
+    );
+    assert_eq!(
+        dispatch.route_head("Register"),
+        Ok(CommandLineSocket::Owner)
+    );
+    assert_eq!(dispatch.route_head("Start"), Ok(CommandLineSocket::Owner));
+    assert!(dispatch.route_head("Unknown").is_err());
+}
+
+#[test]
+fn persona_spirit_request_head_uses_generated_dispatch_before_full_decode() {
+    let working = SpiritRequestHead::from_text(
+        "(Record (workspace Decision \"summary\" \"context\" Maximum \"quote\"))",
+    )
+    .expect("working head reads");
+    let owner = SpiritRequestHead::from_text("(Register (operator))").expect("owner head reads");
+
+    assert_eq!(working.route(), Ok(CommandLineSocket::Working));
+    assert_eq!(owner.route(), Ok(CommandLineSocket::Owner));
 }
 
 #[test]
@@ -335,4 +383,18 @@ fn persona_spirit_client_rejects_unknown_record_shape() {
     let error = fixture.reply_text("(UnknownIntent workspace)").unwrap_err();
 
     assert!(matches!(error, Error::InvalidSpiritRequest { .. }));
+}
+
+#[test]
+fn persona_spirit_owner_request_text_decodes_owner_contract_only() {
+    let owner = OwnerSpiritRequestText::new("(Register (operator))")
+        .decode_request()
+        .expect("owner request decodes");
+    let ordinary = SpiritRequestText::new("(Register (operator))").decode_request();
+
+    assert!(matches!(
+        owner,
+        owner_signal_persona_spirit::OwnerSpiritRequest::Register(_)
+    ));
+    assert!(ordinary.is_err());
 }

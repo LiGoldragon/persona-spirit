@@ -14,6 +14,12 @@ pub enum Error {
     #[error("persona-spirit requires PERSONA_SPIRIT_SOCKET to reach the daemon")]
     MissingSpiritSocket,
 
+    #[error("persona-spirit requires PERSONA_SPIRIT_OWNER_SOCKET to reach the owner daemon socket")]
+    MissingOwnerSpiritSocket,
+
+    #[error("persona-spirit cannot route command-line request: {reason}")]
+    CommandLineRoute { reason: String },
+
     #[error("{surface} runtime is not implemented yet: {reason}")]
     RuntimeNotImplemented {
         surface: &'static str,
@@ -87,6 +93,12 @@ impl Error {
         }
     }
 
+    pub fn command_line_route(error: signal_frame::CommandLineRouteError) -> Self {
+        Self::CommandLineRoute {
+            reason: error.to_string(),
+        }
+    }
+
     pub fn spirit_store(error: sema_engine::Error) -> Self {
         Self::SpiritStore {
             reason: error.to_string(),
@@ -130,6 +142,8 @@ impl BatchErrorClassification for Error {
             | Self::FrameTooLarge { .. }
             | Self::UnexpectedFrame { .. }
             | Self::MissingSpiritSocket
+            | Self::MissingOwnerSpiritSocket
+            | Self::CommandLineRoute { .. }
             | Self::WrongArgumentCount { .. }
             | Self::FlagArgument { .. } => CommitStatus::NotCommitted,
             Self::InputOutput { .. } | Self::ActorRuntime { .. } | Self::SpiritStore { .. } => {

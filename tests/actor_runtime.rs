@@ -522,8 +522,12 @@ fn persona_spirit_command_line_path_does_not_use_actor_runtime_directly() {
         .expect("runtime source is readable");
 
     assert!(source.contains("SpiritRequestText::new"));
+    assert!(source.contains("OwnerSpiritRequestText::new"));
+    assert!(source.contains("SpiritCommandLineDispatch::new"));
     assert!(source.contains("SpiritSignalClient::new"));
+    assert!(source.contains("OwnerSpiritSignalClient::new"));
     assert!(source.contains("SpiritReplyText::new"));
+    assert!(source.contains("OwnerSpiritReplyText::new"));
     assert!(!source.contains("SpiritActorRuntime"));
     assert!(!source.contains("StoreLocation"));
 }

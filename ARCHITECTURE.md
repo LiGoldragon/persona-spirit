@@ -112,11 +112,14 @@ length-prefixed `owner-signal-persona-spirit::Frame` values and submits each
 
 The `spirit` CLI is not a second runtime. It resolves its single argument as
 either a raw NOTA request record (argument begins with `(`) or a path to a NOTA
-request file, decodes the result into a `SpiritRequest`, sends that request to
-the daemon as a length-prefixed `signal-frame` exchange on
-`PERSONA_SPIRIT_SOCKET`, and encodes the daemon's `SpiritReply` back to NOTA.
-If no daemon socket is configured, the CLI fails instead of opening a store or
-running the actor tree in-process.
+request file, peeks the request record head, routes it through the generated
+`signal-frame::signal_cli!` table, and then decodes against the selected
+contract. Working requests become length-prefixed `signal-persona-spirit`
+frames on `PERSONA_SPIRIT_SOCKET`; owner requests become length-prefixed
+`owner-signal-persona-spirit` frames on `PERSONA_SPIRIT_OWNER_SOCKET`. The CLI
+encodes the selected daemon reply back to NOTA. If the selected socket is not
+configured, the CLI fails instead of opening a store or running the actor tree
+in-process.
 
 ## Constraints
 
@@ -124,9 +127,10 @@ running the actor tree in-process.
 |---|---|
 | The `spirit` CLI accepts exactly one argument. | `tests/boundary.rs` checks missing and extra arguments. |
 | The daemon binary accepts exactly one argument. | `tests/boundary.rs` checks the shared argument parser. |
-| The CLI type-checks one `signal-persona-spirit::SpiritRequest`. | `tests/boundary.rs` checks valid `State`, `Record`, and `Observe` requests before daemon submission. |
-| The CLI requires a daemon socket instead of using an in-process store fallback. | `persona_spirit_binary_requires_socket_environment` runs the binary without `PERSONA_SPIRIT_SOCKET` and expects failure. |
-| The CLI path only translates NOTA to Signal frames and Signal replies to NOTA. | `persona_spirit_command_line_path_does_not_use_actor_runtime_directly` checks `runtime.rs` uses `SpiritRequestText`, `SpiritSignalClient`, and `SpiritReplyText`, and not `SpiritActorRuntime` or `StoreLocation`. |
+| The CLI routes request heads through generated working/owner contract metadata before full decode. | `persona_spirit_generated_dispatch_routes_working_and_owner_heads` and `persona_spirit_request_head_uses_generated_dispatch_before_full_decode` check the generated table. |
+| The CLI type-checks one selected contract request. | `tests/boundary.rs` checks valid working `State`, `Record`, and `Observe` requests and owner `Register` requests before daemon submission. |
+| The CLI requires the selected daemon socket instead of using an in-process store fallback. | `persona_spirit_binary_requires_socket_environment` runs a working request without `PERSONA_SPIRIT_SOCKET`; `persona_spirit_binary_requires_owner_socket_for_owner_requests` runs an owner request without `PERSONA_SPIRIT_OWNER_SOCKET`. |
+| The CLI path only translates NOTA to Signal frames and Signal replies to NOTA. | `persona_spirit_command_line_path_does_not_use_actor_runtime_directly` checks `runtime.rs` uses working/owner request text, signal clients, generated dispatch, and reply text, and not `SpiritActorRuntime` or `StoreLocation`. |
 | The CLI accepts a path to a NOTA request file. | `persona_spirit_client_accepts_request_file_path_argument` writes a request file, invokes the same client path, and checks daemon-backed persistence. |
 | Spirit-local commands project to payloadless Sema operation labels. | `tests/sema_projection.rs` checks `Command::from_request` and `ToSemaOperation` through real actor-runtime requests. |
 | Spirit-local effects project to payloadless Sema outcome labels. | `tests/sema_projection.rs` checks `Effect::from_reply`, `ToSemaOutcome`, and `SemaObservation` after real actor-runtime replies. |
@@ -168,6 +172,8 @@ running the actor tree in-process.
 | Daemon shutdown removes both socket paths. | `persona_spirit_daemon_serves_signal_frames_through_actor_root` checks both ordinary and owner sockets are removed after bounded serving. |
 | Signal-frame daemon ingress does not route through the NOTA decoder. | `persona_spirit_daemon_source_does_not_route_signal_frames_through_nota_decoder` checks the socket boundary calls `SubmitRequest`. |
 | The CLI acts as a daemon client without bypassing Signal. | `persona_spirit_client_can_send_nota_request_to_running_daemon` decodes NOTA then sends a Signal frame to the socket. |
+| The CLI can reach owner-only contract behavior through the owner socket. | `spirit_binary_routes_owner_request_to_owner_socket` sends `(Register (operator))` through `spirit` with only `PERSONA_SPIRIT_OWNER_SOCKET` configured. |
+| The flake exposes installable CLI and daemon packages separately. | `test-split-packages` checks `packages.spirit` contains only `spirit` and `packages.persona-spirit-daemon` contains only `persona-spirit-daemon`. |
 | No LLM classifier or mind-forwarding behavior exists until its intent is clear. | Status section says this explicitly. |
 
 ## Code Map
@@ -178,7 +184,7 @@ src/argument.rs                    — one-argument boundary
 src/daemon.rs                      — daemon configuration, bootstrap-policy source selection, socket binding, ordinary/owner frame codecs, signal clients
 src/error.rs                       — typed error
 src/observation.rs                 — Spirit-local Command/Effect to payloadless signal-sema observation projection
-src/runtime.rs                     — CLI boundary that converts NOTA request text to signal-frame request traffic and typed replies back to NOTA
+src/runtime.rs                     — CLI boundary that routes NOTA request heads through generated working/owner dispatch, converts selected request text to signal-frame traffic, and renders typed replies back to NOTA
 src/store.rs                       — sema-engine backed entry store and record queries
 src/actors/root.rs                 — Kameo root and blocking actor-runtime helper
 src/actors/ingress.rs              — text ingress phase
@@ -210,10 +216,13 @@ Implemented now:
 - repo scaffold;
 - daemon binary and `spirit` CLI binary names;
 - one-argument boundary parser;
-- typed CLI request decoding for `signal-persona-spirit::SpiritRequest`
-  from a raw NOTA argument or a NOTA request file path;
-- CLI daemon-client mode that requires `PERSONA_SPIRIT_SOCKET` and performs
-  only NOTA request decoding, signal-frame submission, and NOTA reply encoding;
+- generated CLI head dispatch from the working and owner signal contracts;
+- typed CLI request decoding for `signal-persona-spirit::SpiritRequest` and
+  `owner-signal-persona-spirit::OwnerSpiritRequest` from a raw NOTA argument or
+  a NOTA request file path;
+- CLI daemon-client mode that requires the selected working or owner socket and
+  performs only NOTA request decoding, signal-frame submission, and NOTA reply
+  encoding;
 - provisional classifier for `State` statements that preserves the raw quote as
   a minimum-certainty `Clarification` record under topic `unclassified`;
 - `persona-spirit-daemon` typed configuration and ordinary/owner Unix socket
@@ -243,6 +252,9 @@ Implemented now:
 - ordinary request execution through `signal-executor::Executor`, with the
   existing Kameo planes serving as Spirit's component-local
   `CommandExecutor`.
+- split Nix packages: `packages.spirit` / default for the CLI,
+  `packages.persona-spirit-daemon` for the daemon, and `packages.full` for the
+  complete build product.
 
 Not implemented:
 

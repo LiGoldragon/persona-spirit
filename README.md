@@ -6,10 +6,11 @@ Current status: typed daemon foundation. The ordinary socket accepts
 length-prefixed `signal-persona-spirit` frames over `signal-frame`; the owner
 socket accepts `owner-signal-persona-spirit` frames over the owner contract.
 The `spirit` CLI is only a NOTA-to-Signal client: it resolves one argument
-as either a raw NOTA request or a path to a NOTA request file, sends the
-corresponding `signal-frame` request to the daemon named by
-`PERSONA_SPIRIT_SOCKET`, then renders the daemon's typed reply back to NOTA.
-It does not start an in-process actor tree or open a store by itself.
+as either a raw NOTA request or a path to a NOTA request file, routes the
+record head through the generated working/owner contract table, sends the
+corresponding `signal-frame` request to `PERSONA_SPIRIT_SOCKET` or
+`PERSONA_SPIRIT_OWNER_SOCKET`, then renders the daemon's typed reply back to
+NOTA. It does not start an in-process actor tree or open a store by itself.
 Clients do not submit capture time; the daemon stamps records before storage
 and exposes that time only in provenance replies.
 
