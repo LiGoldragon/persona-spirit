@@ -21,7 +21,7 @@ use signal_core::{
 use signal_frame::{ExchangeIdentifier, ExchangeLane, LaneSequence, RequestPayload, SessionEpoch};
 use signal_persona_spirit::{
     Certainty, Context, Entry, Frame, FrameBody, Kind, Observation, ObservationMode, Quote,
-    RecordQuery, SpiritReply, SpiritRequest, Summary, Timestamp, Topic,
+    RecordQuery, SpiritReply, SpiritRequest, Statement, StatementText, Summary, Timestamp, Topic,
 };
 
 #[derive(Debug, Clone)]
@@ -180,6 +180,53 @@ fn persona_spirit_daemon_serves_signal_frames_through_actor_root() {
         !owner_socket.as_path().exists(),
         "daemon shutdown removes the owner socket path"
     );
+}
+
+#[test]
+fn persona_spirit_daemon_classifies_state_frames_through_actor_root() {
+    let fixture = DaemonFixture::new("signal-frame-state");
+    let daemon = DaemonRuntime::from_configuration(fixture.configuration())
+        .bind()
+        .expect("daemon binds");
+    let handle = thread::spawn(move || daemon.serve_count(2));
+
+    let client = fixture.client();
+    let accepted = client
+        .submit(SpiritRequest::State(Statement {
+            statement: StatementText::new("daemon raw intent"),
+        }))
+        .expect("statement accepted through signal frame");
+    assert_eq!(
+        accepted,
+        SpiritReply::RecordAccepted(signal_persona_spirit::RecordAccepted {
+            captured: signal_persona_spirit::RecordSummary {
+                identifier: signal_persona_spirit::RecordIdentifier::new(1),
+                topic: Topic::new("unclassified"),
+                kind: Kind::Clarification,
+                summary: Summary::new("daemon raw intent"),
+                certainty: Certainty::Minimum,
+            },
+        })
+    );
+
+    let observed = client.submit(observe_all()).expect("records observed");
+    assert_eq!(
+        observed,
+        SpiritReply::RecordsObserved(signal_persona_spirit::RecordsObserved {
+            records: vec![signal_persona_spirit::RecordSummary {
+                identifier: signal_persona_spirit::RecordIdentifier::new(1),
+                topic: Topic::new("unclassified"),
+                kind: Kind::Clarification,
+                summary: Summary::new("daemon raw intent"),
+                certainty: Certainty::Minimum,
+            }],
+        })
+    );
+
+    handle
+        .join()
+        .expect("daemon thread exits")
+        .expect("daemon served state and observe frames");
 }
 
 #[test]
