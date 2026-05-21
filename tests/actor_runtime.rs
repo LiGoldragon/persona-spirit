@@ -139,7 +139,7 @@ async fn persona_spirit_record_observation_uses_read_plane_without_write_plane()
         .await
         .expect("entry accepted");
     let reply = runtime
-        .submit_text("(Observe (Records (None SummaryOnly)))")
+        .submit_text("(Observe (Records (None None SummaryOnly)))")
         .await
         .expect("records observed");
 
@@ -489,7 +489,7 @@ async fn persona_spirit_shutdown_releases_store_for_restart() {
 
     let second_runtime = fixture.runtime().await;
     let reply = second_runtime
-        .submit_text("(Observe (Records (None SummaryOnly)))")
+        .submit_text("(Observe (Records (None None SummaryOnly)))")
         .await
         .expect("records observed after restart");
 

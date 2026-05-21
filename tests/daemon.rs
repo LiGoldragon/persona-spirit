@@ -83,6 +83,7 @@ fn entry(summary: &str) -> Entry {
 fn observe_all() -> WorkingOperation {
     WorkingOperation::Observe(Observation::Records(RecordQuery {
         topic: None,
+        kind: None,
         mode: ObservationMode::SummaryOnly,
     }))
 }

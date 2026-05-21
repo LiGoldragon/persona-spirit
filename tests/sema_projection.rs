@@ -117,6 +117,7 @@ async fn spirit_record_query_projects_to_matched_observation() {
         .expect("record accepted");
     let request = WorkingOperation::Observe(Observation::Records(RecordQuery {
         topic: None,
+        kind: None,
         mode: ObservationMode::SummaryOnly,
     }));
     let runtime_reply = runtime

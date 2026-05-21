@@ -81,7 +81,8 @@ Contract records stay in `signal-persona-spirit` and
 - Subscription retractions return typed close acknowledgements through
   `SubscriptionPlane`.
 - `RecordObservation` queries return summaries by default and provenance only
-  when the caller asks for it.
+  when the caller asks for it. They filter by optional topic and optional kind
+  inside the daemon's read path.
 - Valid but unimplemented requests use `ReplyShaper` and do not touch
   `RecordStore`.
 - Valid but unimplemented CLI requests emit a typed NOTA

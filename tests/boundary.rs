@@ -253,7 +253,7 @@ fn persona_spirit_client_persists_entries_for_later_summary_observation() {
         .expect("second entry persisted");
 
     let reply = fixture
-        .reply_text("(Observe (Records (None SummaryOnly)))")
+        .reply_text("(Observe (Records (None None SummaryOnly)))")
         .expect("records observed");
 
     assert_eq!(
@@ -331,12 +331,55 @@ fn persona_spirit_client_filters_record_observation_by_topic() {
         .expect("naming entry persisted");
 
     let reply = fixture
-        .reply_text("(Observe (Records ((Some naming) SummaryOnly)))")
+        .reply_text("(Observe (Records ((Some naming) None SummaryOnly)))")
         .expect("records observed");
 
     assert_eq!(
         reply,
         "(RecordsObserved ([(2 naming Correction \"naming summary\" Maximum)]))"
+    );
+}
+
+#[test]
+fn persona_spirit_client_filters_record_observation_by_kind() {
+    let fixture = StoreFixture::new("kind-filter");
+    fixture
+        .reply_text("(Record (workspace Principle \"workspace principle\" \"workspace context\" Maximum \"workspace quote\"))")
+        .expect("principle entry persisted");
+    fixture
+        .reply_text("(Record (naming Correction \"naming correction\" \"naming context\" Maximum \"naming quote\"))")
+        .expect("correction entry persisted");
+
+    let reply = fixture
+        .reply_text("(Observe (Records (None (Some Principle) SummaryOnly)))")
+        .expect("records observed");
+
+    assert_eq!(
+        reply,
+        "(RecordsObserved ([(1 workspace Principle \"workspace principle\" Maximum)]))"
+    );
+}
+
+#[test]
+fn persona_spirit_client_filters_record_observation_by_topic_and_kind() {
+    let fixture = StoreFixture::new("topic-kind-filter");
+    fixture
+        .reply_text("(Record (spirit Principle \"spirit principle\" \"spirit context\" Maximum \"spirit quote\"))")
+        .expect("spirit principle persisted");
+    fixture
+        .reply_text("(Record (spirit Correction \"spirit correction\" \"spirit context\" Maximum \"spirit quote\"))")
+        .expect("spirit correction persisted");
+    fixture
+        .reply_text("(Record (naming Principle \"naming principle\" \"naming context\" Maximum \"naming quote\"))")
+        .expect("naming principle persisted");
+
+    let reply = fixture
+        .reply_text("(Observe (Records ((Some spirit) (Some Principle) SummaryOnly)))")
+        .expect("records observed");
+
+    assert_eq!(
+        reply,
+        "(RecordsObserved ([(1 spirit Principle \"spirit principle\" Maximum)]))"
     );
 }
 
@@ -348,7 +391,7 @@ fn persona_spirit_client_returns_provenance_only_when_requested() {
         .expect("entry persisted");
 
     let reply = fixture
-        .reply_text("(Observe (Records (None WithProvenance)))")
+        .reply_text("(Observe (Records (None None WithProvenance)))")
         .expect("provenance observed");
 
     assert!(reply.starts_with(
@@ -368,7 +411,7 @@ fn persona_spirit_client_repeated_entries_remain_distinct_records() {
         .expect("second entry persisted");
 
     let reply = fixture
-        .reply_text("(Observe (Records ((Some naming) SummaryOnly)))")
+        .reply_text("(Observe (Records ((Some naming) None SummaryOnly)))")
         .expect("records observed");
 
     assert_eq!(

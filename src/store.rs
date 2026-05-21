@@ -6,8 +6,8 @@ use sema_engine::{
     TableReference,
 };
 use signal_persona_spirit::{
-    Date, Entry, ObservationMode, Quote, RecordAccepted, RecordIdentifier, RecordObservation,
-    RecordProvenance, RecordProvenancesObserved, RecordSummary, RecordsObserved,
+    Date, Entry, Kind, ObservationMode, Quote, RecordAccepted, RecordIdentifier, RecordObservation,
+    RecordProvenance, RecordProvenancesObserved, RecordQuery, RecordSummary, RecordsObserved,
     Reply as WorkingReply, Time, Topic,
 };
 
@@ -88,7 +88,7 @@ impl SpiritStore {
     }
 
     pub fn observe_records(&self, observation: RecordObservation) -> Result<WorkingReply> {
-        let records = self.records_for_topic(observation.query.topic.as_ref())?;
+        let records = self.records_for_query(&observation.query)?;
         match observation.query.mode {
             ObservationMode::SummaryOnly => Ok(WorkingReply::RecordsObserved(RecordsObserved {
                 records: records.iter().map(StoredRecord::summary).collect(),
@@ -102,8 +102,13 @@ impl SpiritStore {
     }
 
     pub fn summaries_for_topic(&self, topic: Option<&Topic>) -> Result<Vec<RecordSummary>> {
+        let query = RecordQuery {
+            topic: topic.cloned(),
+            kind: None,
+            mode: ObservationMode::SummaryOnly,
+        };
         Ok(self
-            .records_for_topic(topic)?
+            .records_for_query(&query)?
             .iter()
             .map(StoredRecord::summary)
             .collect())
@@ -113,15 +118,11 @@ impl SpiritStore {
         Ok(RecordIdentifierMint::from_records(&self.all_records()?).next_identifier())
     }
 
-    fn records_for_topic(&self, topic: Option<&Topic>) -> Result<Vec<StoredRecord>> {
+    fn records_for_query(&self, query: &RecordQuery) -> Result<Vec<StoredRecord>> {
         Ok(self
             .all_records()?
             .into_iter()
-            .filter(|record| {
-                topic
-                    .map(|expected| &record.entry.entry.topic == expected)
-                    .unwrap_or(true)
-            })
+            .filter(|record| RecordFilter::new(query).matches(record))
             .collect())
     }
 
@@ -135,6 +136,11 @@ impl SpiritStore {
         records.sort_by_key(|record| record.identifier.value());
         Ok(records)
     }
+}
+
+struct RecordFilter<'query> {
+    topic: Option<&'query Topic>,
+    kind: Option<Kind>,
 }
 
 impl StoredRecord {
@@ -160,6 +166,31 @@ impl StoredRecord {
             time: self.entry.time,
             quote: self.entry.entry.quote,
         }
+    }
+}
+
+impl<'query> RecordFilter<'query> {
+    fn new(query: &'query RecordQuery) -> Self {
+        Self {
+            topic: query.topic.as_ref(),
+            kind: query.kind,
+        }
+    }
+
+    fn matches(&self, record: &StoredRecord) -> bool {
+        self.matches_topic(record) && self.matches_kind(record)
+    }
+
+    fn matches_topic(&self, record: &StoredRecord) -> bool {
+        self.topic
+            .map(|expected| &record.entry.entry.topic == expected)
+            .unwrap_or(true)
+    }
+
+    fn matches_kind(&self, record: &StoredRecord) -> bool {
+        self.kind
+            .map(|expected| record.entry.entry.kind == expected)
+            .unwrap_or(true)
     }
 }
 
