@@ -194,3 +194,30 @@ impl RecordIdentifierMint {
         RecordIdentifier::new(self.next)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use signal_persona_spirit::{Certainty, Context, Kind, Summary};
+
+    use super::*;
+
+    #[test]
+    fn stamped_entry_composes_entry_with_daemon_date_and_time() {
+        let entry = Entry {
+            topic: Topic::new("workspace"),
+            kind: Kind::Decision,
+            summary: Summary::new("composition"),
+            context: Context::new("context"),
+            certainty: Certainty::Maximum,
+            quote: Quote::new("quote"),
+        };
+        let date = Date::new(2026, 5, 21);
+        let time = Time::new(10, 45, 0);
+
+        let stamped = StampedEntry::new(entry.clone(), date, time);
+
+        assert_eq!(stamped.entry, entry);
+        assert_eq!(stamped.date, date);
+        assert_eq!(stamped.time, time);
+    }
+}

@@ -49,8 +49,9 @@ Contract records stay in `signal-persona-spirit` and
   planes as `CommandExecutor`, and publishes `signal-sema` observations.
 - Spirit's current `CommandExecutor` implementation is degenerate-atomic:
   each accepted operation lowers to one command, and multi-operation batches
-  are rejected before any command runs. A future multi-command operation must
-  add a real transaction boundary before it lands.
+  and multi-command operation plans are rejected before any command runs. A
+  future multi-command operation must add a real transaction boundary before
+  it lands.
 - The ordinary socket rejects owner frames; the owner socket rejects ordinary
   frames.
 - Each named actor is data-bearing. Do not add public zero-sized actor nouns.

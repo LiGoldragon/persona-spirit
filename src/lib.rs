@@ -13,15 +13,22 @@ pub use actors::root::{
 pub use actors::trace::{ActorTrace, TraceAction, TraceNode};
 pub use argument::SingleArgument;
 pub use daemon::{
-    BootstrapPolicyPath, BoundDaemon, DaemonConfiguration, DaemonRuntime, OwnerSpiritFrameCodec,
-    OwnerSpiritSignalClient, ServedExchange, ServedOwnerExchange, SocketMode, SocketPath,
-    SpiritFrameCodec, SpiritSignalClient, StorePath,
+    BootstrapPolicyPath, BoundDaemon, DaemonConfiguration, DaemonRuntime, ServedExchange,
+    ServedOwnerExchange, SocketMode, SocketPath, StorePath,
 };
 pub use error::{Error, Result};
 pub use observation::{Command, Effect};
-pub use runtime::{
-    OwnerSpiritReplyText, OwnerSpiritRequestText, SpiritClient, SpiritCommandLineDispatch,
-    SpiritCommandLineSockets, SpiritReplyText, SpiritRequestHead, SpiritRequestInput,
-    SpiritRequestText,
-};
 pub use store::{SpiritStore, StoreLocation};
+
+pub mod ordinary {
+    pub use crate::daemon::{FrameCodec, SignalClient};
+    pub use crate::runtime::{
+        Client, CommandLineDispatch, CommandLineSockets, ReplyText, RequestHead, RequestInput,
+        RequestText,
+    };
+}
+
+pub mod owner {
+    pub use crate::daemon::{OwnerFrameCodec as FrameCodec, OwnerSignalClient as SignalClient};
+    pub use crate::runtime::{OwnerReplyText as ReplyText, OwnerRequestText as RequestText};
+}

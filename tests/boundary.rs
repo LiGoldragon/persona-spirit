@@ -3,9 +3,9 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use persona_spirit::{
-    DaemonConfiguration, DaemonRuntime, Error, OwnerSpiritRequestText, SingleArgument, SocketMode,
-    SocketPath, SpiritClient, SpiritCommandLineDispatch, SpiritRequestHead, SpiritRequestInput,
-    SpiritRequestText, StorePath,
+    DaemonConfiguration, DaemonRuntime, Error, SingleArgument, SocketMode, SocketPath, StorePath,
+    ordinary::{Client, CommandLineDispatch, RequestHead, RequestInput, RequestText},
+    owner,
 };
 use signal_frame::CommandLineSocket;
 
@@ -38,8 +38,8 @@ impl StoreFixture {
     fn reply_text(&self, text: &str) -> persona_spirit::Result<String> {
         let argument = SingleArgument::from_arguments(["spirit".to_string(), text.to_string()])
             .expect("single argument accepted");
-        let request_text = SpiritRequestInput::new(argument.clone()).text()?;
-        SpiritRequestText::new(request_text).decode_request()?;
+        let request_text = RequestInput::new(argument.clone()).text()?;
+        RequestText::new(request_text).decode_request()?;
         let daemon = DaemonRuntime::from_configuration(DaemonConfiguration::new(
             self.ordinary_socket.clone(),
             self.owner_socket.clone(),
@@ -49,7 +49,7 @@ impl StoreFixture {
         .bind()
         .expect("daemon binds");
         let handle = std::thread::spawn(move || daemon.serve_count(1));
-        let reply = SpiritClient::with_socket(argument, self.ordinary_socket.clone()).reply_text();
+        let reply = Client::with_socket(argument, self.ordinary_socket.clone()).reply_text();
         handle
             .join()
             .expect("daemon thread exits")
@@ -143,7 +143,7 @@ fn persona_spirit_binary_requires_owner_socket_for_owner_requests() {
 
 #[test]
 fn persona_spirit_generated_dispatch_routes_working_and_owner_heads() {
-    let dispatch = SpiritCommandLineDispatch::new();
+    let dispatch = CommandLineDispatch::new();
 
     assert_eq!(
         dispatch.route_head("Record"),
@@ -163,11 +163,11 @@ fn persona_spirit_generated_dispatch_routes_working_and_owner_heads() {
 
 #[test]
 fn persona_spirit_request_head_uses_generated_dispatch_before_full_decode() {
-    let working = SpiritRequestHead::from_text(
+    let working = RequestHead::from_text(
         "(Record (workspace Decision \"summary\" \"context\" Maximum \"quote\"))",
     )
     .expect("working head reads");
-    let owner = SpiritRequestHead::from_text("(Register (operator))").expect("owner head reads");
+    let owner = RequestHead::from_text("(Register (operator))").expect("owner head reads");
 
     assert_eq!(working.route(), Ok(CommandLineSocket::Working));
     assert_eq!(owner.route(), Ok(CommandLineSocket::Owner));
@@ -226,7 +226,7 @@ fn persona_spirit_client_asserts_entry_and_mints_record_identifier() {
 
 #[test]
 fn persona_spirit_client_rejects_opaque_integer_timestamp_shape() {
-    SpiritRequestText::new(
+    RequestText::new(
         "(Record (workspace Decision \"summary only\" \"current implementation context\" Maximum 1779000000 \"first statement\"))",
     )
     .decode_request()
@@ -235,7 +235,7 @@ fn persona_spirit_client_rejects_opaque_integer_timestamp_shape() {
 
 #[test]
 fn persona_spirit_client_rejects_parenthesized_date_time_shape() {
-    SpiritRequestText::new(
+    RequestText::new(
         "(Record (workspace Decision \"summary only\" \"current implementation context\" Maximum (2026 5 20) (14 30 0) \"first statement\"))",
     )
     .decode_request()
@@ -387,10 +387,10 @@ fn persona_spirit_client_rejects_unknown_record_shape() {
 
 #[test]
 fn persona_spirit_owner_request_text_decodes_owner_contract_only() {
-    let owner = OwnerSpiritRequestText::new("(Register (operator))")
+    let owner = owner::RequestText::new("(Register (operator))")
         .decode_request()
         .expect("owner request decodes");
-    let ordinary = SpiritRequestText::new("(Register (operator))").decode_request();
+    let ordinary = RequestText::new("(Register (operator))").decode_request();
 
     assert!(matches!(
         owner,

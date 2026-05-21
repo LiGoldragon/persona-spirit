@@ -53,6 +53,11 @@ pub enum Error {
     #[error("persona-spirit does not yet support atomic batches with {operation_count} operations")]
     UnsupportedAtomicBatch { operation_count: usize },
 
+    #[error(
+        "persona-spirit does not yet support atomic operation plans with {command_count} commands"
+    )]
+    UnsupportedAtomicOperationPlan { command_count: usize },
+
     #[error("persona-spirit store error: {reason}")]
     SpiritStore { reason: String },
 
@@ -125,7 +130,9 @@ impl BatchErrorClassification for Error {
     fn retry_classification(&self) -> RetryClassification {
         match self {
             Self::ActorRuntime { .. } | Self::InputOutput { .. } => RetryClassification::Unknown,
-            Self::UnsupportedAtomicBatch { .. } => RetryClassification::NotRetryable,
+            Self::UnsupportedAtomicBatch { .. } | Self::UnsupportedAtomicOperationPlan { .. } => {
+                RetryClassification::NotRetryable
+            }
             _ => RetryClassification::NotRetryable,
         }
     }
@@ -133,6 +140,7 @@ impl BatchErrorClassification for Error {
     fn commit_status(&self) -> CommitStatus {
         match self {
             Self::UnsupportedAtomicBatch { .. }
+            | Self::UnsupportedAtomicOperationPlan { .. }
             | Self::InvalidSpiritRequest { .. }
             | Self::InvalidSpiritReply { .. }
             | Self::InvalidDaemonConfiguration { .. }

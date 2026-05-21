@@ -521,15 +521,32 @@ fn persona_spirit_command_line_path_does_not_use_actor_runtime_directly() {
     let source = std::fs::read_to_string(format!("{}/src/runtime.rs", env!("CARGO_MANIFEST_DIR")))
         .expect("runtime source is readable");
 
-    assert!(source.contains("SpiritRequestText::new"));
-    assert!(source.contains("OwnerSpiritRequestText::new"));
-    assert!(source.contains("SpiritCommandLineDispatch::new"));
-    assert!(source.contains("SpiritSignalClient::new"));
-    assert!(source.contains("OwnerSpiritSignalClient::new"));
-    assert!(source.contains("SpiritReplyText::new"));
-    assert!(source.contains("OwnerSpiritReplyText::new"));
+    assert!(source.contains("RequestText::new"));
+    assert!(source.contains("OwnerRequestText::new"));
+    assert!(source.contains("CommandLineDispatch::new"));
+    assert!(source.contains("SignalClient::new"));
+    assert!(source.contains("OwnerSignalClient::new"));
+    assert!(source.contains("ReplyText::new"));
+    assert!(source.contains("OwnerReplyText::new"));
     assert!(!source.contains("SpiritActorRuntime"));
     assert!(!source.contains("StoreLocation"));
+}
+
+#[test]
+fn persona_spirit_public_surface_uses_side_modules_instead_of_spirit_prefixes() {
+    let source = std::fs::read_to_string(format!("{}/src/lib.rs", env!("CARGO_MANIFEST_DIR")))
+        .expect("lib source is readable");
+
+    assert!(source.contains("pub mod ordinary"));
+    assert!(source.contains("pub mod owner"));
+    assert!(!source.contains("SpiritClient"));
+    assert!(!source.contains("SpiritFrameCodec"));
+    assert!(!source.contains("SpiritSignalClient"));
+    assert!(!source.contains("SpiritCommandLine"));
+    assert!(!source.contains("SpiritRequestText"));
+    assert!(!source.contains("SpiritReplyText"));
+    assert!(!source.contains("OwnerSpiritRequestText"));
+    assert!(!source.contains("OwnerSpiritReplyText"));
 }
 
 #[test]

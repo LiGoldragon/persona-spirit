@@ -137,7 +137,7 @@ in-process.
 | Sema observations do not carry Spirit payloads. | `tests/sema_projection.rs` expects only `SemaOperation` plus `SemaOutcome` for assert, match, subscribe, and retract paths. |
 | Ordinary requests execute through `signal-executor`, not a hand-rolled request match. | `persona_spirit_ordinary_request_path_uses_signal_executor_and_sema_observer` and `persona_spirit_dispatch_path_depends_on_signal_executor` check runtime trace and source dependency. |
 | Multi-operation ordinary batches do not pretend to be atomic until the store supports atomic batch execution. | `persona_spirit_daemon_rejects_multi_operation_batches_before_any_commit` expects `BatchAborted` with `NotCommitted` and an empty later query. |
-| Spirit's current atomicity is degenerate: one operation lowers to one command, and multi-operation batches are rejected before any command runs. | `persona_spirit_daemon_rejects_multi_operation_batches_before_any_commit` verifies rejection-before-commit; the `DispatchPhase` implementation documents that multi-command lowering requires new transactional plumbing. |
+| Spirit's current atomicity is degenerate: one operation lowers to one command, and multi-operation batches or multi-command operation plans are rejected before any command runs. | `persona_spirit_daemon_rejects_multi_operation_batches_before_any_commit` verifies batch rejection-before-commit; `spirit_rejects_multi_command_operation_plan_before_execution` verifies multi-command plans cannot execute sequentially without a transaction. |
 | Accepted no-change paths still project through explicit Spirit-local commands. | `spirit_unimplemented_observer_operations_project_as_explicit_no_change_commands` checks valid-but-unimplemented `Tap` / `Untap` requests become `Subscribe` / `Retract` commands with `NoChange` outcomes. |
 | Kameo is the only actor runtime dependency. | `persona_spirit_uses_kameo_as_only_actor_runtime` scans the manifest. |
 | Actor types are data-bearing, not public zero-sized actor nouns. | `persona_spirit_actor_types_are_data_bearing` checks each named actor has a struct body. |
@@ -261,7 +261,8 @@ Not implemented:
 - LLM-backed intent classification;
 - owner-Mutate forwarding to mind;
 - subscription event delivery;
-- atomic execution for multi-operation ordinary batches;
+- non-degenerate atomic execution for multi-operation ordinary batches or
+  multi-command operation plans;
 - filesystem intent projection.
 
 `persona-spirit` can now replace manual file editing for typed capture/query

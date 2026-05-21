@@ -1,7 +1,8 @@
 use std::fs;
 
 use crate::{
-    Error, OwnerSpiritSignalClient, Result, SingleArgument, SocketPath, SpiritSignalClient,
+    Error, Result, SingleArgument, SocketPath,
+    daemon::{OwnerSignalClient, SignalClient},
 };
 use nota_codec::{Decoder, Encoder, NotaDecode, NotaEncode};
 use owner_signal_persona_spirit::{Operation as OwnerOperation, Reply as OwnerReply};
@@ -9,30 +10,30 @@ use signal_frame::CommandLineSocket;
 use signal_persona_spirit::{Operation as WorkingOperation, Reply as WorkingReply};
 
 signal_frame::signal_cli! {
-    pub struct SpiritCommandLineDispatch {
+    pub struct CommandLineDispatch {
         working signal_persona_spirit::Operation;
         owner owner_signal_persona_spirit::Operation;
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SpiritClient {
-    input: SpiritRequestInput,
-    sockets: SpiritCommandLineSockets,
+pub struct Client {
+    input: RequestInput,
+    sockets: CommandLineSockets,
 }
 
-impl SpiritClient {
+impl Client {
     pub fn from_argument(argument: SingleArgument) -> Result<Self> {
         Ok(Self {
-            input: SpiritRequestInput::new(argument),
-            sockets: SpiritCommandLineSockets::from_environment(),
+            input: RequestInput::new(argument),
+            sockets: CommandLineSockets::from_environment(),
         })
     }
 
     pub fn with_socket(argument: SingleArgument, socket: SocketPath) -> Self {
         Self {
-            input: SpiritRequestInput::new(argument),
-            sockets: SpiritCommandLineSockets::ordinary_only(socket),
+            input: RequestInput::new(argument),
+            sockets: CommandLineSockets::ordinary_only(socket),
         }
     }
 
@@ -42,8 +43,8 @@ impl SpiritClient {
         owner_socket: SocketPath,
     ) -> Self {
         Self {
-            input: SpiritRequestInput::new(argument),
-            sockets: SpiritCommandLineSockets::new(Some(ordinary_socket), Some(owner_socket)),
+            input: RequestInput::new(argument),
+            sockets: CommandLineSockets::new(Some(ordinary_socket), Some(owner_socket)),
         }
     }
 
@@ -57,30 +58,30 @@ impl SpiritClient {
     }
 
     fn daemon_reply_text(&self, request_text: &str) -> Result<String> {
-        match SpiritRequestHead::from_text(request_text)?.route()? {
+        match RequestHead::from_text(request_text)?.route()? {
             CommandLineSocket::Working => {
-                let request = SpiritRequestText::new(request_text).decode_request()?;
-                let reply = SpiritSignalClient::new(self.sockets.ordinary_socket()?.clone())
-                    .submit(request)?;
-                SpiritReplyText::new(reply).encode()
+                let request = RequestText::new(request_text).decode_request()?;
+                let reply =
+                    SignalClient::new(self.sockets.ordinary_socket()?.clone()).submit(request)?;
+                ReplyText::new(reply).encode()
             }
             CommandLineSocket::Owner => {
-                let request = OwnerSpiritRequestText::new(request_text).decode_request()?;
-                let reply = OwnerSpiritSignalClient::new(self.sockets.owner_socket()?.clone())
-                    .submit(request)?;
-                OwnerSpiritReplyText::new(reply).encode()
+                let request = OwnerRequestText::new(request_text).decode_request()?;
+                let reply =
+                    OwnerSignalClient::new(self.sockets.owner_socket()?.clone()).submit(request)?;
+                OwnerReplyText::new(reply).encode()
             }
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SpiritCommandLineSockets {
+pub struct CommandLineSockets {
     ordinary_socket: Option<SocketPath>,
     owner_socket: Option<SocketPath>,
 }
 
-impl SpiritCommandLineSockets {
+impl CommandLineSockets {
     pub fn new(ordinary_socket: Option<SocketPath>, owner_socket: Option<SocketPath>) -> Self {
         Self {
             ordinary_socket,
@@ -117,11 +118,11 @@ impl SpiritCommandLineSockets {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SpiritRequestInput {
+pub struct RequestInput {
     argument: SingleArgument,
 }
 
-impl SpiritRequestInput {
+impl RequestInput {
     pub fn new(argument: SingleArgument) -> Self {
         Self { argument }
     }
@@ -137,11 +138,11 @@ impl SpiritRequestInput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SpiritRequestHead {
+pub struct RequestHead {
     head: String,
 }
 
-impl SpiritRequestHead {
+impl RequestHead {
     pub fn from_text(text: &str) -> Result<Self> {
         let mut decoder = Decoder::new(text);
         let head = decoder
@@ -155,18 +156,18 @@ impl SpiritRequestHead {
     }
 
     pub fn route(&self) -> Result<CommandLineSocket> {
-        SpiritCommandLineDispatch::new()
+        CommandLineDispatch::new()
             .route_head(self.as_str())
             .map_err(Error::command_line_route)
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SpiritRequestText {
+pub struct RequestText {
     text: String,
 }
 
-impl SpiritRequestText {
+impl RequestText {
     pub fn new(text: impl Into<String>) -> Self {
         Self { text: text.into() }
     }
@@ -175,17 +176,17 @@ impl SpiritRequestText {
         let mut decoder = Decoder::new(&self.text);
         let request =
             WorkingOperation::decode(&mut decoder).map_err(Error::invalid_spirit_request)?;
-        SpiritRequestEnd::new(&mut decoder).expect()?;
+        RequestEnd::new(&mut decoder).expect()?;
         Ok(request)
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OwnerSpiritRequestText {
+pub struct OwnerRequestText {
     text: String,
 }
 
-impl OwnerSpiritRequestText {
+impl OwnerRequestText {
     pub fn new(text: impl Into<String>) -> Self {
         Self { text: text.into() }
     }
@@ -194,17 +195,17 @@ impl OwnerSpiritRequestText {
         let mut decoder = Decoder::new(&self.text);
         let request =
             OwnerOperation::decode(&mut decoder).map_err(Error::invalid_spirit_request)?;
-        SpiritRequestEnd::new(&mut decoder).expect()?;
+        RequestEnd::new(&mut decoder).expect()?;
         Ok(request)
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SpiritReplyText {
+pub struct ReplyText {
     reply: WorkingReply,
 }
 
-impl SpiritReplyText {
+impl ReplyText {
     pub fn new(reply: WorkingReply) -> Self {
         Self { reply }
     }
@@ -219,11 +220,11 @@ impl SpiritReplyText {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OwnerSpiritReplyText {
+pub struct OwnerReplyText {
     reply: OwnerReply,
 }
 
-impl OwnerSpiritReplyText {
+impl OwnerReplyText {
     pub fn new(reply: OwnerReply) -> Self {
         Self { reply }
     }
@@ -237,11 +238,11 @@ impl OwnerSpiritReplyText {
     }
 }
 
-struct SpiritRequestEnd<'decoder, 'input> {
+struct RequestEnd<'decoder, 'input> {
     decoder: &'decoder mut Decoder<'input>,
 }
 
-impl<'decoder, 'input> SpiritRequestEnd<'decoder, 'input> {
+impl<'decoder, 'input> RequestEnd<'decoder, 'input> {
     fn new(decoder: &'decoder mut Decoder<'input>) -> Self {
         Self { decoder }
     }

@@ -220,14 +220,18 @@ impl SpiritCommandExecutor {
         &self,
         plan: OperationPlan<Command>,
     ) -> Result<OperationEffects<Command, Effect>> {
-        let mut command_effects = Vec::new();
-        for command in plan.into_commands() {
-            command_effects.push(self.execute_command(command).await?);
+        let command = Self::single_command_from_operation_plan(plan)?;
+        let effect = self.execute_command(command).await?;
+        Ok(OperationEffects::new(NonEmpty::single(effect)))
+    }
+
+    fn single_command_from_operation_plan(plan: OperationPlan<Command>) -> Result<Command> {
+        let commands = plan.into_commands();
+        let command_count = commands.len();
+        if command_count != 1 {
+            return Err(Error::UnsupportedAtomicOperationPlan { command_count });
         }
-        Ok(OperationEffects::new(
-            NonEmpty::try_from_vec(command_effects)
-                .expect("operation plans are statically non-empty"),
-        ))
+        Ok(commands.into_head())
     }
 
     async fn execute_command(&self, command: Command) -> Result<CommandEffect<Command, Effect>> {
@@ -463,10 +467,11 @@ impl CommandExecutor for SpiritCommandExecutor {
         &mut self,
         plan: BatchPlan<Self::Command>,
     ) -> Result<BatchEffects<Self::Command, Self::ComponentEffect>> {
-        // Degenerate atomicity: today's Spirit lowering emits exactly
-        // one command plan per request and exactly one command per plan.
-        // Multi-operation batches are rejected before any command runs,
-        // so the single committed command is the whole atomic unit.
+        // Degenerate atomicity: today's Spirit lowering must emit exactly
+        // one operation plan per request and exactly one command per plan.
+        // Multi-operation batches and multi-command plans are rejected
+        // before any command runs, so the single committed command is the
+        // whole atomic unit.
         let operation_count = plan.operations().len();
         if operation_count != 1 {
             return Err(Error::UnsupportedAtomicBatch { operation_count });
@@ -541,5 +546,38 @@ impl Message<RouteFrameRequest> for DispatchPhase {
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.route_frame(message.request, message.trace).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use signal_frame::NonEmpty;
+
+    use super::*;
+
+    #[test]
+    fn spirit_rejects_multi_command_operation_plan_before_execution() {
+        let plan = OperationPlan::new(NonEmpty::from_head_and_tail(
+            Command::ReadState,
+            vec![Command::ReadQuestions],
+        ));
+
+        let error = SpiritCommandExecutor::single_command_from_operation_plan(plan)
+            .expect_err("multi-command plan is rejected");
+
+        assert_eq!(
+            error,
+            Error::UnsupportedAtomicOperationPlan { command_count: 2 }
+        );
+    }
+
+    #[test]
+    fn spirit_accepts_single_command_operation_plan_as_degenerate_atomic_unit() {
+        let plan = OperationPlan::single(Command::ReadState);
+
+        let command = SpiritCommandExecutor::single_command_from_operation_plan(plan)
+            .expect("single command plan is accepted");
+
+        assert_eq!(command, Command::ReadState);
     }
 }

@@ -47,12 +47,12 @@ pub struct BootstrapPolicyPath(String);
 pub struct SocketMode(u32);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SpiritFrameCodec {
+pub struct FrameCodec {
     maximum_frame_bytes: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct OwnerSpiritFrameCodec {
+pub struct OwnerFrameCodec {
     maximum_frame_bytes: usize,
 }
 
@@ -67,20 +67,20 @@ pub struct BoundDaemon {
     owner_listener: UnixListener,
     runtime: Arc<tokio::runtime::Runtime>,
     root: kameo::actor::ActorRef<SpiritRoot>,
-    codec: SpiritFrameCodec,
-    owner_codec: OwnerSpiritFrameCodec,
+    codec: FrameCodec,
+    owner_codec: OwnerFrameCodec,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SpiritSignalClient {
+pub struct SignalClient {
     socket: SocketPath,
-    codec: SpiritFrameCodec,
+    codec: FrameCodec,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OwnerSpiritSignalClient {
+pub struct OwnerSignalClient {
     socket: SocketPath,
-    codec: OwnerSpiritFrameCodec,
+    codec: OwnerFrameCodec,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -195,19 +195,19 @@ impl SocketMode {
     }
 }
 
-impl Default for SpiritFrameCodec {
+impl Default for FrameCodec {
     fn default() -> Self {
         Self::new(DEFAULT_MAXIMUM_FRAME_BYTES)
     }
 }
 
-impl Default for OwnerSpiritFrameCodec {
+impl Default for OwnerFrameCodec {
     fn default() -> Self {
         Self::new(DEFAULT_MAXIMUM_FRAME_BYTES)
     }
 }
 
-impl SpiritFrameCodec {
+impl FrameCodec {
     pub const fn new(maximum_frame_bytes: usize) -> Self {
         Self {
             maximum_frame_bytes,
@@ -284,7 +284,7 @@ impl SpiritFrameCodec {
     }
 }
 
-impl OwnerSpiritFrameCodec {
+impl OwnerFrameCodec {
     pub const fn new(maximum_frame_bytes: usize) -> Self {
         Self {
             maximum_frame_bytes,
@@ -426,8 +426,8 @@ impl DaemonRuntime {
             owner_listener,
             runtime,
             root,
-            codec: SpiritFrameCodec::default(),
-            owner_codec: OwnerSpiritFrameCodec::default(),
+            codec: FrameCodec::default(),
+            owner_codec: OwnerFrameCodec::default(),
         })
     }
 }
@@ -551,14 +551,14 @@ struct SocketServer {
     listener: UnixListener,
     root: kameo::actor::ActorRef<SpiritRoot>,
     runtime: Arc<tokio::runtime::Runtime>,
-    codec: SpiritFrameCodec,
+    codec: FrameCodec,
 }
 
 struct OwnerSocketServer {
     listener: UnixListener,
     root: kameo::actor::ActorRef<SpiritRoot>,
     runtime: Arc<tokio::runtime::Runtime>,
-    codec: OwnerSpiritFrameCodec,
+    codec: OwnerFrameCodec,
 }
 
 struct OrdinaryExchangeHandler {
@@ -576,7 +576,7 @@ impl SocketServer {
         listener: UnixListener,
         root: kameo::actor::ActorRef<SpiritRoot>,
         runtime: Arc<tokio::runtime::Runtime>,
-        codec: SpiritFrameCodec,
+        codec: FrameCodec,
     ) -> Self {
         Self {
             listener,
@@ -611,7 +611,7 @@ impl OwnerSocketServer {
         listener: UnixListener,
         root: kameo::actor::ActorRef<SpiritRoot>,
         runtime: Arc<tokio::runtime::Runtime>,
-        codec: OwnerSpiritFrameCodec,
+        codec: OwnerFrameCodec,
     ) -> Self {
         Self {
             listener,
@@ -700,11 +700,11 @@ impl OwnerExchangeHandler {
     }
 }
 
-impl SpiritSignalClient {
+impl SignalClient {
     pub fn new(socket: SocketPath) -> Self {
         Self {
             socket,
-            codec: SpiritFrameCodec::default(),
+            codec: FrameCodec::default(),
         }
     }
 
@@ -732,11 +732,11 @@ impl SpiritSignalClient {
     }
 }
 
-impl OwnerSpiritSignalClient {
+impl OwnerSignalClient {
     pub fn new(socket: SocketPath) -> Self {
         Self {
             socket,
-            codec: OwnerSpiritFrameCodec::default(),
+            codec: OwnerFrameCodec::default(),
         }
     }
 

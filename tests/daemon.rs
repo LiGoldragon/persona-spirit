@@ -11,9 +11,8 @@ use owner_signal_persona_spirit::{
     Reply as OwnerReply, Start, Started,
 };
 use persona_spirit::{
-    BootstrapPolicyPath, DaemonConfiguration, DaemonRuntime, OwnerSpiritFrameCodec,
-    OwnerSpiritSignalClient, SingleArgument, SocketMode, SocketPath, SpiritClient,
-    SpiritFrameCodec, SpiritSignalClient, StorePath,
+    BootstrapPolicyPath, DaemonConfiguration, DaemonRuntime, SingleArgument, SocketMode,
+    SocketPath, StorePath, ordinary, owner,
 };
 use signal_frame::{
     AcceptedOutcome, BatchFailureReason, CommitStatus, ExchangeIdentifier, ExchangeLane,
@@ -61,12 +60,12 @@ impl DaemonFixture {
         )
     }
 
-    fn client(&self) -> SpiritSignalClient {
-        SpiritSignalClient::new(self.ordinary_socket.clone())
+    fn client(&self) -> ordinary::SignalClient {
+        ordinary::SignalClient::new(self.ordinary_socket.clone())
     }
 
-    fn owner_client(&self) -> OwnerSpiritSignalClient {
-        OwnerSpiritSignalClient::new(self.owner_socket.clone())
+    fn owner_client(&self) -> owner::SignalClient {
+        owner::SignalClient::new(self.owner_socket.clone())
     }
 }
 
@@ -184,7 +183,7 @@ fn persona_spirit_daemon_rejects_multi_operation_batches_before_any_commit() {
     let ordinary_socket = fixture.ordinary_socket.clone();
     let handle = thread::spawn(move || daemon.serve_count(2));
 
-    let codec = SpiritFrameCodec::default();
+    let codec = ordinary::FrameCodec::default();
     let request = RequestBuilder::new()
         .with(WorkingOperation::Record(entry("first batch entry")))
         .with(WorkingOperation::Record(entry("second batch entry")))
@@ -374,7 +373,7 @@ fn persona_spirit_ordinary_socket_rejects_owner_signal_frames() {
         served
     });
 
-    let codec = OwnerSpiritFrameCodec::default();
+    let codec = owner::FrameCodec::default();
     let mut stream = UnixStream::connect(socket.as_path()).expect("client connects");
     let frame = OwnerFrame::new(OwnerFrameBody::Request {
         exchange: exchange(),
@@ -410,7 +409,7 @@ fn persona_spirit_owner_socket_rejects_ordinary_signal_frames() {
         served
     });
 
-    let codec = SpiritFrameCodec::default();
+    let codec = ordinary::FrameCodec::default();
     let mut stream = UnixStream::connect(socket.as_path()).expect("client connects");
     let frame = Frame::new(FrameBody::Request {
         exchange: exchange(),
@@ -453,7 +452,7 @@ fn persona_spirit_client_can_send_nota_request_to_running_daemon() {
     ])
     .expect("single request argument");
 
-    let reply = SpiritClient::with_socket(argument, fixture.ordinary_socket.clone())
+    let reply = ordinary::Client::with_socket(argument, fixture.ordinary_socket.clone())
         .reply_text()
         .expect("client sends to daemon");
 
