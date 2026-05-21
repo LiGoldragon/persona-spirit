@@ -139,15 +139,9 @@ fn persona_spirit_daemon_serves_signal_frames_through_actor_root() {
         .expect("entry accepted through signal frame");
     assert_eq!(
         accepted,
-        WorkingReply::RecordAccepted(signal_persona_spirit::RecordAccepted {
-            captured: signal_persona_spirit::RecordSummary {
-                identifier: signal_persona_spirit::RecordIdentifier::new(1),
-                topic: Topic::new("workspace"),
-                kind: Kind::Decision,
-                summary: Summary::new("daemon accepted"),
-                certainty: Certainty::Maximum,
-            },
-        })
+        WorkingReply::RecordAccepted(signal_persona_spirit::RecordAccepted::new(
+            signal_persona_spirit::RecordIdentifier::new(1)
+        ))
     );
 
     let observed = client.submit(observe_all()).expect("records observed");
@@ -254,15 +248,9 @@ fn persona_spirit_daemon_classifies_state_frames_through_actor_root() {
         .expect("statement accepted through signal frame");
     assert_eq!(
         accepted,
-        WorkingReply::RecordAccepted(signal_persona_spirit::RecordAccepted {
-            captured: signal_persona_spirit::RecordSummary {
-                identifier: signal_persona_spirit::RecordIdentifier::new(1),
-                topic: Topic::new("unclassified"),
-                kind: Kind::Clarification,
-                summary: Summary::new("daemon raw intent"),
-                certainty: Certainty::Minimum,
-            },
-        })
+        WorkingReply::RecordAccepted(signal_persona_spirit::RecordAccepted::new(
+            signal_persona_spirit::RecordIdentifier::new(1)
+        ))
     );
 
     let observed = client.submit(observe_all()).expect("records observed");
@@ -473,13 +461,14 @@ fn persona_spirit_owner_socket_rejects_ordinary_signal_frames() {
         .write_frame(&mut stream, &frame)
         .expect("ordinary request frame writes to owner socket");
 
+    let error = handle
+        .join()
+        .expect("daemon thread exits")
+        .expect_err("owner socket rejects ordinary frame")
+        .to_string();
     assert!(
-        handle
-            .join()
-            .expect("daemon thread exits")
-            .expect_err("owner socket rejects ordinary frame")
-            .to_string()
-            .contains("persona-spirit signal frame error")
+        error.contains("unexpected persona-spirit signal frame: expected owner request"),
+        "unexpected owner-socket rejection error: {error}"
     );
 }
 
@@ -510,10 +499,7 @@ fn persona_spirit_client_can_send_nota_request_to_running_daemon() {
         .reply_text()
         .expect("client sends to daemon");
 
-    assert_eq!(
-        reply,
-        "(RecordAccepted ((1 workspace Decision \"client socket\" Maximum)))"
-    );
+    assert_eq!(reply, "(RecordAccepted 1)");
     handle
         .join()
         .expect("daemon thread exits")
@@ -556,7 +542,7 @@ fn spirit_binary_can_send_request_file_to_running_daemon() {
     );
     assert_eq!(
         String::from_utf8_lossy(&output.stdout).trim(),
-        "(RecordAccepted ((1 workspace Decision \"binary file\" Maximum)))"
+        "(RecordAccepted 1)"
     );
 }
 

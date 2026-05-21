@@ -83,9 +83,7 @@ impl SpiritStore {
         self.engine
             .assert(Assertion::new(self.records, stored.clone()))
             .map_err(Error::spirit_store)?;
-        Ok(RecordAccepted {
-            captured: stored.summary(),
-        })
+        Ok(RecordAccepted::new(stored.identifier))
     }
 
     pub fn observe_records(&self, observation: RecordObservation) -> Result<WorkingReply> {

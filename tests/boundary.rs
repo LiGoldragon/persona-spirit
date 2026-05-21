@@ -192,10 +192,7 @@ fn persona_spirit_client_accepts_request_file_path_argument() {
         .reply_text(&request_path.to_string_lossy())
         .expect("file path request persisted");
 
-    assert_eq!(
-        reply,
-        "(RecordAccepted ((1 workspace Decision \"file request\" Maximum)))"
-    );
+    assert_eq!(reply, "(RecordAccepted 1)");
 }
 
 #[test]
@@ -205,10 +202,7 @@ fn persona_spirit_client_classifies_statement_as_provisional_record() {
         .reply_text("(State (\"capture this intent\"))")
         .expect("statement classified");
 
-    assert_eq!(
-        reply,
-        "(RecordAccepted ((1 unclassified Clarification \"capture this intent\" Minimum)))"
-    );
+    assert_eq!(reply, "(RecordAccepted 1)");
 }
 
 #[test]
@@ -218,10 +212,7 @@ fn persona_spirit_client_asserts_entry_and_mints_record_identifier() {
         .reply_text("(Record (workspace Decision \"summary only\" \"current implementation context\" Maximum \"first statement\"))")
         .expect("entry persisted");
 
-    assert_eq!(
-        reply,
-        "(RecordAccepted ((1 workspace Decision \"summary only\" Maximum)))"
-    );
+    assert_eq!(reply, "(RecordAccepted 1)");
 }
 
 #[test]

@@ -515,7 +515,7 @@ dependencies = [
 [[package]]
 name = "signal-persona-spirit"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#cda546956323e97dd3deb12e57957db20987849e"
+source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=operator%2Fspirit-response-protocol#8586f594f6ad0ca12442b1aa7e348de9e58e9e63"
 dependencies = [
  "nota-codec",
  "rkyv",
@@ -527,7 +527,7 @@ dependencies = [
 [[package]]
 name = "signal-sema"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-sema.git?branch=main#25476a3dc58c1363dc77d95ed56c848fb96756d3"
+source = "git+https://github.com/LiGoldragon/signal-sema.git?branch=main#22b036a095857b42a81556666e093f03bf4533a1"
 dependencies = [
  "nota-codec",
  "rkyv",

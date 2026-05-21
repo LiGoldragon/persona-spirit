@@ -58,10 +58,7 @@ async fn persona_spirit_entry_assertion_runs_through_actor_planes() {
         .await
         .expect("entry accepted");
 
-    assert_eq!(
-        reply.text(),
-        "(RecordAccepted ((1 workspace Decision \"actor path\" Maximum)))"
-    );
+    assert_eq!(reply.text(), "(RecordAccepted 1)");
     assert!(reply.trace().contains_ordered(&[
         TraceNode::SPIRIT_ROOT,
         TraceNode::INGRESS_PHASE,
@@ -488,10 +485,7 @@ async fn persona_spirit_state_statement_uses_classifier_before_store() {
         .await
         .expect("statement classified");
 
-    assert_eq!(
-        reply.text(),
-        "(RecordAccepted ((1 unclassified Clarification \"capture this intent\" Minimum)))"
-    );
+    assert_eq!(reply.text(), "(RecordAccepted 1)");
     assert!(reply.trace().contains_ordered(&[
         TraceNode::DISPATCH_PHASE,
         TraceNode::CLASSIFIER_PLANE,
