@@ -275,7 +275,7 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 [[package]]
 name = "owner-signal-persona-spirit"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/owner-signal-persona-spirit.git?branch=main#00d15451774d75e1e9c5bb6b9435ffce601895b0"
+source = "git+https://github.com/LiGoldragon/owner-signal-persona-spirit.git?branch=main#cf932a619e1f6f3afc80cb62b6c0da6460e1c1f0"
 dependencies = [
  "nota-codec",
  "rkyv",
