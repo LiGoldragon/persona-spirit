@@ -239,6 +239,7 @@ impl SpiritCommandExecutor {
             Command::ClassifyStatement(statement) => self.classify_statement(statement).await?,
             Command::AssertEntry(entry) => self.capture_entry(entry).await?,
             Command::ReadRecords(observation) => self.observe_records(observation).await?,
+            Command::ReadTopics => self.observe_topics().await?,
             Command::ReadState => self.observe_state().await?,
             Command::ReadQuestions => self.observe_questions().await?,
             Command::OpenStateSubscription => self.subscribe_state().await?,
@@ -308,6 +309,18 @@ impl SpiritCommandExecutor {
         let pipeline = self
             .store
             .ask(store::ObserveRecords { observation, trace })
+            .await
+            .map_err(Self::store_send_error)?;
+        let (reply, trace) = pipeline.into_parts();
+        self.trace.replace(trace);
+        Ok(reply)
+    }
+
+    async fn observe_topics(&self) -> Result<WorkingReply> {
+        let trace = self.trace.snapshot();
+        let pipeline = self
+            .store
+            .ask(store::ObserveTopics { trace })
             .await
             .map_err(Self::store_send_error)?;
         let (reply, trace) = pipeline.into_parts();

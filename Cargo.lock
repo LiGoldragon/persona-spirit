@@ -515,7 +515,7 @@ dependencies = [
 [[package]]
 name = "signal-persona-spirit"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#b89731f2ae66d56695cb3625986b9747af52a808"
+source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#cda546956323e97dd3deb12e57957db20987849e"
 dependencies = [
  "nota-codec",
  "rkyv",

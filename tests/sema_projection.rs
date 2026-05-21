@@ -136,6 +136,30 @@ async fn spirit_record_query_projects_to_matched_observation() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn spirit_topic_catalog_query_projects_to_matched_observation() {
+    let fixture = RuntimeFixture::new("topic-query");
+    let runtime = fixture.runtime().await;
+    runtime
+        .submit_request(WorkingOperation::Record(entry("matched projection")))
+        .await
+        .expect("record accepted");
+    let request = WorkingOperation::Observe(Observation::Topics);
+    let runtime_reply = runtime
+        .submit_request(request.clone())
+        .await
+        .expect("topics observed");
+    assert_runtime_projection_trace(runtime_reply.trace());
+    let reply = runtime_reply.into_reply();
+
+    assert_eq!(
+        observation_for(request, reply),
+        SemaObservation::new(SemaOperation::Match, SemaOutcome::Matched)
+    );
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn spirit_state_query_projects_to_matched_observation() {
     let fixture = RuntimeFixture::new("state-query");
     let runtime = fixture.runtime().await;

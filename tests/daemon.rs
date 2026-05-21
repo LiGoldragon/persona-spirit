@@ -88,6 +88,10 @@ fn observe_all() -> WorkingOperation {
     }))
 }
 
+fn observe_topics() -> WorkingOperation {
+    WorkingOperation::Observe(Observation::Topics)
+}
+
 fn exchange() -> ExchangeIdentifier {
     ExchangeIdentifier::new(
         SessionEpoch::new(0),
@@ -279,6 +283,55 @@ fn persona_spirit_daemon_classifies_state_frames_through_actor_root() {
         .join()
         .expect("daemon thread exits")
         .expect("daemon served state and observe frames");
+}
+
+#[test]
+fn persona_spirit_daemon_serves_topic_catalog_through_signal_frames() {
+    let fixture = DaemonFixture::new("topic-catalog-signal-frame");
+    let daemon = DaemonRuntime::from_configuration(fixture.configuration())
+        .bind()
+        .expect("daemon binds");
+    let handle = thread::spawn(move || daemon.serve_count(4));
+
+    let client = fixture.client();
+    client
+        .submit(WorkingOperation::Record(entry("first spirit")))
+        .expect("first entry accepted through signal frame");
+    client
+        .submit(WorkingOperation::Record(Entry {
+            topic: Topic::new("naming"),
+            kind: Kind::Correction,
+            summary: Summary::new("naming entry"),
+            context: Context::new("daemon context"),
+            certainty: Certainty::Maximum,
+            quote: Quote::new("daemon quote"),
+        }))
+        .expect("second entry accepted through signal frame");
+    client
+        .submit(WorkingOperation::Record(entry("second spirit")))
+        .expect("third entry accepted through signal frame");
+
+    let observed = client.submit(observe_topics()).expect("topics observed");
+    assert_eq!(
+        observed,
+        WorkingReply::TopicsObserved(signal_persona_spirit::TopicsObserved {
+            topics: vec![
+                signal_persona_spirit::TopicCount {
+                    topic: Topic::new("naming"),
+                    entries: 1,
+                },
+                signal_persona_spirit::TopicCount {
+                    topic: Topic::new("workspace"),
+                    entries: 2,
+                },
+            ],
+        })
+    );
+
+    handle
+        .join()
+        .expect("daemon thread exits")
+        .expect("daemon served record and observe frames");
 }
 
 #[test]

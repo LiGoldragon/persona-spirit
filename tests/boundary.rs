@@ -384,6 +384,26 @@ fn persona_spirit_client_filters_record_observation_by_topic_and_kind() {
 }
 
 #[test]
+fn persona_spirit_client_lists_topics_with_entry_counts() {
+    let fixture = StoreFixture::new("topic-counts");
+    fixture
+        .reply_text("(Record (spirit Principle \"first spirit\" \"spirit context\" Maximum \"spirit quote\"))")
+        .expect("first spirit entry persisted");
+    fixture
+        .reply_text("(Record (naming Correction \"naming correction\" \"naming context\" Maximum \"naming quote\"))")
+        .expect("naming entry persisted");
+    fixture
+        .reply_text("(Record (spirit Constraint \"second spirit\" \"spirit context\" Maximum \"second quote\"))")
+        .expect("second spirit entry persisted");
+
+    let reply = fixture
+        .reply_text("(Observe Topics)")
+        .expect("topics observed");
+
+    assert_eq!(reply, "(TopicsObserved ([(naming 1) (spirit 2)]))");
+}
+
+#[test]
 fn persona_spirit_client_returns_provenance_only_when_requested() {
     let fixture = StoreFixture::new("provenance");
     fixture

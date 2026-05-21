@@ -158,6 +158,40 @@ async fn persona_spirit_record_observation_uses_read_plane_without_write_plane()
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn persona_spirit_topic_catalog_observation_uses_read_plane_without_write_plane() {
+    let fixture = SpiritRuntimeFixture::new("topic-catalog");
+    let runtime = fixture.runtime().await;
+
+    runtime
+        .submit_text("(Record (spirit Principle \"topic one\" \"context\" Maximum \"quote\"))")
+        .await
+        .expect("first entry accepted");
+    runtime
+        .submit_text("(Record (naming Correction \"topic two\" \"context\" Maximum \"quote\"))")
+        .await
+        .expect("second entry accepted");
+    runtime
+        .submit_text("(Record (spirit Constraint \"topic three\" \"context\" Maximum \"quote\"))")
+        .await
+        .expect("third entry accepted");
+
+    let reply = runtime
+        .submit_text("(Observe Topics)")
+        .await
+        .expect("topics observed");
+
+    assert_eq!(reply.text(), "(TopicsObserved ([(naming 1) (spirit 2)]))");
+    assert!(
+        reply
+            .trace()
+            .contains_action(TraceNode::SEMA_READER, TraceAction::RecordsRead)
+    );
+    assert!(!reply.trace().contains(TraceNode::SEMA_WRITER));
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn persona_spirit_state_observation_uses_state_plane() {
     let fixture = SpiritRuntimeFixture::new("state-plane");
     let runtime = fixture.runtime().await;

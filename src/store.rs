@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use sema::SchemaVersion;
@@ -8,7 +9,7 @@ use sema_engine::{
 use signal_persona_spirit::{
     Date, Entry, Kind, ObservationMode, Quote, RecordAccepted, RecordIdentifier, RecordObservation,
     RecordProvenance, RecordProvenancesObserved, RecordQuery, RecordSummary, RecordsObserved,
-    Reply as WorkingReply, Time, Topic,
+    Reply as WorkingReply, Time, Topic, TopicCount, TopicsObserved,
 };
 
 use crate::{Result, error::Error};
@@ -101,6 +102,12 @@ impl SpiritStore {
         }
     }
 
+    pub fn observe_topics(&self) -> Result<WorkingReply> {
+        Ok(WorkingReply::TopicsObserved(TopicsObserved {
+            topics: self.topic_counts()?,
+        }))
+    }
+
     pub fn summaries_for_topic(&self, topic: Option<&Topic>) -> Result<Vec<RecordSummary>> {
         let query = RecordQuery {
             topic: topic.cloned(),
@@ -135,6 +142,22 @@ impl SpiritStore {
             .to_vec();
         records.sort_by_key(|record| record.identifier.value());
         Ok(records)
+    }
+
+    fn topic_counts(&self) -> Result<Vec<TopicCount>> {
+        let mut counts = BTreeMap::<String, u64>::new();
+        for record in self.all_records()? {
+            *counts
+                .entry(record.entry.entry.topic.as_str().to_owned())
+                .or_insert(0) += 1;
+        }
+        Ok(counts
+            .into_iter()
+            .map(|(topic, entries)| TopicCount {
+                topic: Topic::new(topic),
+                entries,
+            })
+            .collect())
     }
 }
 

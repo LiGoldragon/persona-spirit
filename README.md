@@ -14,8 +14,9 @@ NOTA. It does not start an in-process actor tree or open a store by itself.
 Clients do not submit capture time; the daemon stamps records before storage
 and exposes that time only in provenance replies.
 
-The daemon actor tree persists `Record` operations, serves `Observe` reads,
-opens/retracts `Watch` subscriptions, provisionally classifies raw `State`
+The daemon actor tree persists `Record` operations, serves `Observe` reads
+for records and the topic catalog, opens/retracts `Watch` subscriptions,
+provisionally classifies raw `State`
 statements into minimum-certainty records, and handles owner
 lifecycle/bootstrap-policy requests.
 

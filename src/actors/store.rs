@@ -28,6 +28,10 @@ pub struct ObserveRecords {
     pub trace: ActorTrace,
 }
 
+pub struct ObserveTopics {
+    pub trace: ActorTrace,
+}
+
 pub struct ReadRecordSnapshot {
     pub subscription: RecordSubscription,
     pub trace: ActorTrace,
@@ -64,6 +68,15 @@ impl RecordStore {
         trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReceived);
         trace.record(TraceNode::SEMA_READER, TraceAction::MessageReceived);
         let reply = self.store.observe_records(observation)?;
+        trace.record(TraceNode::SEMA_READER, TraceAction::RecordsRead);
+        trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReplied);
+        Ok(PipelineReply::new(reply, trace))
+    }
+
+    fn observe_topics(&self, mut trace: ActorTrace) -> Result<PipelineReply> {
+        trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReceived);
+        trace.record(TraceNode::SEMA_READER, TraceAction::MessageReceived);
+        let reply = self.store.observe_topics()?;
         trace.record(TraceNode::SEMA_READER, TraceAction::RecordsRead);
         trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReplied);
         Ok(PipelineReply::new(reply, trace))
@@ -115,6 +128,18 @@ impl Message<ObserveRecords> for RecordStore {
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.observe_records(message.observation, message.trace)
+    }
+}
+
+impl Message<ObserveTopics> for RecordStore {
+    type Reply = Result<PipelineReply>;
+
+    async fn handle(
+        &mut self,
+        message: ObserveTopics,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.observe_topics(message.trace)
     }
 }
 
