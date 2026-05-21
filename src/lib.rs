@@ -21,7 +21,7 @@ pub use observation::{Command, Effect};
 pub use store::{SpiritStore, StoreLocation};
 
 pub mod ordinary {
-    pub use crate::daemon::{FrameCodec, SignalClient};
+    pub use crate::daemon::ordinary::{FrameCodec, SignalClient};
     pub use crate::runtime::{
         Client, CommandLineDispatch, CommandLineSockets, ReplyText, RequestHead, RequestInput,
         RequestText,
@@ -29,6 +29,6 @@ pub mod ordinary {
 }
 
 pub mod owner {
-    pub use crate::daemon::{OwnerFrameCodec as FrameCodec, OwnerSignalClient as SignalClient};
+    pub use crate::daemon::owner::{FrameCodec, SignalClient};
     pub use crate::runtime::{OwnerReplyText as ReplyText, OwnerRequestText as RequestText};
 }

@@ -552,8 +552,8 @@ fn persona_spirit_command_line_path_does_not_use_actor_runtime_directly() {
     assert!(source.contains("RequestText::new"));
     assert!(source.contains("OwnerRequestText::new"));
     assert!(source.contains("CommandLineDispatch::new"));
-    assert!(source.contains("SignalClient::new"));
-    assert!(source.contains("OwnerSignalClient::new"));
+    assert!(source.contains("daemon_ordinary::SignalClient::new"));
+    assert!(source.contains("daemon_owner::SignalClient::new"));
     assert!(source.contains("ReplyText::new"));
     assert!(source.contains("OwnerReplyText::new"));
     assert!(!source.contains("SpiritActorRuntime"));
@@ -570,6 +570,7 @@ fn persona_spirit_public_surface_uses_side_modules_instead_of_spirit_prefixes() 
     assert!(!source.contains("SpiritClient"));
     assert!(!source.contains("SpiritFrameCodec"));
     assert!(!source.contains("SpiritSignalClient"));
+    assert!(!source.contains("OwnerSignalClient"));
     assert!(!source.contains("SpiritCommandLine"));
     assert!(!source.contains("SpiritRequestText"));
     assert!(!source.contains("SpiritReplyText"));

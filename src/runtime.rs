@@ -2,7 +2,7 @@ use std::fs;
 
 use crate::{
     Error, Result, SingleArgument, SocketPath,
-    daemon::{OwnerSignalClient, SignalClient},
+    daemon::{ordinary as daemon_ordinary, owner as daemon_owner},
 };
 use nota_codec::{Decoder, Encoder, NotaDecode, NotaEncode};
 use owner_signal_persona_spirit::{Operation as OwnerOperation, Reply as OwnerReply};
@@ -62,13 +62,14 @@ impl Client {
             CommandLineSocket::Working => {
                 let request = RequestText::new(request_text).decode_request()?;
                 let reply =
-                    SignalClient::new(self.sockets.ordinary_socket()?.clone()).submit(request)?;
+                    daemon_ordinary::SignalClient::new(self.sockets.ordinary_socket()?.clone())
+                        .submit(request)?;
                 ReplyText::new(reply).encode()
             }
             CommandLineSocket::Owner => {
                 let request = OwnerRequestText::new(request_text).decode_request()?;
-                let reply =
-                    OwnerSignalClient::new(self.sockets.owner_socket()?.clone()).submit(request)?;
+                let reply = daemon_owner::SignalClient::new(self.sockets.owner_socket()?.clone())
+                    .submit(request)?;
                 OwnerReplyText::new(reply).encode()
             }
         }

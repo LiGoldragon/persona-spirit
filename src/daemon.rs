@@ -46,14 +46,46 @@ pub struct BootstrapPolicyPath(String);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, NotaTransparent)]
 pub struct SocketMode(u32);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct FrameCodec {
-    maximum_frame_bytes: usize,
+pub mod ordinary {
+    use super::{DEFAULT_MAXIMUM_FRAME_BYTES, SocketPath};
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct FrameCodec {
+        pub(super) maximum_frame_bytes: usize,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct SignalClient {
+        pub(super) socket: SocketPath,
+        pub(super) codec: FrameCodec,
+    }
+
+    impl Default for FrameCodec {
+        fn default() -> Self {
+            Self::new(DEFAULT_MAXIMUM_FRAME_BYTES)
+        }
+    }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct OwnerFrameCodec {
-    maximum_frame_bytes: usize,
+pub mod owner {
+    use super::{DEFAULT_MAXIMUM_FRAME_BYTES, SocketPath};
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct FrameCodec {
+        pub(super) maximum_frame_bytes: usize,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct SignalClient {
+        pub(super) socket: SocketPath,
+        pub(super) codec: FrameCodec,
+    }
+
+    impl Default for FrameCodec {
+        fn default() -> Self {
+            Self::new(DEFAULT_MAXIMUM_FRAME_BYTES)
+        }
+    }
 }
 
 pub struct DaemonRuntime {
@@ -67,20 +99,8 @@ pub struct BoundDaemon {
     owner_listener: UnixListener,
     runtime: Arc<tokio::runtime::Runtime>,
     root: kameo::actor::ActorRef<SpiritRoot>,
-    codec: FrameCodec,
-    owner_codec: OwnerFrameCodec,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SignalClient {
-    socket: SocketPath,
-    codec: FrameCodec,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OwnerSignalClient {
-    socket: SocketPath,
-    codec: OwnerFrameCodec,
+    codec: ordinary::FrameCodec,
+    owner_codec: owner::FrameCodec,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -195,19 +215,7 @@ impl SocketMode {
     }
 }
 
-impl Default for FrameCodec {
-    fn default() -> Self {
-        Self::new(DEFAULT_MAXIMUM_FRAME_BYTES)
-    }
-}
-
-impl Default for OwnerFrameCodec {
-    fn default() -> Self {
-        Self::new(DEFAULT_MAXIMUM_FRAME_BYTES)
-    }
-}
-
-impl FrameCodec {
+impl ordinary::FrameCodec {
     pub const fn new(maximum_frame_bytes: usize) -> Self {
         Self {
             maximum_frame_bytes,
@@ -284,7 +292,7 @@ impl FrameCodec {
     }
 }
 
-impl OwnerFrameCodec {
+impl owner::FrameCodec {
     pub const fn new(maximum_frame_bytes: usize) -> Self {
         Self {
             maximum_frame_bytes,
@@ -426,8 +434,8 @@ impl DaemonRuntime {
             owner_listener,
             runtime,
             root,
-            codec: FrameCodec::default(),
-            owner_codec: OwnerFrameCodec::default(),
+            codec: ordinary::FrameCodec::default(),
+            owner_codec: owner::FrameCodec::default(),
         })
     }
 }
@@ -551,14 +559,14 @@ struct SocketServer {
     listener: UnixListener,
     root: kameo::actor::ActorRef<SpiritRoot>,
     runtime: Arc<tokio::runtime::Runtime>,
-    codec: FrameCodec,
+    codec: ordinary::FrameCodec,
 }
 
 struct OwnerSocketServer {
     listener: UnixListener,
     root: kameo::actor::ActorRef<SpiritRoot>,
     runtime: Arc<tokio::runtime::Runtime>,
-    codec: OwnerFrameCodec,
+    codec: owner::FrameCodec,
 }
 
 struct OrdinaryExchangeHandler {
@@ -576,7 +584,7 @@ impl SocketServer {
         listener: UnixListener,
         root: kameo::actor::ActorRef<SpiritRoot>,
         runtime: Arc<tokio::runtime::Runtime>,
-        codec: FrameCodec,
+        codec: ordinary::FrameCodec,
     ) -> Self {
         Self {
             listener,
@@ -611,7 +619,7 @@ impl OwnerSocketServer {
         listener: UnixListener,
         root: kameo::actor::ActorRef<SpiritRoot>,
         runtime: Arc<tokio::runtime::Runtime>,
-        codec: OwnerFrameCodec,
+        codec: owner::FrameCodec,
     ) -> Self {
         Self {
             listener,
@@ -700,11 +708,11 @@ impl OwnerExchangeHandler {
     }
 }
 
-impl SignalClient {
+impl ordinary::SignalClient {
     pub fn new(socket: SocketPath) -> Self {
         Self {
             socket,
-            codec: FrameCodec::default(),
+            codec: ordinary::FrameCodec::default(),
         }
     }
 
@@ -732,11 +740,11 @@ impl SignalClient {
     }
 }
 
-impl OwnerSignalClient {
+impl owner::SignalClient {
     pub fn new(socket: SocketPath) -> Self {
         Self {
             socket,
-            codec: OwnerFrameCodec::default(),
+            codec: owner::FrameCodec::default(),
         }
     }
 
