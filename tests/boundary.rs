@@ -216,6 +216,25 @@ fn persona_spirit_client_asserts_entry_and_mints_record_identifier() {
 }
 
 #[test]
+fn persona_spirit_client_accepts_high_magnitude_and_observes_it_back() {
+    let fixture = StoreFixture::new("high-magnitude");
+    fixture
+        .reply_text(
+            "(Record (workspace Decision \"high summary\" \"high context\" High \"high quote\"))",
+        )
+        .expect("high-magnitude entry persisted");
+
+    let reply = fixture
+        .reply_text("(Observe (Records (None None SummaryOnly)))")
+        .expect("records observed");
+
+    assert_eq!(
+        reply,
+        "(RecordsObserved ([(1 workspace Decision \"high summary\" High)]))"
+    );
+}
+
+#[test]
 fn persona_spirit_client_rejects_opaque_integer_timestamp_shape() {
     RequestText::new(
         "(Record (workspace Decision \"summary only\" \"current implementation context\" Maximum 1779000000 \"first statement\"))",

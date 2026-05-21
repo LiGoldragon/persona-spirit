@@ -249,7 +249,8 @@ impl RecordIdentifierMint {
 
 #[cfg(test)]
 mod tests {
-    use signal_persona_spirit::{Certainty, Context, Kind, Summary};
+    use signal_persona_spirit::{Context, Kind, Summary};
+    use signal_sema::Magnitude;
 
     use super::*;
 
@@ -260,7 +261,7 @@ mod tests {
             kind: Kind::Decision,
             summary: Summary::new("composition"),
             context: Context::new("context"),
-            certainty: Certainty::Maximum,
+            certainty: Magnitude::Maximum,
             quote: Quote::new("quote"),
         };
         let date = Date::new(2026, 5, 21);

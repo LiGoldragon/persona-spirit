@@ -1,7 +1,8 @@
 use kameo::actor::{Actor, ActorRef};
 use kameo::error::Infallible;
 use kameo::message::{Context as ActorContext, Message};
-use signal_persona_spirit::{Certainty, Context, Entry, Kind, Quote, Statement, Summary, Topic};
+use signal_persona_spirit::{Context, Entry, Kind, Quote, Statement, Summary, Topic};
+use signal_sema::Magnitude;
 
 use super::trace::{ActorTrace, TraceAction, TraceNode};
 
@@ -24,7 +25,7 @@ pub struct Arguments {
 pub struct ClassificationPolicy {
     fallback_topic: Topic,
     fallback_kind: Kind,
-    fallback_certainty: Certainty,
+    fallback_certainty: Magnitude,
     fallback_context: Context,
 }
 
@@ -38,7 +39,7 @@ impl Default for ClassificationPolicy {
         Self {
             fallback_topic: Topic::new("unclassified"),
             fallback_kind: Kind::Clarification,
-            fallback_certainty: Certainty::Minimum,
+            fallback_certainty: Magnitude::Minimum,
             fallback_context: Context::new(
                 "captured from State operation by provisional classifier",
             ),

@@ -92,7 +92,7 @@ async fn persona_spirit_ordinary_request_path_uses_signal_executor_and_sema_obse
             kind: signal_persona_spirit::Kind::Decision,
             summary: signal_persona_spirit::Summary::new("executor path"),
             context: signal_persona_spirit::Context::new("actor context"),
-            certainty: signal_persona_spirit::Certainty::Maximum,
+            certainty: signal_sema::Magnitude::Maximum,
             quote: signal_persona_spirit::Quote::new("actor quote"),
         }))
         .await

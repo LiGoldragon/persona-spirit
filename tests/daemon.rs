@@ -20,10 +20,11 @@ use signal_frame::{
     SubReply,
 };
 use signal_persona_spirit::{
-    Certainty, Context, Entry, Frame, FrameBody, Kind, Observation, ObservationMode,
+    Context, Entry, Frame, FrameBody, Kind, Observation, ObservationMode,
     Operation as WorkingOperation, Quote, RecordQuery, Reply as WorkingReply, Statement,
     StatementText, Summary, Topic,
 };
+use signal_sema::Magnitude;
 
 #[derive(Debug, Clone)]
 struct DaemonFixture {
@@ -75,7 +76,7 @@ fn entry(summary: &str) -> Entry {
         kind: Kind::Decision,
         summary: Summary::new(summary),
         context: Context::new("daemon context"),
-        certainty: Certainty::Maximum,
+        certainty: Magnitude::Maximum,
         quote: Quote::new("daemon quote"),
     }
 }
@@ -153,7 +154,7 @@ fn persona_spirit_daemon_serves_signal_frames_through_actor_root() {
                 topic: Topic::new("workspace"),
                 kind: Kind::Decision,
                 summary: Summary::new("daemon accepted"),
-                certainty: Certainty::Maximum,
+                certainty: Magnitude::Maximum,
             }],
         })
     );
@@ -262,7 +263,7 @@ fn persona_spirit_daemon_classifies_state_frames_through_actor_root() {
                 topic: Topic::new("unclassified"),
                 kind: Kind::Clarification,
                 summary: Summary::new("daemon raw intent"),
-                certainty: Certainty::Minimum,
+                certainty: Magnitude::Minimum,
             }],
         })
     );
@@ -291,7 +292,7 @@ fn persona_spirit_daemon_serves_topic_catalog_through_signal_frames() {
             kind: Kind::Correction,
             summary: Summary::new("naming entry"),
             context: Context::new("daemon context"),
-            certainty: Certainty::Maximum,
+            certainty: Magnitude::Maximum,
             quote: Quote::new("daemon quote"),
         }))
         .expect("second entry accepted through signal frame");
