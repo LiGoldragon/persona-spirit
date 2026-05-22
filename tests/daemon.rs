@@ -1024,7 +1024,7 @@ fn persona_spirit_daemon_configuration_controls_bootstrap_policy_source() {
             .expect("system clock after epoch")
             .as_nanos()
     ));
-    std::fs::write(&policy_path, "(\"daemon configured bootstrap policy\")")
+    std::fs::write(&policy_path, "([daemon configured bootstrap policy])")
         .expect("policy fixture writes");
     let configuration =
         fixture
@@ -1141,7 +1141,7 @@ fn persona_spirit_client_can_send_nota_request_to_running_daemon() {
     let handle = thread::spawn(move || daemon.serve_count(1));
     let argument = SingleArgument::from_arguments([
         "spirit".to_string(),
-        "(Record (workspace Decision \"client socket\" \"daemon context\" Maximum \"daemon quote\"))"
+        "(Record (workspace Decision [client socket] [daemon context] Maximum [daemon quote]))"
             .to_string(),
     ])
     .expect("single request argument");
@@ -1172,7 +1172,7 @@ fn spirit_binary_can_send_request_file_to_running_daemon() {
     request_path.push(format!("persona-spirit-cli-request-{nanos}.nota"));
     fs::write(
         &request_path,
-        "(Record (workspace Decision \"binary file\" \"daemon context\" Maximum \"daemon quote\"))",
+        "(Record (workspace Decision [binary file] [daemon context] Maximum [daemon quote]))",
     )
     .expect("request file written");
 

@@ -54,7 +54,9 @@ async fn persona_spirit_entry_assertion_runs_through_actor_planes() {
     let runtime = fixture.runtime().await;
 
     let reply = runtime
-        .submit_text("(Record (workspace Decision \"actor path\" \"actor context\" Maximum \"actor quote\"))")
+        .submit_text(
+            "(Record (workspace Decision [actor path] [actor context] Maximum [actor quote]))",
+        )
         .await
         .expect("entry accepted");
 
@@ -132,7 +134,7 @@ async fn persona_spirit_record_observation_uses_read_plane_without_write_plane()
     let runtime = fixture.runtime().await;
 
     runtime
-        .submit_text("(Record (workspace Decision \"summary\" \"context\" Maximum \"quote\"))")
+        .submit_text("(Record (workspace Decision summary context Maximum quote))")
         .await
         .expect("entry accepted");
     let reply = runtime
@@ -285,9 +287,7 @@ async fn persona_spirit_record_subscription_uses_read_plane_then_subscription_pl
     let runtime = fixture.runtime().await;
 
     runtime
-        .submit_text(
-            "(Record (workspace Decision \"subscription path\" \"context\" Maximum \"quote\"))",
-        )
+        .submit_text("(Record (workspace Decision [subscription path] context Maximum quote))")
         .await
         .expect("entry accepted");
     let reply = runtime
@@ -297,7 +297,7 @@ async fn persona_spirit_record_subscription_uses_read_plane_then_subscription_pl
 
     assert_eq!(
         reply.text(),
-        "(SubscriptionOpened ((Records (1)) (Records [(1 workspace Decision \"subscription path\" Maximum)])))"
+        "(SubscriptionOpened ((Records (1)) (Records [(1 workspace Decision [subscription path] Maximum)])))"
     );
     assert!(reply.trace().contains_ordered(&[
         TraceNode::RECORD_STORE,
@@ -508,9 +508,7 @@ async fn persona_spirit_shutdown_releases_store_for_restart() {
     let first_runtime = fixture.runtime().await;
 
     first_runtime
-        .submit_text(
-            "(Record (workspace Decision \"restart survives\" \"context\" Maximum \"quote\"))",
-        )
+        .submit_text("(Record (workspace Decision [restart survives] context Maximum quote))")
         .await
         .expect("entry accepted");
     first_runtime.stop().await.expect("first runtime stops");
@@ -523,7 +521,7 @@ async fn persona_spirit_shutdown_releases_store_for_restart() {
 
     assert_eq!(
         reply.text(),
-        "(RecordsObserved ([(1 workspace Decision \"restart survives\" Maximum)]))"
+        "(RecordsObserved ([(1 workspace Decision [restart survives] Maximum)]))"
     );
 
     second_runtime.stop().await.expect("second runtime stops");
