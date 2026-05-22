@@ -87,6 +87,14 @@
             inherit cargoArtifacts;
             cargoTestExtraArgs = "--test daemon";
           });
+          test-upgrade-completion-requires-readiness = craneLib.cargoTest (commonArguments // {
+            inherit cargoArtifacts;
+            cargoTestExtraArgs = "--test daemon persona_spirit_upgrade_completion_requires_accepted_readiness -- --exact";
+          });
+          test-upgrade-completion-rejects-drift = craneLib.cargoTest (commonArguments // {
+            inherit cargoArtifacts;
+            cargoTestExtraArgs = "--test daemon persona_spirit_upgrade_completion_rejects_commit_sequence_drift_after_readiness -- --exact";
+          });
           test-sema-projection = craneLib.cargoTest (commonArguments // {
             inherit cargoArtifacts;
             cargoTestExtraArgs = "--test sema_projection";

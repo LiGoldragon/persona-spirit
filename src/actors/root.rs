@@ -24,6 +24,7 @@ pub struct SpiritRoot {
     dispatch: ActorRef<dispatch::DispatchPhase>,
     encoder: ActorRef<reply::ReplyTextEncoder>,
     store: ActorRef<store::RecordStore>,
+    handover: HandoverState,
 }
 
 #[derive(Clone)]
@@ -86,6 +87,15 @@ pub struct SpiritActorRuntime {
     root: ActorRef<SpiritRoot>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum HandoverState {
+    Active,
+    HandoverMode {
+        accepted_marker: signal_version_handover::HandoverMarker,
+    },
+    PrivateUpgradeOnly,
+}
+
 impl Arguments {
     pub fn new(store: StoreLocation) -> Self {
         Self {
@@ -119,6 +129,7 @@ impl SpiritRoot {
             dispatch,
             encoder,
             store,
+            handover: HandoverState::Active,
         }
     }
 
@@ -200,7 +211,7 @@ impl SpiritRoot {
     }
 
     async fn submit_upgrade_request(
-        &self,
+        &mut self,
         request: signal_version_handover::Operation,
     ) -> Result<RootUpgradeReply> {
         let mut trace = ActorTrace::new();
@@ -216,47 +227,83 @@ impl SpiritRoot {
                 signal_version_handover::Reply::HandoverMarker(marker.marker)
             }
             signal_version_handover::Operation::ReadyToHandover(report) => {
-                let marker = self
-                    .store
-                    .ask(store::ReadHandoverMarker {
-                        request: signal_version_handover::MarkerRequest {
-                            component: report.component.clone(),
-                        },
-                        trace,
-                    })
-                    .await
-                    .map_err(Self::pipeline_send_error)?;
-                trace = marker.trace;
-                if marker.marker.commit_sequence == report.source_marker.commit_sequence {
-                    signal_version_handover::Reply::HandoverAccepted(
-                        signal_version_handover::HandoverAcceptance {
-                            accepted_marker: marker.marker,
-                        },
-                    )
+                if matches!(self.handover, HandoverState::Active) {
+                    let marker = self
+                        .store
+                        .ask(store::ReadHandoverMarker {
+                            request: signal_version_handover::MarkerRequest {
+                                component: report.component.clone(),
+                            },
+                            trace,
+                        })
+                        .await
+                        .map_err(Self::pipeline_send_error)?;
+                    trace = marker.trace;
+                    if marker.marker.commit_sequence == report.source_marker.commit_sequence {
+                        self.handover = HandoverState::HandoverMode {
+                            accepted_marker: marker.marker.clone(),
+                        };
+                        signal_version_handover::Reply::HandoverAccepted(
+                            signal_version_handover::HandoverAcceptance {
+                                accepted_marker: marker.marker,
+                            },
+                        )
+                    } else {
+                        Self::handover_rejected(
+                            report.component,
+                            signal_version_handover::HandoverRejectionReason::CommitSequenceAdvanced,
+                        )
+                    }
                 } else {
-                    signal_version_handover::Reply::HandoverRejected(
-                        signal_version_handover::HandoverRejection {
-                            component: report.component,
-                            reason: signal_version_handover::HandoverRejectionReason::CommitSequenceAdvanced,
-                        },
+                    Self::handover_rejected(
+                        report.component,
+                        signal_version_handover::HandoverRejectionReason::AlreadyInHandover,
                     )
                 }
             }
             signal_version_handover::Operation::HandoverCompleted(report) => {
-                signal_version_handover::Reply::HandoverFinalized(
-                    signal_version_handover::HandoverFinalization {
-                        finalized_marker: report.accepted_marker,
-                    },
-                )
+                let accepted_marker = match &self.handover {
+                    HandoverState::HandoverMode { accepted_marker } => {
+                        Some(accepted_marker.clone())
+                    }
+                    HandoverState::Active | HandoverState::PrivateUpgradeOnly => None,
+                };
+                if accepted_marker.as_ref() != Some(&report.accepted_marker) {
+                    Self::handover_rejected(
+                        report.component,
+                        signal_version_handover::HandoverRejectionReason::NotReady,
+                    )
+                } else {
+                    let marker = self
+                        .store
+                        .ask(store::ReadHandoverMarker {
+                            request: signal_version_handover::MarkerRequest {
+                                component: report.component.clone(),
+                            },
+                            trace,
+                        })
+                        .await
+                        .map_err(Self::pipeline_send_error)?;
+                    trace = marker.trace;
+                    if marker.marker.commit_sequence != report.accepted_marker.commit_sequence {
+                        Self::handover_rejected(
+                            report.component,
+                            signal_version_handover::HandoverRejectionReason::CommitSequenceAdvanced,
+                        )
+                    } else {
+                        self.handover = HandoverState::PrivateUpgradeOnly;
+                        signal_version_handover::Reply::HandoverFinalized(
+                            signal_version_handover::HandoverFinalization {
+                                finalized_marker: report.accepted_marker,
+                            },
+                        )
+                    }
+                }
             }
-            signal_version_handover::Operation::Mirror(payload) => {
-                signal_version_handover::Reply::HandoverRejected(
-                    signal_version_handover::HandoverRejection {
-                        component: payload.component,
-                        reason: signal_version_handover::HandoverRejectionReason::NotReady,
-                    },
-                )
-            }
+            signal_version_handover::Operation::Mirror(payload) => Self::handover_rejected(
+                payload.component,
+                signal_version_handover::HandoverRejectionReason::NotReady,
+            ),
             signal_version_handover::Operation::Divergence(payload) => {
                 signal_version_handover::Reply::DivergenceAcknowledged(
                     signal_version_handover::DivergenceAcknowledgement {
@@ -276,6 +323,15 @@ impl SpiritRoot {
         };
         trace.record(TraceNode::SPIRIT_ROOT, TraceAction::MessageReplied);
         Ok(RootUpgradeReply::new(reply, trace))
+    }
+
+    fn handover_rejected(
+        component: version_projection::ComponentName,
+        reason: signal_version_handover::HandoverRejectionReason,
+    ) -> signal_version_handover::Reply {
+        signal_version_handover::Reply::HandoverRejected(
+            signal_version_handover::HandoverRejection { component, reason },
+        )
     }
 
     async fn encode(&self, pipeline: PipelineReply) -> Result<TextReply> {

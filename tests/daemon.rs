@@ -26,8 +26,8 @@ use signal_persona_spirit::{
 };
 use signal_sema::Magnitude;
 use signal_version_handover::{
-    HandoverAcceptance, HandoverFinalization, MarkerRequest, Operation as UpgradeOperation,
-    Reply as UpgradeReply,
+    HandoverAcceptance, HandoverFinalization, HandoverRejection, HandoverRejectionReason,
+    MarkerRequest, Operation as UpgradeOperation, Reply as UpgradeReply,
 };
 use version_projection::ComponentName;
 
@@ -483,6 +483,186 @@ fn persona_spirit_daemon_serves_version_handover_frames_through_upgrade_socket()
         ordinary_error.to_string().contains("No such file")
             || ordinary_error.to_string().contains("not found"),
         "unexpected ordinary close error: {ordinary_error}"
+    );
+
+    daemon.shutdown().expect("daemon shuts down");
+}
+
+#[test]
+fn persona_spirit_upgrade_completion_requires_accepted_readiness() {
+    let fixture = DaemonFixture::new("upgrade-completion-requires-readiness");
+    let mut daemon = DaemonRuntime::from_configuration(fixture.configuration())
+        .bind()
+        .expect("daemon binds");
+    let client = fixture.upgrade_client();
+    let component = ComponentName::new("persona-spirit");
+
+    let marker_client = client.clone();
+    let component_for_marker = component.clone();
+    let marker_handle = thread::spawn(move || {
+        marker_client.submit(UpgradeOperation::AskHandoverMarker(MarkerRequest {
+            component: component_for_marker,
+        }))
+    });
+    daemon
+        .serve_upgrade_one()
+        .expect("daemon serves marker exchange");
+    let marker_reply = marker_handle
+        .join()
+        .expect("marker client exits")
+        .expect("marker reply received");
+    let UpgradeReply::HandoverMarker(marker) = marker_reply else {
+        panic!("expected handover marker, got {marker_reply:?}");
+    };
+
+    let completion_client = client.clone();
+    let component_for_completion = component.clone();
+    let completion_handle = thread::spawn(move || {
+        completion_client.submit(UpgradeOperation::HandoverCompleted(
+            signal_version_handover::CompletionReport {
+                component: component_for_completion,
+                accepted_marker: marker,
+            },
+        ))
+    });
+    daemon
+        .serve_upgrade_one()
+        .expect("daemon serves completion exchange");
+    let completion_reply = completion_handle
+        .join()
+        .expect("completion client exits")
+        .expect("completion reply received");
+    assert_eq!(
+        completion_reply,
+        UpgradeReply::HandoverRejected(HandoverRejection {
+            component: component.clone(),
+            reason: HandoverRejectionReason::NotReady,
+        })
+    );
+
+    assert!(
+        fixture.ordinary_socket.as_path().exists(),
+        "ordinary socket remains after rejected completion"
+    );
+    let ordinary_client = fixture.client();
+    let ordinary_handle = thread::spawn(move || {
+        ordinary_client.submit(WorkingOperation::Record(entry("completion rejected")))
+    });
+    daemon
+        .serve_one()
+        .expect("daemon still serves ordinary exchange");
+    let ordinary_reply = ordinary_handle
+        .join()
+        .expect("ordinary client exits")
+        .expect("ordinary reply received");
+    assert_eq!(
+        ordinary_reply,
+        WorkingReply::RecordAccepted(signal_persona_spirit::RecordAccepted::new(
+            signal_persona_spirit::RecordIdentifier::new(1)
+        ))
+    );
+
+    daemon.shutdown().expect("daemon shuts down");
+}
+
+#[test]
+fn persona_spirit_upgrade_completion_rejects_commit_sequence_drift_after_readiness() {
+    let fixture = DaemonFixture::new("upgrade-completion-rejects-drift");
+    let mut daemon = DaemonRuntime::from_configuration(fixture.configuration())
+        .bind()
+        .expect("daemon binds");
+    let client = fixture.upgrade_client();
+    let component = ComponentName::new("persona-spirit");
+
+    let marker_client = client.clone();
+    let component_for_marker = component.clone();
+    let marker_handle = thread::spawn(move || {
+        marker_client.submit(UpgradeOperation::AskHandoverMarker(MarkerRequest {
+            component: component_for_marker,
+        }))
+    });
+    daemon
+        .serve_upgrade_one()
+        .expect("daemon serves marker exchange");
+    let marker_reply = marker_handle
+        .join()
+        .expect("marker client exits")
+        .expect("marker reply received");
+    let UpgradeReply::HandoverMarker(marker) = marker_reply else {
+        panic!("expected handover marker, got {marker_reply:?}");
+    };
+
+    let readiness_client = client.clone();
+    let component_for_readiness = component.clone();
+    let marker_for_readiness = marker.clone();
+    let readiness_handle = thread::spawn(move || {
+        readiness_client.submit(UpgradeOperation::ReadyToHandover(
+            signal_version_handover::ReadinessReport {
+                component: component_for_readiness,
+                source_marker: marker_for_readiness,
+            },
+        ))
+    });
+    daemon
+        .serve_upgrade_one()
+        .expect("daemon serves readiness exchange");
+    let readiness_reply = readiness_handle
+        .join()
+        .expect("readiness client exits")
+        .expect("readiness reply received");
+    assert_eq!(
+        readiness_reply,
+        UpgradeReply::HandoverAccepted(HandoverAcceptance {
+            accepted_marker: marker.clone(),
+        })
+    );
+
+    let ordinary_client = fixture.client();
+    let ordinary_handle = thread::spawn(move || {
+        ordinary_client.submit(WorkingOperation::Record(entry("drift after readiness")))
+    });
+    daemon
+        .serve_one()
+        .expect("daemon serves ordinary exchange that advances commit sequence");
+    let ordinary_reply = ordinary_handle
+        .join()
+        .expect("ordinary client exits")
+        .expect("ordinary reply received");
+    assert_eq!(
+        ordinary_reply,
+        WorkingReply::RecordAccepted(signal_persona_spirit::RecordAccepted::new(
+            signal_persona_spirit::RecordIdentifier::new(1)
+        ))
+    );
+
+    let completion_client = client.clone();
+    let component_for_completion = component.clone();
+    let marker_for_completion = marker.clone();
+    let completion_handle = thread::spawn(move || {
+        completion_client.submit(UpgradeOperation::HandoverCompleted(
+            signal_version_handover::CompletionReport {
+                component: component_for_completion,
+                accepted_marker: marker_for_completion,
+            },
+        ))
+    });
+    daemon
+        .serve_upgrade_one()
+        .expect("daemon serves completion exchange");
+    let completion_reply = completion_handle
+        .join()
+        .expect("completion client exits")
+        .expect("completion reply received");
+    assert_eq!(
+        completion_reply,
+        UpgradeReply::HandoverRejected(HandoverRejection {
+            component,
+            reason: HandoverRejectionReason::CommitSequenceAdvanced,
+        })
+    );
+    assert!(
+        fixture.ordinary_socket.as_path().exists(),
+        "ordinary socket remains after drift rejection"
     );
 
     daemon.shutdown().expect("daemon shuts down");

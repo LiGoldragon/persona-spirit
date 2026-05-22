@@ -114,10 +114,11 @@ The upgrade socket reads length-prefixed `signal-version-handover::Frame`
 values. It is the private handover surface for a staged Spirit replacement:
 `AskHandoverMarker` reads the store's current commit sequence and last record
 identifier, `ReadyToHandover` accepts only when the source marker still matches
-the local store, and `HandoverCompleted` finalizes the marker and removes the
-ordinary and owner socket paths. The upgrade socket does not yet apply mirrored
-write payloads; that remains the next step before a zero-downtime cutover can
-replace the temporary sema-upgrade runner.
+the local store, and `HandoverCompleted` finalizes only after a matching
+accepted readiness marker while the store marker remains unchanged. Completion
+then removes the ordinary and owner socket paths. The upgrade socket does not
+yet apply mirrored write payloads; that remains the next step before a
+zero-downtime cutover can replace the temporary sema-upgrade runner.
 
 The daemon advances through three handover states:
 
@@ -132,9 +133,11 @@ stateDiagram-v2
 
 - **Active** — ordinary, owner, and upgrade sockets all serve their
   respective contracts; public writes accepted. The steady state.
-- **HandoverMode** — ordinary and owner sockets still serve reads;
-  public writes paused; the upgrade socket exchanges marker, mirror,
-  and divergence frames with the next-version sibling daemon.
+- **HandoverMode** — ordinary and owner sockets remain bound. Current
+  implementation detects any public write that advances the commit
+  sequence and rejects completion as `CommitSequenceAdvanced`; the next
+  zero-downtime step is to pause or mirror those writes instead of
+  merely detecting the drift.
 - **PrivateUpgradeOnly** — ordinary and owner socket paths removed;
   only the upgrade socket remains bound; the daemon receives mirrored
   writes from next if old-compat reads still consume the previous
@@ -202,6 +205,8 @@ in-process.
 | The ordinary socket rejects owner Signal frames. | `persona_spirit_ordinary_socket_rejects_owner_signal_frames` writes an owner frame to the ordinary socket and expects decode rejection. |
 | The owner socket rejects ordinary Signal frames. | `persona_spirit_owner_socket_rejects_ordinary_signal_frames` writes an ordinary frame to the owner socket and expects decode rejection. |
 | The daemon serves private upgrade length-prefixed Signal frames through the actor root and store plane. | `persona_spirit_daemon_serves_version_handover_frames_through_upgrade_socket` asks for a handover marker, performs readiness, and completes handover through the upgrade socket. |
+| Handover completion requires prior accepted readiness. | `persona_spirit_upgrade_completion_requires_accepted_readiness` sends `HandoverCompleted` before `ReadyToHandover` and receives `HandoverRejected(NotReady)` while public sockets remain open. |
+| Handover completion rejects marker drift after readiness. | `persona_spirit_upgrade_completion_rejects_commit_sequence_drift_after_readiness` accepts readiness, writes a record through the ordinary socket, and receives `HandoverRejected(CommitSequenceAdvanced)` instead of falsely finalizing. |
 | Handover completion removes the ordinary and owner socket paths. | `persona_spirit_daemon_serves_version_handover_frames_through_upgrade_socket` completes handover and then verifies public socket paths are gone. |
 | Daemon shutdown removes all socket paths. | `persona_spirit_daemon_serves_signal_frames_through_actor_root` checks ordinary, owner, and upgrade sockets are removed after bounded serving. |
 | Signal-frame daemon ingress does not route through the NOTA decoder. | `persona_spirit_daemon_source_does_not_route_signal_frames_through_nota_decoder` checks the socket boundary calls `SubmitRequest`. |
