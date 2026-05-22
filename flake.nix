@@ -91,9 +91,13 @@
             inherit cargoArtifacts;
             cargoTestExtraArgs = "--test daemon persona_spirit_upgrade_completion_requires_accepted_readiness -- --exact";
           });
-          test-upgrade-completion-rejects-drift = craneLib.cargoTest (commonArguments // {
+          test-upgrade-readiness-rejects-drift = craneLib.cargoTest (commonArguments // {
             inherit cargoArtifacts;
-            cargoTestExtraArgs = "--test daemon persona_spirit_upgrade_completion_rejects_commit_sequence_drift_after_readiness -- --exact";
+            cargoTestExtraArgs = "--test daemon persona_spirit_upgrade_readiness_rejects_commit_sequence_drift -- --exact";
+          });
+          test-upgrade-readiness-freezes-public-writes = craneLib.cargoTest (commonArguments // {
+            inherit cargoArtifacts;
+            cargoTestExtraArgs = "--test daemon persona_spirit_upgrade_readiness_freezes_public_writes_until_completion -- --exact";
           });
           test-upgrade-mirror-applies-stamped-entry = craneLib.cargoTest (commonArguments // {
             inherit cargoArtifacts;

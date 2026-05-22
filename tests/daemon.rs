@@ -579,8 +579,86 @@ fn persona_spirit_upgrade_completion_requires_accepted_readiness() {
 }
 
 #[test]
-fn persona_spirit_upgrade_completion_rejects_commit_sequence_drift_after_readiness() {
-    let fixture = DaemonFixture::new("upgrade-completion-rejects-drift");
+fn persona_spirit_upgrade_readiness_rejects_commit_sequence_drift() {
+    let fixture = DaemonFixture::new("upgrade-readiness-rejects-drift");
+    let mut daemon = DaemonRuntime::from_configuration(fixture.configuration())
+        .bind()
+        .expect("daemon binds");
+    let client = fixture.upgrade_client();
+    let component = ComponentName::new("persona-spirit");
+
+    let marker_client = client.clone();
+    let component_for_marker = component.clone();
+    let marker_handle = thread::spawn(move || {
+        marker_client.submit(UpgradeOperation::AskHandoverMarker(MarkerRequest {
+            component: component_for_marker,
+        }))
+    });
+    daemon
+        .serve_upgrade_one()
+        .expect("daemon serves marker exchange");
+    let marker_reply = marker_handle
+        .join()
+        .expect("marker client exits")
+        .expect("marker reply received");
+    let UpgradeReply::HandoverMarker(marker) = marker_reply else {
+        panic!("expected handover marker, got {marker_reply:?}");
+    };
+
+    let ordinary_client = fixture.client();
+    let ordinary_handle = thread::spawn(move || {
+        ordinary_client.submit(WorkingOperation::Record(entry("drift before readiness")))
+    });
+    daemon
+        .serve_one()
+        .expect("daemon serves ordinary exchange that advances commit sequence");
+    let ordinary_reply = ordinary_handle
+        .join()
+        .expect("ordinary client exits")
+        .expect("ordinary reply received");
+    assert_eq!(
+        ordinary_reply,
+        WorkingReply::RecordAccepted(signal_persona_spirit::RecordAccepted::new(
+            signal_persona_spirit::RecordIdentifier::new(1)
+        ))
+    );
+
+    let readiness_client = client.clone();
+    let component_for_readiness = component.clone();
+    let marker_for_readiness = marker.clone();
+    let readiness_handle = thread::spawn(move || {
+        readiness_client.submit(UpgradeOperation::ReadyToHandover(
+            signal_version_handover::ReadinessReport {
+                component: component_for_readiness,
+                source_marker: marker_for_readiness,
+            },
+        ))
+    });
+    daemon
+        .serve_upgrade_one()
+        .expect("daemon serves readiness exchange");
+    let readiness_reply = readiness_handle
+        .join()
+        .expect("readiness client exits")
+        .expect("readiness reply received");
+    assert_eq!(
+        readiness_reply,
+        UpgradeReply::HandoverRejected(HandoverRejection {
+            component,
+            reason: HandoverRejectionReason::CommitSequenceAdvanced,
+        })
+    );
+    assert!(
+        fixture.ordinary_socket.as_path().exists(),
+        "ordinary socket remains after drift rejection"
+    );
+
+    daemon.shutdown().expect("daemon shuts down");
+}
+
+#[test]
+fn persona_spirit_upgrade_readiness_freezes_public_writes_until_completion() {
+    let fixture = DaemonFixture::new("upgrade-readiness-freezes-writes");
     let mut daemon = DaemonRuntime::from_configuration(fixture.configuration())
         .bind()
         .expect("daemon binds");
@@ -627,30 +705,38 @@ fn persona_spirit_upgrade_completion_rejects_commit_sequence_drift_after_readine
     else {
         panic!("expected handover accepted, got {readiness_reply:?}");
     };
-    assert_eq!(accepted_marker.component, marker.component);
-    assert_eq!(accepted_marker.commit_sequence, marker.commit_sequence);
-    assert_eq!(accepted_marker.write_counter, marker.write_counter);
-    assert_eq!(
-        accepted_marker.last_record_identifier,
-        marker.last_record_identifier
-    );
 
-    let ordinary_client = fixture.client();
-    let ordinary_handle = thread::spawn(move || {
-        ordinary_client.submit(WorkingOperation::Record(entry("drift after readiness")))
+    let write_client = fixture.client();
+    let write_handle = thread::spawn(move || {
+        write_client.submit(WorkingOperation::Record(entry("write after readiness")))
     });
     daemon
         .serve_one()
-        .expect("daemon serves ordinary exchange that advances commit sequence");
-    let ordinary_reply = ordinary_handle
+        .expect("daemon serves rejected ordinary write");
+    let write_error = write_handle
         .join()
-        .expect("ordinary client exits")
-        .expect("ordinary reply received");
+        .expect("write client exits")
+        .expect_err("ordinary write is rejected during handover mode");
+    assert!(
+        write_error
+            .to_string()
+            .contains("persona-spirit request rejected before execution: receiver-internal"),
+        "unexpected handover-mode write error: {write_error}"
+    );
+
+    let read_client = fixture.client();
+    let read_handle =
+        thread::spawn(move || read_client.submit(WorkingOperation::Observe(Observation::Topics)));
+    daemon
+        .serve_one()
+        .expect("daemon serves ordinary read during handover mode");
+    let read_reply = read_handle
+        .join()
+        .expect("read client exits")
+        .expect("ordinary read remains available during handover mode");
     assert_eq!(
-        ordinary_reply,
-        WorkingReply::RecordAccepted(signal_persona_spirit::RecordAccepted::new(
-            signal_persona_spirit::RecordIdentifier::new(1)
-        ))
+        read_reply,
+        WorkingReply::TopicsObserved(signal_persona_spirit::TopicsObserved { topics: vec![] })
     );
 
     let completion_client = client.clone();
@@ -673,14 +759,18 @@ fn persona_spirit_upgrade_completion_rejects_commit_sequence_drift_after_readine
         .expect("completion reply received");
     assert_eq!(
         completion_reply,
-        UpgradeReply::HandoverRejected(HandoverRejection {
-            component,
-            reason: HandoverRejectionReason::CommitSequenceAdvanced,
+        UpgradeReply::HandoverFinalized(HandoverFinalization {
+            finalized_marker: accepted_marker,
         })
     );
+
     assert!(
-        fixture.ordinary_socket.as_path().exists(),
-        "ordinary socket remains after drift rejection"
+        !fixture.ordinary_socket.as_path().exists(),
+        "ordinary socket path is removed after handover completion"
+    );
+    assert!(
+        !fixture.owner_socket.as_path().exists(),
+        "owner socket path is removed after handover completion"
     );
 
     daemon.shutdown().expect("daemon shuts down");

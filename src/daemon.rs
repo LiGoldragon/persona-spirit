@@ -4,7 +4,7 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
 use std::sync::{
     Arc,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicU8, Ordering},
 };
 use std::thread;
 
@@ -173,7 +173,14 @@ pub struct ServedUpgradeExchange {
 struct PublicSockets {
     ordinary_socket: SocketPath,
     owner_socket: SocketPath,
-    accepting: Arc<AtomicBool>,
+    state: Arc<AtomicU8>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PublicSocketState {
+    Active,
+    HandoverMode,
+    Closed,
 }
 
 impl DaemonConfiguration {
@@ -618,7 +625,7 @@ impl BoundDaemon {
             .map_err(Error::input_output)?;
         let frame = self.codec.read_frame(&mut stream)?;
         let received = self.codec.request_from_frame(frame)?;
-        let reply = if self.public_sockets.is_accepting() {
+        let reply = if self.public_sockets.accepts_request(&received.request) {
             self.reply_to_request(received.request)?
         } else {
             Reply::rejected(RequestRejectionReason::Internal)
@@ -632,7 +639,7 @@ impl BoundDaemon {
         let (mut stream, _address) = self.owner_listener.accept().map_err(Error::input_output)?;
         let frame = self.owner_codec.read_frame(&mut stream)?;
         let received = self.owner_codec.request_from_frame(frame)?;
-        let reply = if self.public_sockets.is_accepting() {
+        let reply = if self.public_sockets.accepts_owner_request() {
             self.reply_to_owner_request(received.request)?
         } else {
             Reply::rejected(RequestRejectionReason::Internal)
@@ -846,7 +853,7 @@ impl SocketServer {
         let (mut stream, _address) = self.listener.accept().map_err(Error::input_output)?;
         let frame = self.codec.read_frame(&mut stream)?;
         let received = self.codec.request_from_frame(frame)?;
-        let reply = if self.public_sockets.is_accepting() {
+        let reply = if self.public_sockets.accepts_request(&received.request) {
             OrdinaryExchangeHandler::new(self.root.clone(), self.runtime.clone())
                 .reply_to_request(received.request)?
         } else {
@@ -887,7 +894,7 @@ impl OwnerSocketServer {
         let (mut stream, _address) = self.listener.accept().map_err(Error::input_output)?;
         let frame = self.codec.read_frame(&mut stream)?;
         let received = self.codec.request_from_frame(frame)?;
-        let reply = if self.public_sockets.is_accepting() {
+        let reply = if self.public_sockets.accepts_owner_request() {
             OwnerExchangeHandler::new(self.root.clone(), self.runtime.clone())
                 .reply_to_request(received.request)?
         } else {
@@ -1027,6 +1034,7 @@ impl UpgradeExchangeHandler {
     }
 
     fn reply_to_operation(&self, request: UpgradeOperation) -> Result<SubReply<UpgradeReply>> {
+        let freezes_public_writes = matches!(request, UpgradeOperation::ReadyToHandover(_));
         let closes_public_sockets = matches!(request, UpgradeOperation::HandoverCompleted(_));
         let reply = self
             .runtime
@@ -1037,6 +1045,9 @@ impl UpgradeExchangeHandler {
             })
             .map_err(|error| Error::actor_runtime(error.to_string()))?;
         let reply = reply.into_reply();
+        if freezes_public_writes && matches!(reply, UpgradeReply::HandoverAccepted(_)) {
+            self.public_sockets.enter_handover_mode();
+        }
         if closes_public_sockets && matches!(reply, UpgradeReply::HandoverFinalized(_)) {
             self.public_sockets.close();
         }
@@ -1049,18 +1060,58 @@ impl PublicSockets {
         Self {
             ordinary_socket,
             owner_socket,
-            accepting: Arc::new(AtomicBool::new(true)),
+            state: Arc::new(AtomicU8::new(PublicSocketState::Active.as_u8())),
         }
     }
 
-    fn is_accepting(&self) -> bool {
-        self.accepting.load(Ordering::SeqCst)
+    fn accepts_request(&self, request: &signal_frame::Request<WorkingOperation>) -> bool {
+        match self.state() {
+            PublicSocketState::Active => true,
+            PublicSocketState::HandoverMode => request.payloads.iter().all(Self::is_read_request),
+            PublicSocketState::Closed => false,
+        }
+    }
+
+    fn accepts_owner_request(&self) -> bool {
+        matches!(self.state(), PublicSocketState::Active)
+    }
+
+    fn is_read_request(request: &WorkingOperation) -> bool {
+        matches!(request, WorkingOperation::Observe(_))
+    }
+
+    fn state(&self) -> PublicSocketState {
+        PublicSocketState::from_u8(self.state.load(Ordering::SeqCst))
+    }
+
+    fn enter_handover_mode(&self) {
+        self.state
+            .store(PublicSocketState::HandoverMode.as_u8(), Ordering::SeqCst);
     }
 
     fn close(&self) {
-        self.accepting.store(false, Ordering::SeqCst);
+        self.state
+            .store(PublicSocketState::Closed.as_u8(), Ordering::SeqCst);
         let _ = SocketBinding::remove(&self.ordinary_socket);
         let _ = SocketBinding::remove(&self.owner_socket);
+    }
+}
+
+impl PublicSocketState {
+    const fn as_u8(self) -> u8 {
+        match self {
+            Self::Active => 0,
+            Self::HandoverMode => 1,
+            Self::Closed => 2,
+        }
+    }
+
+    fn from_u8(value: u8) -> Self {
+        match value {
+            0 => Self::Active,
+            1 => Self::HandoverMode,
+            _ => Self::Closed,
+        }
     }
 }
 
