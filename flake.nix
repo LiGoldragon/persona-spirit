@@ -95,6 +95,10 @@
             inherit cargoArtifacts;
             cargoTestExtraArgs = "--test daemon persona_spirit_upgrade_completion_rejects_commit_sequence_drift_after_readiness -- --exact";
           });
+          test-upgrade-mirror-applies-stamped-entry = craneLib.cargoTest (commonArguments // {
+            inherit cargoArtifacts;
+            cargoTestExtraArgs = "--test daemon persona_spirit_upgrade_mirror_applies_stamped_entry_after_completion -- --exact";
+          });
           test-sema-projection = craneLib.cargoTest (commonArguments // {
             inherit cargoArtifacts;
             cargoTestExtraArgs = "--test sema_projection";

@@ -18,6 +18,8 @@ use super::store;
 use super::subscription;
 use super::trace::{ActorTrace, TraceAction, TraceNode};
 
+const MIRROR_KIND_STAMPED_ENTRY: &str = "StampedEntry";
+
 pub struct SpiritRoot {
     owner: ActorRef<owner::OwnerPlane>,
     ingress: ActorRef<ingress::IngressPhase>,
@@ -300,10 +302,54 @@ impl SpiritRoot {
                     }
                 }
             }
-            signal_version_handover::Operation::Mirror(payload) => Self::handover_rejected(
-                payload.component,
-                signal_version_handover::HandoverRejectionReason::NotReady,
-            ),
+            signal_version_handover::Operation::Mirror(payload) => {
+                if !matches!(self.handover, HandoverState::PrivateUpgradeOnly) {
+                    Self::handover_rejected(
+                        payload.component,
+                        signal_version_handover::HandoverRejectionReason::NotReady,
+                    )
+                } else if payload.kind.as_str() != MIRROR_KIND_STAMPED_ENTRY {
+                    Self::handover_rejected(
+                        payload.component,
+                        signal_version_handover::HandoverRejectionReason::SchemaMismatch,
+                    )
+                } else {
+                    match rkyv::from_bytes::<crate::store::StampedEntry, rkyv::rancor::Error>(
+                        &payload.payload,
+                    ) {
+                        Ok(entry) => {
+                            let component = payload.component.clone();
+                            let captured = self
+                                .store
+                                .ask(store::CaptureEntry { entry, trace })
+                                .await
+                                .map_err(Self::pipeline_send_error)?;
+                            let (_reply, capture_trace) = captured.into_parts();
+                            let marker = self
+                                .store
+                                .ask(store::ReadHandoverMarker {
+                                    request: signal_version_handover::MarkerRequest {
+                                        component: component.clone(),
+                                    },
+                                    trace: capture_trace,
+                                })
+                                .await
+                                .map_err(Self::pipeline_send_error)?;
+                            trace = marker.trace;
+                            signal_version_handover::Reply::MirrorAcknowledged(
+                                signal_version_handover::MirrorAcknowledgement {
+                                    component,
+                                    write_counter: marker.marker.write_counter,
+                                },
+                            )
+                        }
+                        Err(_error) => Self::handover_rejected(
+                            payload.component,
+                            signal_version_handover::HandoverRejectionReason::SchemaMismatch,
+                        ),
+                    }
+                }
+            }
             signal_version_handover::Operation::Divergence(payload) => {
                 signal_version_handover::Reply::DivergenceAcknowledged(
                     signal_version_handover::DivergenceAcknowledgement {

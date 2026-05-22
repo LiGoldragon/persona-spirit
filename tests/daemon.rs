@@ -12,7 +12,7 @@ use owner_signal_persona_spirit::{
 };
 use persona_spirit::{
     BootstrapPolicyPath, DaemonConfiguration, DaemonRuntime, SingleArgument, SocketMode,
-    SocketPath, StorePath, ordinary, owner, upgrade,
+    SocketPath, StorePath, ordinary, owner, store::StampedEntry, upgrade,
 };
 use signal_frame::{
     AcceptedOutcome, BatchFailureReason, CommitStatus, ExchangeIdentifier, ExchangeLane,
@@ -20,16 +20,16 @@ use signal_frame::{
     SessionEpoch, SubReply,
 };
 use signal_persona_spirit::{
-    Context, Entry, Frame, FrameBody, Kind, Observation, ObservationMode,
+    Context, Date, Entry, Frame, FrameBody, Kind, Observation, ObservationMode,
     Operation as WorkingOperation, Quote, RecordQuery, Reply as WorkingReply, Statement,
-    StatementText, Summary, Topic,
+    StatementText, Summary, Time, Topic,
 };
 use signal_sema::Magnitude;
 use signal_version_handover::{
     HandoverAcceptance, HandoverFinalization, HandoverRejection, HandoverRejectionReason,
     MarkerRequest, Operation as UpgradeOperation, Reply as UpgradeReply,
 };
-use version_projection::ComponentName;
+use version_projection::{ComponentName, ContractVersion, RecordKind};
 
 #[derive(Debug, Clone)]
 struct DaemonFixture {
@@ -93,6 +93,14 @@ fn entry(summary: &str) -> Entry {
         certainty: Magnitude::Maximum,
         quote: Quote::new("daemon quote"),
     }
+}
+
+fn mirrored_stamped_entry_payload(summary: &str) -> Vec<u8> {
+    let entry = StampedEntry::new(entry(summary), Date::new(2026, 5, 22), Time::new(20, 52, 0));
+    rkyv::to_bytes::<rkyv::rancor::Error>(&entry)
+        .expect("stamped entry encodes")
+        .as_ref()
+        .to_vec()
 }
 
 fn observe_all() -> WorkingOperation {
@@ -435,16 +443,21 @@ fn persona_spirit_daemon_serves_version_handover_frames_through_upgrade_socket()
         .join()
         .expect("readiness client exits")
         .expect("readiness reply received");
+    let UpgradeReply::HandoverAccepted(HandoverAcceptance { accepted_marker }) = readiness_reply
+    else {
+        panic!("expected handover accepted, got {readiness_reply:?}");
+    };
+    assert_eq!(accepted_marker.component, marker.component);
+    assert_eq!(accepted_marker.commit_sequence, marker.commit_sequence);
+    assert_eq!(accepted_marker.write_counter, marker.write_counter);
     assert_eq!(
-        readiness_reply,
-        UpgradeReply::HandoverAccepted(HandoverAcceptance {
-            accepted_marker: marker.clone(),
-        })
+        accepted_marker.last_record_identifier,
+        marker.last_record_identifier
     );
 
     let completion_client = client.clone();
     let component_for_completion = component.clone();
-    let marker_for_completion = marker.clone();
+    let marker_for_completion = accepted_marker.clone();
     let completion_handle = thread::spawn(move || {
         completion_client.submit(UpgradeOperation::HandoverCompleted(
             signal_version_handover::CompletionReport {
@@ -463,7 +476,7 @@ fn persona_spirit_daemon_serves_version_handover_frames_through_upgrade_socket()
     assert_eq!(
         completion_reply,
         UpgradeReply::HandoverFinalized(HandoverFinalization {
-            finalized_marker: marker,
+            finalized_marker: accepted_marker,
         })
     );
 
@@ -610,11 +623,16 @@ fn persona_spirit_upgrade_completion_rejects_commit_sequence_drift_after_readine
         .join()
         .expect("readiness client exits")
         .expect("readiness reply received");
+    let UpgradeReply::HandoverAccepted(HandoverAcceptance { accepted_marker }) = readiness_reply
+    else {
+        panic!("expected handover accepted, got {readiness_reply:?}");
+    };
+    assert_eq!(accepted_marker.component, marker.component);
+    assert_eq!(accepted_marker.commit_sequence, marker.commit_sequence);
+    assert_eq!(accepted_marker.write_counter, marker.write_counter);
     assert_eq!(
-        readiness_reply,
-        UpgradeReply::HandoverAccepted(HandoverAcceptance {
-            accepted_marker: marker.clone(),
-        })
+        accepted_marker.last_record_identifier,
+        marker.last_record_identifier
     );
 
     let ordinary_client = fixture.client();
@@ -637,7 +655,7 @@ fn persona_spirit_upgrade_completion_rejects_commit_sequence_drift_after_readine
 
     let completion_client = client.clone();
     let component_for_completion = component.clone();
-    let marker_for_completion = marker.clone();
+    let marker_for_completion = accepted_marker.clone();
     let completion_handle = thread::spawn(move || {
         completion_client.submit(UpgradeOperation::HandoverCompleted(
             signal_version_handover::CompletionReport {
@@ -663,6 +681,144 @@ fn persona_spirit_upgrade_completion_rejects_commit_sequence_drift_after_readine
     assert!(
         fixture.ordinary_socket.as_path().exists(),
         "ordinary socket remains after drift rejection"
+    );
+
+    daemon.shutdown().expect("daemon shuts down");
+}
+
+#[test]
+fn persona_spirit_upgrade_mirror_applies_stamped_entry_after_completion() {
+    let fixture = DaemonFixture::new("upgrade-mirror-after-completion");
+    let mut daemon = DaemonRuntime::from_configuration(fixture.configuration())
+        .bind()
+        .expect("daemon binds");
+    let client = fixture.upgrade_client();
+    let component = ComponentName::new("persona-spirit");
+
+    let marker_client = client.clone();
+    let component_for_marker = component.clone();
+    let marker_handle = thread::spawn(move || {
+        marker_client.submit(UpgradeOperation::AskHandoverMarker(MarkerRequest {
+            component: component_for_marker,
+        }))
+    });
+    daemon
+        .serve_upgrade_one()
+        .expect("daemon serves marker exchange");
+    let marker_reply = marker_handle
+        .join()
+        .expect("marker client exits")
+        .expect("marker reply received");
+    let UpgradeReply::HandoverMarker(marker) = marker_reply else {
+        panic!("expected handover marker, got {marker_reply:?}");
+    };
+
+    let readiness_client = client.clone();
+    let component_for_readiness = component.clone();
+    let marker_for_readiness = marker.clone();
+    let readiness_handle = thread::spawn(move || {
+        readiness_client.submit(UpgradeOperation::ReadyToHandover(
+            signal_version_handover::ReadinessReport {
+                component: component_for_readiness,
+                source_marker: marker_for_readiness,
+            },
+        ))
+    });
+    daemon
+        .serve_upgrade_one()
+        .expect("daemon serves readiness exchange");
+    let readiness_reply = readiness_handle
+        .join()
+        .expect("readiness client exits")
+        .expect("readiness reply received");
+    let UpgradeReply::HandoverAccepted(HandoverAcceptance { accepted_marker }) = readiness_reply
+    else {
+        panic!("expected handover accepted, got {readiness_reply:?}");
+    };
+    assert_eq!(accepted_marker.component, marker.component);
+    assert_eq!(accepted_marker.commit_sequence, marker.commit_sequence);
+    assert_eq!(accepted_marker.write_counter, marker.write_counter);
+    assert_eq!(
+        accepted_marker.last_record_identifier,
+        marker.last_record_identifier
+    );
+
+    let completion_client = client.clone();
+    let component_for_completion = component.clone();
+    let marker_for_completion = accepted_marker.clone();
+    let completion_handle = thread::spawn(move || {
+        completion_client.submit(UpgradeOperation::HandoverCompleted(
+            signal_version_handover::CompletionReport {
+                component: component_for_completion,
+                accepted_marker: marker_for_completion,
+            },
+        ))
+    });
+    daemon
+        .serve_upgrade_one()
+        .expect("daemon serves completion exchange");
+    let completion_reply = completion_handle
+        .join()
+        .expect("completion client exits")
+        .expect("completion reply received");
+    assert_eq!(
+        completion_reply,
+        UpgradeReply::HandoverFinalized(HandoverFinalization {
+            finalized_marker: accepted_marker,
+        })
+    );
+
+    let mirror_client = client.clone();
+    let component_for_mirror = component.clone();
+    let mirror_handle = thread::spawn(move || {
+        mirror_client.submit(UpgradeOperation::Mirror(
+            signal_version_handover::MirrorPayload {
+                component: component_for_mirror,
+                source_version: ContractVersion::new([2; 32]),
+                target_version: ContractVersion::new([1; 32]),
+                kind: RecordKind::new("StampedEntry"),
+                payload: mirrored_stamped_entry_payload("mirrored after completion"),
+            },
+        ))
+    });
+    daemon
+        .serve_upgrade_one()
+        .expect("daemon serves mirror exchange");
+    let mirror_reply = mirror_handle
+        .join()
+        .expect("mirror client exits")
+        .expect("mirror reply received");
+    assert_eq!(
+        mirror_reply,
+        UpgradeReply::MirrorAcknowledged(signal_version_handover::MirrorAcknowledgement {
+            component: component.clone(),
+            write_counter: 1,
+        })
+    );
+
+    let marker_client = client.clone();
+    let component_for_marker = component.clone();
+    let marker_handle = thread::spawn(move || {
+        marker_client.submit(UpgradeOperation::AskHandoverMarker(MarkerRequest {
+            component: component_for_marker,
+        }))
+    });
+    daemon
+        .serve_upgrade_one()
+        .expect("daemon serves post-mirror marker exchange");
+    let marker_reply = marker_handle
+        .join()
+        .expect("marker client exits")
+        .expect("marker reply received");
+    let UpgradeReply::HandoverMarker(marker) = marker_reply else {
+        panic!("expected post-mirror marker, got {marker_reply:?}");
+    };
+    assert_eq!(marker.commit_sequence, 1);
+    assert_eq!(marker.write_counter, 1);
+    assert_eq!(marker.last_record_identifier, Some(1));
+    assert!(
+        !fixture.ordinary_socket.as_path().exists(),
+        "ordinary socket remains closed while mirror uses private upgrade socket"
     );
 
     daemon.shutdown().expect("daemon shuts down");

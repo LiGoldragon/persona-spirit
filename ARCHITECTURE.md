@@ -116,9 +116,11 @@ values. It is the private handover surface for a staged Spirit replacement:
 identifier, `ReadyToHandover` accepts only when the source marker still matches
 the local store, and `HandoverCompleted` finalizes only after a matching
 accepted readiness marker while the store marker remains unchanged. Completion
-then removes the ordinary and owner socket paths. The upgrade socket does not
-yet apply mirrored write payloads; that remains the next step before a
-zero-downtime cutover can replace the temporary sema-upgrade runner.
+then removes the ordinary and owner socket paths. The upgrade socket also
+applies the first mirrored write payload shape:
+`RecordKind("StampedEntry")` with component-private rkyv bytes. Broader
+cross-version projection remains the next step before a zero-downtime cutover
+can replace the temporary sema-upgrade runner.
 
 The daemon advances through three handover states:
 
@@ -140,8 +142,8 @@ stateDiagram-v2
   merely detecting the drift.
 - **PrivateUpgradeOnly** — ordinary and owner socket paths removed;
   only the upgrade socket remains bound; the daemon receives mirrored
-  writes from next if old-compat reads still consume the previous
-  shape, then retires.
+  `StampedEntry` writes from next if old-compat reads still consume the
+  previous shape, then retires.
 
 The `spirit` CLI is not a second runtime. It resolves its single argument as
 either a raw NOTA request record (argument begins with `(`) or a path to a NOTA
@@ -207,6 +209,7 @@ in-process.
 | The daemon serves private upgrade length-prefixed Signal frames through the actor root and store plane. | `persona_spirit_daemon_serves_version_handover_frames_through_upgrade_socket` asks for a handover marker, performs readiness, and completes handover through the upgrade socket. |
 | Handover completion requires prior accepted readiness. | `persona_spirit_upgrade_completion_requires_accepted_readiness` sends `HandoverCompleted` before `ReadyToHandover` and receives `HandoverRejected(NotReady)` while public sockets remain open. |
 | Handover completion rejects marker drift after readiness. | `persona_spirit_upgrade_completion_rejects_commit_sequence_drift_after_readiness` accepts readiness, writes a record through the ordinary socket, and receives `HandoverRejected(CommitSequenceAdvanced)` instead of falsely finalizing. |
+| Private-upgrade mirror can apply a component-private stamped entry after completion. | `persona_spirit_upgrade_mirror_applies_stamped_entry_after_completion` completes handover, sends `Mirror(RecordKind("StampedEntry"), bytes)`, receives `MirrorAcknowledged`, and verifies the marker advances while public sockets stay closed. |
 | Handover completion removes the ordinary and owner socket paths. | `persona_spirit_daemon_serves_version_handover_frames_through_upgrade_socket` completes handover and then verifies public socket paths are gone. |
 | Daemon shutdown removes all socket paths. | `persona_spirit_daemon_serves_signal_frames_through_actor_root` checks ordinary, owner, and upgrade sockets are removed after bounded serving. |
 | Signal-frame daemon ingress does not route through the NOTA decoder. | `persona_spirit_daemon_source_does_not_route_signal_frames_through_nota_decoder` checks the socket boundary calls `SubmitRequest`. |
