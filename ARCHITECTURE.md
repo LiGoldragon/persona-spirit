@@ -136,10 +136,10 @@ stateDiagram-v2
 - **Active** — ordinary, owner, and upgrade sockets all serve their
   respective contracts; public writes accepted. The steady state.
 - **HandoverMode** — ordinary and owner sockets remain bound. Current
-  implementation detects any public write that advances the commit
-  sequence and rejects completion as `CommitSequenceAdvanced`; the next
-  zero-downtime step is to pause or mirror those writes instead of
-  merely detecting the drift.
+  implementation freezes public writes so the accepted marker remains
+  stable through completion; ordinary reads remain available. If
+  Persona cannot complete the cutover, `RecoverFromFailure` returns the
+  daemon to `Active` before public socket paths are removed.
 - **PrivateUpgradeOnly** — ordinary and owner socket paths removed;
   only the upgrade socket remains bound; the daemon receives mirrored
   `StampedEntry` writes from next if old-compat reads still consume the
@@ -210,6 +210,7 @@ in-process.
 | Handover completion requires prior accepted readiness. | `persona_spirit_upgrade_completion_requires_accepted_readiness` sends `HandoverCompleted` before `ReadyToHandover` and receives `HandoverRejected(NotReady)` while public sockets remain open. |
 | Handover readiness rejects marker drift. | `persona_spirit_upgrade_readiness_rejects_commit_sequence_drift` reads marker N, accepts a public write, then receives `HandoverRejected(CommitSequenceAdvanced)` when it tries to enter handover mode from stale marker N. |
 | Handover readiness freezes public writes until completion. | `persona_spirit_upgrade_readiness_freezes_public_writes_until_completion` accepts readiness, rejects an ordinary `Record` write while still allowing an ordinary `Observe` read, then closes ordinary and owner socket paths after `HandoverCompleted`. |
+| Handover recovery reopens public writes after a failed readiness window. | `persona_spirit_upgrade_recovery_reopens_public_writes_after_readiness` accepts readiness, rejects a write while frozen, applies `RecoverFromFailure`, then accepts ordinary writes again. |
 | Private-upgrade mirror can apply a component-private stamped entry after completion. | `persona_spirit_upgrade_mirror_applies_stamped_entry_after_completion` completes handover, sends `Mirror(RecordKind("StampedEntry"), bytes)`, receives `MirrorAcknowledged`, and verifies the marker advances while public sockets stay closed. |
 | Handover completion removes the ordinary and owner socket paths. | `persona_spirit_daemon_serves_version_handover_frames_through_upgrade_socket` completes handover and then verifies public socket paths are gone. |
 | Daemon shutdown removes all socket paths. | `persona_spirit_daemon_serves_signal_frames_through_actor_root` checks ordinary, owner, and upgrade sockets are removed after bounded serving. |

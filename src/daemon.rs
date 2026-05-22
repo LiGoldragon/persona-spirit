@@ -1036,6 +1036,7 @@ impl UpgradeExchangeHandler {
     fn reply_to_operation(&self, request: UpgradeOperation) -> Result<SubReply<UpgradeReply>> {
         let freezes_public_writes = matches!(request, UpgradeOperation::ReadyToHandover(_));
         let closes_public_sockets = matches!(request, UpgradeOperation::HandoverCompleted(_));
+        let may_reopen_public_writes = matches!(request, UpgradeOperation::RecoverFromFailure(_));
         let reply = self
             .runtime
             .block_on(async {
@@ -1050,6 +1051,17 @@ impl UpgradeExchangeHandler {
         }
         if closes_public_sockets && matches!(reply, UpgradeReply::HandoverFinalized(_)) {
             self.public_sockets.close();
+        }
+        if may_reopen_public_writes
+            && matches!(
+                reply,
+                UpgradeReply::RecoveryCompleted(signal_version_handover::RecoveryResult {
+                    recovered: true,
+                    ..
+                })
+            )
+        {
+            self.public_sockets.leave_handover_mode();
         }
         Ok(SubReply::Ok(reply))
     }
@@ -1087,6 +1099,11 @@ impl PublicSockets {
     fn enter_handover_mode(&self) {
         self.state
             .store(PublicSocketState::HandoverMode.as_u8(), Ordering::SeqCst);
+    }
+
+    fn leave_handover_mode(&self) {
+        self.state
+            .store(PublicSocketState::Active.as_u8(), Ordering::SeqCst);
     }
 
     fn close(&self) {

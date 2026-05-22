@@ -99,6 +99,10 @@
             inherit cargoArtifacts;
             cargoTestExtraArgs = "--test daemon persona_spirit_upgrade_readiness_freezes_public_writes_until_completion -- --exact";
           });
+          test-upgrade-recovery-reopens-public-writes = craneLib.cargoTest (commonArguments // {
+            inherit cargoArtifacts;
+            cargoTestExtraArgs = "--test daemon persona_spirit_upgrade_recovery_reopens_public_writes_after_readiness -- --exact";
+          });
           test-upgrade-mirror-applies-stamped-entry = craneLib.cargoTest (commonArguments // {
             inherit cargoArtifacts;
             cargoTestExtraArgs = "--test daemon persona_spirit_upgrade_mirror_applies_stamped_entry_after_completion -- --exact";

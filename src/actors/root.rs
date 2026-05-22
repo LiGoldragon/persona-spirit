@@ -359,10 +359,18 @@ impl SpiritRoot {
                 )
             }
             signal_version_handover::Operation::RecoverFromFailure(request) => {
+                let recovered = match self.handover {
+                    HandoverState::Active => true,
+                    HandoverState::HandoverMode { .. } => {
+                        self.handover = HandoverState::Active;
+                        true
+                    }
+                    HandoverState::PrivateUpgradeOnly => false,
+                };
                 signal_version_handover::Reply::RecoveryCompleted(
                     signal_version_handover::RecoveryResult {
                         component: request.component,
-                        recovered: false,
+                        recovered,
                     },
                 )
             }

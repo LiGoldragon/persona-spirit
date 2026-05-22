@@ -777,6 +777,105 @@ fn persona_spirit_upgrade_readiness_freezes_public_writes_until_completion() {
 }
 
 #[test]
+fn persona_spirit_upgrade_recovery_reopens_public_writes_after_readiness() {
+    let fixture = DaemonFixture::new("upgrade-recovery-reopens-writes");
+    let mut daemon = DaemonRuntime::from_configuration(fixture.configuration())
+        .bind()
+        .expect("daemon binds");
+    let client = fixture.upgrade_client();
+    let component = ComponentName::new("persona-spirit");
+
+    let marker_client = client.clone();
+    let component_for_marker = component.clone();
+    let marker_handle = thread::spawn(move || {
+        marker_client.submit(UpgradeOperation::AskHandoverMarker(MarkerRequest {
+            component: component_for_marker,
+        }))
+    });
+    daemon
+        .serve_upgrade_one()
+        .expect("daemon serves marker exchange");
+    let marker_reply = marker_handle
+        .join()
+        .expect("marker client exits")
+        .expect("marker reply received");
+    let UpgradeReply::HandoverMarker(marker) = marker_reply else {
+        panic!("expected handover marker, got {marker_reply:?}");
+    };
+
+    let readiness_client = client.clone();
+    let component_for_readiness = component.clone();
+    let marker_for_readiness = marker.clone();
+    let readiness_handle = thread::spawn(move || {
+        readiness_client.submit(UpgradeOperation::ReadyToHandover(
+            signal_version_handover::ReadinessReport {
+                component: component_for_readiness,
+                source_marker: marker_for_readiness,
+            },
+        ))
+    });
+    daemon
+        .serve_upgrade_one()
+        .expect("daemon serves readiness exchange");
+    let readiness_reply = readiness_handle
+        .join()
+        .expect("readiness client exits")
+        .expect("readiness reply received");
+    assert!(matches!(readiness_reply, UpgradeReply::HandoverAccepted(_)));
+
+    let frozen_client = fixture.client();
+    let frozen_write = thread::spawn(move || {
+        frozen_client.submit(WorkingOperation::Record(entry("write while frozen")))
+    });
+    daemon
+        .serve_one()
+        .expect("daemon serves rejected ordinary write");
+    frozen_write
+        .join()
+        .expect("frozen write client exits")
+        .expect_err("ordinary write is rejected before recovery");
+
+    let recovery_client = client.clone();
+    let component_for_recovery = component.clone();
+    let recovery_handle = thread::spawn(move || {
+        recovery_client.submit(UpgradeOperation::RecoverFromFailure(
+            signal_version_handover::RecoveryRequest {
+                component: component_for_recovery,
+                failure_identifier: marker.commit_sequence,
+            },
+        ))
+    });
+    daemon
+        .serve_upgrade_one()
+        .expect("daemon serves recovery exchange");
+    let recovery_reply = recovery_handle
+        .join()
+        .expect("recovery client exits")
+        .expect("recovery reply received");
+    assert_eq!(
+        recovery_reply,
+        UpgradeReply::RecoveryCompleted(signal_version_handover::RecoveryResult {
+            component,
+            recovered: true,
+        })
+    );
+
+    let recovered_client = fixture.client();
+    let recovered_write = thread::spawn(move || {
+        recovered_client.submit(WorkingOperation::Record(entry("write after recovery")))
+    });
+    daemon
+        .serve_one()
+        .expect("daemon serves recovered ordinary write");
+    recovered_write
+        .join()
+        .expect("recovered write client exits")
+        .expect("ordinary write is accepted after recovery");
+
+    daemon.shutdown().expect("daemon shuts down");
+}
+
+#[test]
 fn persona_spirit_upgrade_mirror_applies_stamped_entry_after_completion() {
     let fixture = DaemonFixture::new("upgrade-mirror-after-completion");
     let mut daemon = DaemonRuntime::from_configuration(fixture.configuration())
