@@ -285,7 +285,7 @@ dependencies = [
 
 [[package]]
 name = "persona-spirit"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "kameo",
  "nota-codec",
@@ -514,8 +514,8 @@ dependencies = [
 
 [[package]]
 name = "signal-persona-spirit"
-version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=operator%2Fspirit-response-protocol#d7b22bfb77b91cb2693b9fdb04f2115825ebee2f"
+version = "0.1.1"
+source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#5f7d4f4215f7ee0c82641d1dc081c9380bf0e0a1"
 dependencies = [
  "nota-codec",
  "rkyv",
