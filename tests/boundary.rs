@@ -13,6 +13,7 @@ use signal_frame::CommandLineSocket;
 struct StoreFixture {
     ordinary_socket: SocketPath,
     owner_socket: SocketPath,
+    upgrade_socket: SocketPath,
     store: StorePath,
 }
 
@@ -26,11 +27,14 @@ impl StoreFixture {
         ordinary_socket.push(format!("persona-spirit-{test_name}-{nanos}-ordinary.sock"));
         let mut owner_socket = std::env::temp_dir();
         owner_socket.push(format!("persona-spirit-{test_name}-{nanos}-owner.sock"));
+        let mut upgrade_socket = std::env::temp_dir();
+        upgrade_socket.push(format!("persona-spirit-{test_name}-{nanos}-upgrade.sock"));
         let mut store = std::env::temp_dir();
         store.push(format!("persona-spirit-{test_name}-{nanos}.redb"));
         Self {
             ordinary_socket: SocketPath::new(ordinary_socket.to_string_lossy().into_owned()),
             owner_socket: SocketPath::new(owner_socket.to_string_lossy().into_owned()),
+            upgrade_socket: SocketPath::new(upgrade_socket.to_string_lossy().into_owned()),
             store: StorePath::new(store.to_string_lossy().into_owned()),
         }
     }
@@ -43,6 +47,7 @@ impl StoreFixture {
         let daemon = DaemonRuntime::from_configuration(DaemonConfiguration::new(
             self.ordinary_socket.clone(),
             self.owner_socket.clone(),
+            self.upgrade_socket.clone(),
             self.store.clone(),
             SocketMode::from_octal(0o600),
         ))

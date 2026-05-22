@@ -296,9 +296,11 @@ dependencies = [
  "signal-executor",
  "signal-frame",
  "signal-persona-spirit",
- "signal-sema",
+ "signal-sema 0.1.0 (git+https://github.com/LiGoldragon/signal-sema.git?branch=main)",
+ "signal-version-handover",
  "thiserror",
  "tokio",
+ "version-projection",
 ]
 
 [[package]]
@@ -421,11 +423,12 @@ dependencies = [
 [[package]]
 name = "sema-engine"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/sema-engine.git?branch=main#d73701f3698568d0e00022d3fd158633892b6eff"
+source = "git+https://github.com/LiGoldragon/sema-engine.git?branch=main#e0a7153c8476ece889c9d251c73fb55471d8e011"
 dependencies = [
  "rkyv",
  "sema",
  "signal-core",
+ "signal-sema 0.1.0 (git+https://github.com/LiGoldragon/signal-sema.git)",
  "thiserror",
 ]
 
@@ -487,7 +490,7 @@ source = "git+https://github.com/LiGoldragon/signal-executor.git?branch=main#7b0
 dependencies = [
  "rkyv",
  "signal-frame",
- "signal-sema",
+ "signal-sema 0.1.0 (git+https://github.com/LiGoldragon/signal-sema.git?branch=main)",
  "thiserror",
 ]
 
@@ -520,7 +523,7 @@ dependencies = [
  "nota-codec",
  "rkyv",
  "signal-frame",
- "signal-sema",
+ "signal-sema 0.1.0 (git+https://github.com/LiGoldragon/signal-sema.git?branch=main)",
  "thiserror",
 ]
 
@@ -532,6 +535,28 @@ dependencies = [
  "nota-codec",
  "rkyv",
  "thiserror",
+]
+
+[[package]]
+name = "signal-sema"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/signal-sema.git#e83fd008d2128bd15f1a7d2c7bd41f10da2de500"
+dependencies = [
+ "nota-codec",
+ "rkyv",
+ "thiserror",
+]
+
+[[package]]
+name = "signal-version-handover"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/signal-version-handover.git?branch=main#f2dfe3b48261bdf933dc24a8980dac2b39f3e319"
+dependencies = [
+ "nota-codec",
+ "rkyv",
+ "signal-frame",
+ "thiserror",
+ "version-projection",
 ]
 
 [[package]]
@@ -659,6 +684,16 @@ checksum = "ddd74a9687298c6858e9b88ec8935ec45d22e8fd5e6394fa1bd4e99a87789c76"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "version-projection"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/version-projection.git?branch=main#69bd2dd01e457f86ce48f7e9347b2ea6fb6d3620"
+dependencies = [
+ "nota-codec",
+ "rkyv",
+ "thiserror",
 ]
 
 [[package]]

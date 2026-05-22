@@ -2,7 +2,10 @@ use std::io::{Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use std::thread;
 
 use nota_codec::{Decoder, NotaDecode, NotaTransparent};
@@ -11,11 +14,15 @@ use owner_signal_persona_spirit::{
     Reply as OwnerReply,
 };
 use signal_frame::{
-    ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, RequestPayload, SessionEpoch,
-    SubReply,
+    ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, RequestPayload,
+    RequestRejectionReason, SessionEpoch, SubReply,
 };
 use signal_persona_spirit::{
     Frame, FrameBody, Operation as WorkingOperation, Reply as WorkingReply,
+};
+use signal_version_handover::{
+    Frame as UpgradeFrame, FrameBody as UpgradeFrameBody, Operation as UpgradeOperation,
+    Reply as UpgradeReply,
 };
 
 use crate::{
@@ -29,6 +36,7 @@ const DEFAULT_MAXIMUM_FRAME_BYTES: usize = 1024 * 1024;
 pub struct DaemonConfiguration {
     pub ordinary_socket_path: SocketPath,
     pub owner_socket_path: SocketPath,
+    pub upgrade_socket_path: SocketPath,
     pub store_path: StorePath,
     pub socket_mode: SocketMode,
     pub bootstrap_policy_path: Option<BootstrapPolicyPath>,
@@ -88,6 +96,27 @@ pub mod owner {
     }
 }
 
+pub mod upgrade {
+    use super::{DEFAULT_MAXIMUM_FRAME_BYTES, SocketPath};
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct FrameCodec {
+        pub(super) maximum_frame_bytes: usize,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct SignalClient {
+        pub(super) socket: SocketPath,
+        pub(super) codec: FrameCodec,
+    }
+
+    impl Default for FrameCodec {
+        fn default() -> Self {
+            Self::new(DEFAULT_MAXIMUM_FRAME_BYTES)
+        }
+    }
+}
+
 pub struct DaemonRuntime {
     configuration: DaemonConfiguration,
 }
@@ -95,12 +124,16 @@ pub struct DaemonRuntime {
 pub struct BoundDaemon {
     ordinary_socket: SocketPath,
     owner_socket: SocketPath,
+    upgrade_socket: SocketPath,
     ordinary_listener: UnixListener,
     owner_listener: UnixListener,
+    upgrade_listener: UnixListener,
     runtime: Arc<tokio::runtime::Runtime>,
     root: kameo::actor::ActorRef<SpiritRoot>,
     codec: ordinary::FrameCodec,
     owner_codec: owner::FrameCodec,
+    upgrade_codec: upgrade::FrameCodec,
+    public_sockets: PublicSockets,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -116,6 +149,12 @@ pub struct ReceivedOwnerRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReceivedUpgradeRequest {
+    exchange: ExchangeIdentifier,
+    request: signal_frame::Request<UpgradeOperation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServedExchange {
     reply: Reply<WorkingReply>,
 }
@@ -125,16 +164,30 @@ pub struct ServedOwnerExchange {
     reply: Reply<OwnerReply>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ServedUpgradeExchange {
+    reply: Reply<UpgradeReply>,
+}
+
+#[derive(Debug, Clone)]
+struct PublicSockets {
+    ordinary_socket: SocketPath,
+    owner_socket: SocketPath,
+    accepting: Arc<AtomicBool>,
+}
+
 impl DaemonConfiguration {
     pub fn new(
         ordinary_socket_path: SocketPath,
         owner_socket_path: SocketPath,
+        upgrade_socket_path: SocketPath,
         store_path: StorePath,
         socket_mode: SocketMode,
     ) -> Self {
         Self {
             ordinary_socket_path,
             owner_socket_path,
+            upgrade_socket_path,
             store_path,
             socket_mode,
             bootstrap_policy_path: None,
@@ -375,6 +428,89 @@ impl owner::FrameCodec {
     }
 }
 
+impl upgrade::FrameCodec {
+    pub const fn new(maximum_frame_bytes: usize) -> Self {
+        Self {
+            maximum_frame_bytes,
+        }
+    }
+
+    pub fn read_frame(&self, stream: &mut UnixStream) -> Result<UpgradeFrame> {
+        let mut prefix = [0_u8; 4];
+        stream
+            .read_exact(&mut prefix)
+            .map_err(Error::input_output)?;
+        let length = u32::from_be_bytes(prefix) as usize;
+        if length > self.maximum_frame_bytes {
+            return Err(Error::FrameTooLarge {
+                found: length,
+                limit: self.maximum_frame_bytes,
+            });
+        }
+
+        let mut bytes = Vec::with_capacity(4 + length);
+        bytes.extend_from_slice(&prefix);
+        bytes.resize(4 + length, 0);
+        stream
+            .read_exact(&mut bytes[4..])
+            .map_err(Error::input_output)?;
+        UpgradeFrame::decode_length_prefixed(&bytes).map_err(Error::signal_frame)
+    }
+
+    pub fn write_frame(&self, stream: &mut UnixStream, frame: &UpgradeFrame) -> Result<()> {
+        let bytes = frame
+            .encode_length_prefixed()
+            .map_err(Error::signal_frame)?;
+        stream.write_all(&bytes).map_err(Error::input_output)?;
+        stream.flush().map_err(Error::input_output)
+    }
+
+    pub fn request_frame(&self, request: UpgradeOperation) -> UpgradeFrame {
+        UpgradeFrame::new(UpgradeFrameBody::Request {
+            exchange: self.exchange(),
+            request: request.into_request(),
+        })
+    }
+
+    pub fn reply_frame(
+        &self,
+        exchange: ExchangeIdentifier,
+        reply: Reply<UpgradeReply>,
+    ) -> UpgradeFrame {
+        UpgradeFrame::new(UpgradeFrameBody::Reply { exchange, reply })
+    }
+
+    pub fn request_from_frame(&self, frame: UpgradeFrame) -> Result<ReceivedUpgradeRequest> {
+        match frame.into_body() {
+            UpgradeFrameBody::Request { exchange, request } => {
+                Ok(ReceivedUpgradeRequest { exchange, request })
+            }
+            other => Err(Error::UnexpectedFrame {
+                expected: "upgrade request",
+                got: format!("{other:?}"),
+            }),
+        }
+    }
+
+    pub fn reply_from_frame(&self, frame: UpgradeFrame) -> Result<Reply<UpgradeReply>> {
+        match frame.into_body() {
+            UpgradeFrameBody::Reply { reply, .. } => Ok(reply),
+            other => Err(Error::UnexpectedFrame {
+                expected: "upgrade reply",
+                got: format!("{other:?}"),
+            }),
+        }
+    }
+
+    fn exchange(&self) -> ExchangeIdentifier {
+        ExchangeIdentifier::new(
+            SessionEpoch::new(0),
+            ExchangeLane::Connector,
+            LaneSequence::first(),
+        )
+    }
+}
+
 impl DaemonRuntime {
     pub fn from_configuration(configuration: DaemonConfiguration) -> Self {
         Self { configuration }
@@ -399,10 +535,16 @@ impl DaemonRuntime {
             &self.configuration.owner_socket_path,
             self.configuration.socket_mode,
         )?;
+        SocketBinding::bind(
+            &self.configuration.upgrade_socket_path,
+            self.configuration.socket_mode,
+        )?;
         let ordinary_listener =
             UnixListener::bind(self.configuration.ordinary_socket_path.as_path())
                 .map_err(Error::input_output)?;
         let owner_listener = UnixListener::bind(self.configuration.owner_socket_path.as_path())
+            .map_err(Error::input_output)?;
+        let upgrade_listener = UnixListener::bind(self.configuration.upgrade_socket_path.as_path())
             .map_err(Error::input_output)?;
         std::fs::set_permissions(
             self.configuration.ordinary_socket_path.as_path(),
@@ -411,6 +553,11 @@ impl DaemonRuntime {
         .map_err(Error::input_output)?;
         std::fs::set_permissions(
             self.configuration.owner_socket_path.as_path(),
+            std::fs::Permissions::from_mode(self.configuration.socket_mode.as_octal()),
+        )
+        .map_err(Error::input_output)?;
+        std::fs::set_permissions(
+            self.configuration.upgrade_socket_path.as_path(),
             std::fs::Permissions::from_mode(self.configuration.socket_mode.as_octal()),
         )
         .map_err(Error::input_output)?;
@@ -428,14 +575,21 @@ impl DaemonRuntime {
             ),
         ))?;
         Ok(BoundDaemon {
-            ordinary_socket: self.configuration.ordinary_socket_path,
-            owner_socket: self.configuration.owner_socket_path,
+            ordinary_socket: self.configuration.ordinary_socket_path.clone(),
+            owner_socket: self.configuration.owner_socket_path.clone(),
+            upgrade_socket: self.configuration.upgrade_socket_path,
             ordinary_listener,
             owner_listener,
+            upgrade_listener,
             runtime,
             root,
             codec: ordinary::FrameCodec::default(),
             owner_codec: owner::FrameCodec::default(),
+            upgrade_codec: upgrade::FrameCodec::default(),
+            public_sockets: PublicSockets::open(
+                self.configuration.ordinary_socket_path.clone(),
+                self.configuration.owner_socket_path.clone(),
+            ),
         })
     }
 }
@@ -453,6 +607,10 @@ impl BoundDaemon {
         self.owner_socket.as_path()
     }
 
+    pub fn upgrade_socket_path(&self) -> &Path {
+        self.upgrade_socket.as_path()
+    }
+
     pub fn serve_one(&mut self) -> Result<ServedExchange> {
         let (mut stream, _address) = self
             .ordinary_listener
@@ -460,7 +618,11 @@ impl BoundDaemon {
             .map_err(Error::input_output)?;
         let frame = self.codec.read_frame(&mut stream)?;
         let received = self.codec.request_from_frame(frame)?;
-        let reply = self.reply_to_request(received.request)?;
+        let reply = if self.public_sockets.is_accepting() {
+            self.reply_to_request(received.request)?
+        } else {
+            Reply::rejected(RequestRejectionReason::Internal)
+        };
         let frame = self.codec.reply_frame(received.exchange, reply.clone());
         self.codec.write_frame(&mut stream, &frame)?;
         Ok(ServedExchange::new(reply))
@@ -470,12 +632,31 @@ impl BoundDaemon {
         let (mut stream, _address) = self.owner_listener.accept().map_err(Error::input_output)?;
         let frame = self.owner_codec.read_frame(&mut stream)?;
         let received = self.owner_codec.request_from_frame(frame)?;
-        let reply = self.reply_to_owner_request(received.request)?;
+        let reply = if self.public_sockets.is_accepting() {
+            self.reply_to_owner_request(received.request)?
+        } else {
+            Reply::rejected(RequestRejectionReason::Internal)
+        };
         let frame = self
             .owner_codec
             .reply_frame(received.exchange, reply.clone());
         self.owner_codec.write_frame(&mut stream, &frame)?;
         Ok(ServedOwnerExchange::new(reply))
+    }
+
+    pub fn serve_upgrade_one(&mut self) -> Result<ServedUpgradeExchange> {
+        let (mut stream, _address) = self
+            .upgrade_listener
+            .accept()
+            .map_err(Error::input_output)?;
+        let frame = self.upgrade_codec.read_frame(&mut stream)?;
+        let received = self.upgrade_codec.request_from_frame(frame)?;
+        let reply = self.reply_to_upgrade_request(received.request)?;
+        let frame = self
+            .upgrade_codec
+            .reply_frame(received.exchange, reply.clone());
+        self.upgrade_codec.write_frame(&mut stream, &frame)?;
+        Ok(ServedUpgradeExchange::new(reply))
     }
 
     pub fn serve_count(mut self, count: usize) -> Result<Vec<ServedExchange>> {
@@ -502,6 +683,18 @@ impl BoundDaemon {
         }
     }
 
+    pub fn serve_upgrade_count(mut self, count: usize) -> Result<Vec<ServedUpgradeExchange>> {
+        let result = (0..count)
+            .map(|_| self.serve_upgrade_one())
+            .collect::<Result<Vec<_>>>();
+        let shutdown = self.shutdown();
+        match (result, shutdown) {
+            (Ok(served), Ok(())) => Ok(served),
+            (Err(error), _) => Err(error),
+            (Ok(_served), Err(error)) => Err(error),
+        }
+    }
+
     pub fn serve_forever(self) -> Result<()> {
         let ordinary = SocketServer::new(
             self.ordinary_listener
@@ -510,6 +703,7 @@ impl BoundDaemon {
             self.root.clone(),
             self.runtime.clone(),
             self.codec,
+            self.public_sockets.clone(),
         );
         let owner = OwnerSocketServer::new(
             self.owner_listener
@@ -518,24 +712,40 @@ impl BoundDaemon {
             self.root.clone(),
             self.runtime.clone(),
             self.owner_codec,
+            self.public_sockets.clone(),
+        );
+        let upgrade = UpgradeSocketServer::new(
+            self.upgrade_listener
+                .try_clone()
+                .map_err(Error::input_output)?,
+            self.root.clone(),
+            self.runtime.clone(),
+            self.upgrade_codec,
+            self.public_sockets.clone(),
         );
         let ordinary_handle = thread::spawn(move || ordinary.serve_forever());
-        let owner_result = owner.serve_forever();
+        let owner_handle = thread::spawn(move || owner.serve_forever());
+        let upgrade_result = upgrade.serve_forever();
         let ordinary_result = ordinary_handle
             .join()
             .map_err(|_| Error::actor_runtime("ordinary socket thread panicked"))?;
-        owner_result.and(ordinary_result)
+        let owner_result = owner_handle
+            .join()
+            .map_err(|_| Error::actor_runtime("owner socket thread panicked"))?;
+        upgrade_result.and(owner_result).and(ordinary_result)
     }
 
     pub fn shutdown(self) -> Result<()> {
         let stop = self.runtime.block_on(SpiritRoot::stop(self.root));
         let remove_ordinary = SocketBinding::remove(&self.ordinary_socket);
         let remove_owner = SocketBinding::remove(&self.owner_socket);
-        match (stop, remove_ordinary, remove_owner) {
-            (Ok(()), Ok(()), Ok(())) => Ok(()),
-            (Err(error), _, _) => Err(error),
-            (Ok(()), Err(error), _) => Err(error),
-            (Ok(()), Ok(()), Err(error)) => Err(error),
+        let remove_upgrade = SocketBinding::remove(&self.upgrade_socket);
+        match (stop, remove_ordinary, remove_owner, remove_upgrade) {
+            (Ok(()), Ok(()), Ok(()), Ok(())) => Ok(()),
+            (Err(error), _, _, _) => Err(error),
+            (Ok(()), Err(error), _, _) => Err(error),
+            (Ok(()), Ok(()), Err(error), _) => Err(error),
+            (Ok(()), Ok(()), Ok(()), Err(error)) => Err(error),
         }
     }
 
@@ -553,6 +763,18 @@ impl BoundDaemon {
     ) -> Result<Reply<OwnerReply>> {
         OwnerExchangeHandler::new(self.root.clone(), self.runtime.clone()).reply_to_request(request)
     }
+
+    fn reply_to_upgrade_request(
+        &self,
+        request: signal_frame::Request<UpgradeOperation>,
+    ) -> Result<Reply<UpgradeReply>> {
+        UpgradeExchangeHandler::new(
+            self.root.clone(),
+            self.runtime.clone(),
+            self.public_sockets.clone(),
+        )
+        .reply_to_request(request)
+    }
 }
 
 struct SocketServer {
@@ -560,6 +782,7 @@ struct SocketServer {
     root: kameo::actor::ActorRef<SpiritRoot>,
     runtime: Arc<tokio::runtime::Runtime>,
     codec: ordinary::FrameCodec,
+    public_sockets: PublicSockets,
 }
 
 struct OwnerSocketServer {
@@ -567,6 +790,15 @@ struct OwnerSocketServer {
     root: kameo::actor::ActorRef<SpiritRoot>,
     runtime: Arc<tokio::runtime::Runtime>,
     codec: owner::FrameCodec,
+    public_sockets: PublicSockets,
+}
+
+struct UpgradeSocketServer {
+    listener: UnixListener,
+    root: kameo::actor::ActorRef<SpiritRoot>,
+    runtime: Arc<tokio::runtime::Runtime>,
+    codec: upgrade::FrameCodec,
+    public_sockets: PublicSockets,
 }
 
 struct OrdinaryExchangeHandler {
@@ -579,18 +811,26 @@ struct OwnerExchangeHandler {
     runtime: Arc<tokio::runtime::Runtime>,
 }
 
+struct UpgradeExchangeHandler {
+    root: kameo::actor::ActorRef<SpiritRoot>,
+    runtime: Arc<tokio::runtime::Runtime>,
+    public_sockets: PublicSockets,
+}
+
 impl SocketServer {
     fn new(
         listener: UnixListener,
         root: kameo::actor::ActorRef<SpiritRoot>,
         runtime: Arc<tokio::runtime::Runtime>,
         codec: ordinary::FrameCodec,
+        public_sockets: PublicSockets,
     ) -> Self {
         Self {
             listener,
             root,
             runtime,
             codec,
+            public_sockets,
         }
     }
 
@@ -606,8 +846,12 @@ impl SocketServer {
         let (mut stream, _address) = self.listener.accept().map_err(Error::input_output)?;
         let frame = self.codec.read_frame(&mut stream)?;
         let received = self.codec.request_from_frame(frame)?;
-        let reply = OrdinaryExchangeHandler::new(self.root.clone(), self.runtime.clone())
-            .reply_to_request(received.request)?;
+        let reply = if self.public_sockets.is_accepting() {
+            OrdinaryExchangeHandler::new(self.root.clone(), self.runtime.clone())
+                .reply_to_request(received.request)?
+        } else {
+            Reply::rejected(RequestRejectionReason::Internal)
+        };
         let frame = self.codec.reply_frame(received.exchange, reply.clone());
         self.codec.write_frame(&mut stream, &frame)?;
         Ok(ServedExchange::new(reply))
@@ -620,12 +864,14 @@ impl OwnerSocketServer {
         root: kameo::actor::ActorRef<SpiritRoot>,
         runtime: Arc<tokio::runtime::Runtime>,
         codec: owner::FrameCodec,
+        public_sockets: PublicSockets,
     ) -> Self {
         Self {
             listener,
             root,
             runtime,
             codec,
+            public_sockets,
         }
     }
 
@@ -641,11 +887,56 @@ impl OwnerSocketServer {
         let (mut stream, _address) = self.listener.accept().map_err(Error::input_output)?;
         let frame = self.codec.read_frame(&mut stream)?;
         let received = self.codec.request_from_frame(frame)?;
-        let reply = OwnerExchangeHandler::new(self.root.clone(), self.runtime.clone())
-            .reply_to_request(received.request)?;
+        let reply = if self.public_sockets.is_accepting() {
+            OwnerExchangeHandler::new(self.root.clone(), self.runtime.clone())
+                .reply_to_request(received.request)?
+        } else {
+            Reply::rejected(RequestRejectionReason::Internal)
+        };
         let frame = self.codec.reply_frame(received.exchange, reply.clone());
         self.codec.write_frame(&mut stream, &frame)?;
         Ok(ServedOwnerExchange::new(reply))
+    }
+}
+
+impl UpgradeSocketServer {
+    fn new(
+        listener: UnixListener,
+        root: kameo::actor::ActorRef<SpiritRoot>,
+        runtime: Arc<tokio::runtime::Runtime>,
+        codec: upgrade::FrameCodec,
+        public_sockets: PublicSockets,
+    ) -> Self {
+        Self {
+            listener,
+            root,
+            runtime,
+            codec,
+            public_sockets,
+        }
+    }
+
+    fn serve_forever(self) -> Result<()> {
+        loop {
+            if let Err(error) = self.serve_one() {
+                eprintln!("persona-spirit-daemon upgrade client error: {error}");
+            }
+        }
+    }
+
+    fn serve_one(&self) -> Result<ServedUpgradeExchange> {
+        let (mut stream, _address) = self.listener.accept().map_err(Error::input_output)?;
+        let frame = self.codec.read_frame(&mut stream)?;
+        let received = self.codec.request_from_frame(frame)?;
+        let reply = UpgradeExchangeHandler::new(
+            self.root.clone(),
+            self.runtime.clone(),
+            self.public_sockets.clone(),
+        )
+        .reply_to_request(received.request)?;
+        let frame = self.codec.reply_frame(received.exchange, reply.clone());
+        self.codec.write_frame(&mut stream, &frame)?;
+        Ok(ServedUpgradeExchange::new(reply))
     }
 }
 
@@ -705,6 +996,71 @@ impl OwnerExchangeHandler {
             })
             .map_err(|error| Error::actor_runtime(error.to_string()))?;
         Ok(SubReply::Ok(reply.into_reply()))
+    }
+}
+
+impl UpgradeExchangeHandler {
+    fn new(
+        root: kameo::actor::ActorRef<SpiritRoot>,
+        runtime: Arc<tokio::runtime::Runtime>,
+        public_sockets: PublicSockets,
+    ) -> Self {
+        Self {
+            root,
+            runtime,
+            public_sockets,
+        }
+    }
+
+    fn reply_to_request(
+        &self,
+        request: signal_frame::Request<UpgradeOperation>,
+    ) -> Result<Reply<UpgradeReply>> {
+        let replies = request
+            .payloads
+            .into_iter()
+            .map(|request| self.reply_to_operation(request))
+            .collect::<Result<Vec<_>>>()?;
+        Ok(Reply::committed(
+            NonEmpty::try_from_vec(replies).expect("request is non-empty"),
+        ))
+    }
+
+    fn reply_to_operation(&self, request: UpgradeOperation) -> Result<SubReply<UpgradeReply>> {
+        let closes_public_sockets = matches!(request, UpgradeOperation::HandoverCompleted(_));
+        let reply = self
+            .runtime
+            .block_on(async {
+                self.root
+                    .ask(crate::actors::root::SubmitUpgradeRequest { request })
+                    .await
+            })
+            .map_err(|error| Error::actor_runtime(error.to_string()))?;
+        let reply = reply.into_reply();
+        if closes_public_sockets && matches!(reply, UpgradeReply::HandoverFinalized(_)) {
+            self.public_sockets.close();
+        }
+        Ok(SubReply::Ok(reply))
+    }
+}
+
+impl PublicSockets {
+    fn open(ordinary_socket: SocketPath, owner_socket: SocketPath) -> Self {
+        Self {
+            ordinary_socket,
+            owner_socket,
+            accepting: Arc::new(AtomicBool::new(true)),
+        }
+    }
+
+    fn is_accepting(&self) -> bool {
+        self.accepting.load(Ordering::SeqCst)
+    }
+
+    fn close(&self) {
+        self.accepting.store(false, Ordering::SeqCst);
+        let _ = SocketBinding::remove(&self.ordinary_socket);
+        let _ = SocketBinding::remove(&self.owner_socket);
     }
 }
 
@@ -772,6 +1128,38 @@ impl owner::SignalClient {
     }
 }
 
+impl upgrade::SignalClient {
+    pub fn new(socket: SocketPath) -> Self {
+        Self {
+            socket,
+            codec: upgrade::FrameCodec::default(),
+        }
+    }
+
+    pub fn submit(&self, request: UpgradeOperation) -> Result<UpgradeReply> {
+        let mut stream = UnixStream::connect(self.socket.as_path()).map_err(Error::input_output)?;
+        let frame = self.codec.request_frame(request);
+        self.codec.write_frame(&mut stream, &frame)?;
+        let reply = self.codec.read_frame(&mut stream)?;
+        self.reply_payload(self.codec.reply_from_frame(reply)?)
+    }
+
+    fn reply_payload(&self, reply: Reply<UpgradeReply>) -> Result<UpgradeReply> {
+        match reply {
+            Reply::Accepted { per_operation, .. } => match per_operation.into_head() {
+                SubReply::Ok(payload) => Ok(payload),
+                other => Err(Error::UnexpectedFrame {
+                    expected: "accepted upgrade operation reply",
+                    got: format!("{other:?}"),
+                }),
+            },
+            Reply::Rejected { reason } => Err(Error::RequestRejected {
+                reason: reason.to_string(),
+            }),
+        }
+    }
+}
+
 impl ServedExchange {
     fn new(reply: Reply<WorkingReply>) -> Self {
         Self { reply }
@@ -788,6 +1176,16 @@ impl ServedOwnerExchange {
     }
 
     pub fn reply(&self) -> &Reply<OwnerReply> {
+        &self.reply
+    }
+}
+
+impl ServedUpgradeExchange {
+    fn new(reply: Reply<UpgradeReply>) -> Self {
+        Self { reply }
+    }
+
+    pub fn reply(&self) -> &Reply<UpgradeReply> {
         &self.reply
     }
 }

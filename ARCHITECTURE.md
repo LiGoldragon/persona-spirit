@@ -45,7 +45,7 @@ downstream owner-Mutate audit once the runtime lands.
 
 ## Actor topology
 
-The daemon keeps the Kameo actor tree alive behind two typed Unix sockets:
+The daemon keeps the Kameo actor tree alive behind three typed Unix sockets:
 
 ```mermaid
 flowchart LR
@@ -110,6 +110,15 @@ checks the `signal-frame::Request`, and submits each working-contract
 length-prefixed `owner-signal-persona-spirit::Frame` values and submits each
 owner-contract `Operation` directly to `OwnerPlane`.
 
+The upgrade socket reads length-prefixed `signal-version-handover::Frame`
+values. It is the private handover surface for a staged Spirit replacement:
+`AskHandoverMarker` reads the store's current commit sequence and last record
+identifier, `ReadyToHandover` accepts only when the source marker still matches
+the local store, and `HandoverCompleted` finalizes the marker and removes the
+ordinary and owner socket paths. The upgrade socket does not yet apply mirrored
+write payloads; that remains the next step before a zero-downtime cutover can
+replace the temporary sema-upgrade runner.
+
 The `spirit` CLI is not a second runtime. It resolves its single argument as
 either a raw NOTA request record (argument begins with `(`) or a path to a NOTA
 request file, peeks the request record head, routes it through the generated
@@ -171,7 +180,9 @@ in-process.
 | The daemon serves owner length-prefixed Signal frames through `OwnerPlane`. | `persona_spirit_daemon_serves_owner_signal_frames_through_owner_plane` writes and reads through the owner Unix socket. |
 | The ordinary socket rejects owner Signal frames. | `persona_spirit_ordinary_socket_rejects_owner_signal_frames` writes an owner frame to the ordinary socket and expects decode rejection. |
 | The owner socket rejects ordinary Signal frames. | `persona_spirit_owner_socket_rejects_ordinary_signal_frames` writes an ordinary frame to the owner socket and expects decode rejection. |
-| Daemon shutdown removes both socket paths. | `persona_spirit_daemon_serves_signal_frames_through_actor_root` checks both ordinary and owner sockets are removed after bounded serving. |
+| The daemon serves private upgrade length-prefixed Signal frames through the actor root and store plane. | `persona_spirit_daemon_serves_version_handover_frames_through_upgrade_socket` asks for a handover marker, performs readiness, and completes handover through the upgrade socket. |
+| Handover completion removes the ordinary and owner socket paths. | `persona_spirit_daemon_serves_version_handover_frames_through_upgrade_socket` completes handover and then verifies public socket paths are gone. |
+| Daemon shutdown removes all socket paths. | `persona_spirit_daemon_serves_signal_frames_through_actor_root` checks ordinary, owner, and upgrade sockets are removed after bounded serving. |
 | Signal-frame daemon ingress does not route through the NOTA decoder. | `persona_spirit_daemon_source_does_not_route_signal_frames_through_nota_decoder` checks the socket boundary calls `SubmitRequest`. |
 | The CLI acts as a daemon client without bypassing Signal. | `persona_spirit_client_can_send_nota_request_to_running_daemon` decodes NOTA then sends a Signal frame to the socket. |
 | The CLI can reach owner-only contract behavior through the owner socket. | `spirit_binary_routes_owner_request_to_owner_socket` sends `(Register (operator))` through `spirit` with only `PERSONA_SPIRIT_OWNER_SOCKET` configured. |
@@ -183,7 +194,7 @@ in-process.
 ```text
 src/lib.rs                         — module entry
 src/argument.rs                    — one-argument boundary
-src/daemon.rs                      — daemon configuration, bootstrap-policy source selection, socket binding, ordinary/owner frame codecs, signal clients
+src/daemon.rs                      — daemon configuration, bootstrap-policy source selection, socket binding, ordinary/owner/upgrade frame codecs, signal clients
 src/error.rs                       — typed error
 src/observation.rs                 — Spirit-local Command/Effect to payloadless signal-sema observation projection
 src/runtime.rs                     — CLI boundary that routes NOTA request heads through generated working/owner dispatch, converts selected request text to signal-frame traffic, and renders typed replies back to NOTA
@@ -229,10 +240,13 @@ Implemented now:
   a minimum-certainty `Clarification` record under topic `unclassified`;
 - `persona-spirit-daemon` typed configuration and ordinary/owner Unix socket
   binding;
+- private upgrade Unix socket binding for `signal-version-handover`;
 - length-prefixed RKYV ordinary Signal frame request/reply path over the
   ordinary daemon socket;
 - length-prefixed RKYV owner Signal frame request/reply path over the owner
   daemon socket;
+- length-prefixed RKYV upgrade Signal frame request/reply path over the
+  private upgrade socket for handover marker, readiness, and completion;
 - CLI socket-client mode for a running daemon;
 - actor trace witnesses for root, ingress, decode, dispatch, store, sema
   writer/reader, signal-executor, signal-sema observer, working state, reply
@@ -265,6 +279,7 @@ Not implemented:
 - LLM-backed intent classification;
 - owner-Mutate forwarding to mind;
 - subscription event delivery;
+- mirrored write replay through the private upgrade socket;
 - non-degenerate atomic execution for multi-operation ordinary batches or
   multi-command operation plans;
 - filesystem intent projection.

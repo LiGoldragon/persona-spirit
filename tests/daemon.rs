@@ -12,12 +12,12 @@ use owner_signal_persona_spirit::{
 };
 use persona_spirit::{
     BootstrapPolicyPath, DaemonConfiguration, DaemonRuntime, SingleArgument, SocketMode,
-    SocketPath, StorePath, ordinary, owner,
+    SocketPath, StorePath, ordinary, owner, upgrade,
 };
 use signal_frame::{
     AcceptedOutcome, BatchFailureReason, CommitStatus, ExchangeIdentifier, ExchangeLane,
-    LaneSequence, Reply, RequestBuilder, RequestPayload, RetryClassification, SessionEpoch,
-    SubReply,
+    LaneSequence, NonEmpty, Reply, RequestBuilder, RequestPayload, RetryClassification,
+    SessionEpoch, SubReply,
 };
 use signal_persona_spirit::{
     Context, Entry, Frame, FrameBody, Kind, Observation, ObservationMode,
@@ -25,11 +25,17 @@ use signal_persona_spirit::{
     StatementText, Summary, Topic,
 };
 use signal_sema::Magnitude;
+use signal_version_handover::{
+    HandoverAcceptance, HandoverFinalization, MarkerRequest, Operation as UpgradeOperation,
+    Reply as UpgradeReply,
+};
+use version_projection::ComponentName;
 
 #[derive(Debug, Clone)]
 struct DaemonFixture {
     ordinary_socket: SocketPath,
     owner_socket: SocketPath,
+    upgrade_socket: SocketPath,
     store: StorePath,
 }
 
@@ -43,11 +49,14 @@ impl DaemonFixture {
         socket.push(format!("persona-spirit-{test_name}-{nanos}-ordinary.sock"));
         let mut owner_socket = std::env::temp_dir();
         owner_socket.push(format!("persona-spirit-{test_name}-{nanos}-owner.sock"));
+        let mut upgrade_socket = std::env::temp_dir();
+        upgrade_socket.push(format!("persona-spirit-{test_name}-{nanos}-upgrade.sock"));
         let mut store = std::env::temp_dir();
         store.push(format!("persona-spirit-{test_name}-{nanos}.redb"));
         Self {
             ordinary_socket: SocketPath::new(socket.to_string_lossy().into_owned()),
             owner_socket: SocketPath::new(owner_socket.to_string_lossy().into_owned()),
+            upgrade_socket: SocketPath::new(upgrade_socket.to_string_lossy().into_owned()),
             store: StorePath::new(store.to_string_lossy().into_owned()),
         }
     }
@@ -56,6 +65,7 @@ impl DaemonFixture {
         DaemonConfiguration::new(
             self.ordinary_socket.clone(),
             self.owner_socket.clone(),
+            self.upgrade_socket.clone(),
             self.store.clone(),
             SocketMode::from_octal(0o600),
         )
@@ -67,6 +77,10 @@ impl DaemonFixture {
 
     fn owner_client(&self) -> owner::SignalClient {
         owner::SignalClient::new(self.owner_socket.clone())
+    }
+
+    fn upgrade_client(&self) -> upgrade::SignalClient {
+        upgrade::SignalClient::new(self.upgrade_socket.clone())
     }
 }
 
@@ -132,6 +146,7 @@ fn persona_spirit_daemon_serves_signal_frames_through_actor_root() {
         .expect("daemon binds");
     let ordinary_socket = fixture.ordinary_socket.clone();
     let owner_socket = fixture.owner_socket.clone();
+    let upgrade_socket = fixture.upgrade_socket.clone();
     let handle = thread::spawn(move || daemon.serve_count(2));
 
     let client = fixture.client();
@@ -171,6 +186,10 @@ fn persona_spirit_daemon_serves_signal_frames_through_actor_root() {
     assert!(
         !owner_socket.as_path().exists(),
         "daemon shutdown removes the owner socket path"
+    );
+    assert!(
+        !upgrade_socket.as_path().exists(),
+        "daemon shutdown removes the upgrade socket path"
     );
 }
 
@@ -361,6 +380,112 @@ fn persona_spirit_daemon_serves_owner_signal_frames_through_owner_plane() {
         .expect("daemon thread exits")
         .expect("daemon served two owner exchanges");
     assert_eq!(served.len(), 2);
+}
+
+#[test]
+fn persona_spirit_daemon_serves_version_handover_frames_through_upgrade_socket() {
+    let fixture = DaemonFixture::new("upgrade-signal-frame");
+    let mut daemon = DaemonRuntime::from_configuration(fixture.configuration())
+        .bind()
+        .expect("daemon binds");
+    let client = fixture.upgrade_client();
+    let component = ComponentName::new("persona-spirit");
+
+    let marker_client = client.clone();
+    let component_for_marker = component.clone();
+    let marker_handle = thread::spawn(move || {
+        marker_client.submit(UpgradeOperation::AskHandoverMarker(MarkerRequest {
+            component: component_for_marker,
+        }))
+    });
+    let served_marker = daemon
+        .serve_upgrade_one()
+        .expect("daemon serves marker exchange");
+    let marker_reply = marker_handle
+        .join()
+        .expect("marker client exits")
+        .expect("marker reply received");
+    assert_eq!(
+        served_marker.reply(),
+        &Reply::committed(NonEmpty::single(SubReply::Ok(marker_reply.clone())))
+    );
+    let UpgradeReply::HandoverMarker(marker) = marker_reply else {
+        panic!("expected handover marker, got {marker_reply:?}");
+    };
+    assert_eq!(marker.component, component);
+    assert_eq!(marker.commit_sequence, 0);
+    assert_eq!(marker.write_counter, 0);
+    assert_eq!(marker.last_record_identifier, None);
+
+    let readiness_client = client.clone();
+    let component_for_readiness = component.clone();
+    let marker_for_readiness = marker.clone();
+    let readiness_handle = thread::spawn(move || {
+        readiness_client.submit(UpgradeOperation::ReadyToHandover(
+            signal_version_handover::ReadinessReport {
+                component: component_for_readiness,
+                source_marker: marker_for_readiness,
+            },
+        ))
+    });
+    daemon
+        .serve_upgrade_one()
+        .expect("daemon serves readiness exchange");
+    let readiness_reply = readiness_handle
+        .join()
+        .expect("readiness client exits")
+        .expect("readiness reply received");
+    assert_eq!(
+        readiness_reply,
+        UpgradeReply::HandoverAccepted(HandoverAcceptance {
+            accepted_marker: marker.clone(),
+        })
+    );
+
+    let completion_client = client.clone();
+    let component_for_completion = component.clone();
+    let marker_for_completion = marker.clone();
+    let completion_handle = thread::spawn(move || {
+        completion_client.submit(UpgradeOperation::HandoverCompleted(
+            signal_version_handover::CompletionReport {
+                component: component_for_completion,
+                accepted_marker: marker_for_completion,
+            },
+        ))
+    });
+    daemon
+        .serve_upgrade_one()
+        .expect("daemon serves completion exchange");
+    let completion_reply = completion_handle
+        .join()
+        .expect("completion client exits")
+        .expect("completion reply received");
+    assert_eq!(
+        completion_reply,
+        UpgradeReply::HandoverFinalized(HandoverFinalization {
+            finalized_marker: marker,
+        })
+    );
+
+    assert!(
+        !fixture.ordinary_socket.as_path().exists(),
+        "ordinary socket path is removed after handover completion"
+    );
+    assert!(
+        !fixture.owner_socket.as_path().exists(),
+        "owner socket path is removed after handover completion"
+    );
+    let ordinary_error = fixture
+        .client()
+        .submit(WorkingOperation::Record(entry("after handover")))
+        .expect_err("ordinary socket is closed after handover");
+    assert!(
+        ordinary_error.to_string().contains("No such file")
+            || ordinary_error.to_string().contains("not found"),
+        "unexpected ordinary close error: {ordinary_error}"
+    );
+
+    daemon.shutdown().expect("daemon shuts down");
 }
 
 #[test]
