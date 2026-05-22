@@ -119,6 +119,27 @@ ordinary and owner socket paths. The upgrade socket does not yet apply mirrored
 write payloads; that remains the next step before a zero-downtime cutover can
 replace the temporary sema-upgrade runner.
 
+The daemon advances through three handover states:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Active: daemon binds ordinary + owner + upgrade sockets
+    Active --> HandoverMode: ReadyToHandover accepted
+    HandoverMode --> Active: handover aborted
+    HandoverMode --> PrivateUpgradeOnly: HandoverCompleted received
+    PrivateUpgradeOnly --> [*]: daemon retired
+```
+
+- **Active** — ordinary, owner, and upgrade sockets all serve their
+  respective contracts; public writes accepted. The steady state.
+- **HandoverMode** — ordinary and owner sockets still serve reads;
+  public writes paused; the upgrade socket exchanges marker, mirror,
+  and divergence frames with the next-version sibling daemon.
+- **PrivateUpgradeOnly** — ordinary and owner socket paths removed;
+  only the upgrade socket remains bound; the daemon receives mirrored
+  writes from next if old-compat reads still consume the previous
+  shape, then retires.
+
 The `spirit` CLI is not a second runtime. It resolves its single argument as
 either a raw NOTA request record (argument begins with `(`) or a path to a NOTA
 request file, peeks the request record head, routes it through the generated
