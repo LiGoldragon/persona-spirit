@@ -111,7 +111,10 @@ checks the `signal-frame::Request`, and submits each working-contract
 to Persona's control socket and can receive accepted public-client file
 descriptors by `SCM_RIGHTS`; each received descriptor is treated as the same
 ordinary length-prefixed Signal stream, so Persona is not on the byte path after
-handoff. The owner socket reads length-prefixed
+handoff. A received descriptor is already admitted by Persona, so it can drain
+even if this daemon later closes its public sockets during handover; direct
+ordinary-socket traffic still obeys the daemon's current public-socket state.
+The owner socket reads length-prefixed
 `owner-signal-persona-spirit::Frame` values and submits each owner-contract
 `Operation` directly to `OwnerPlane`.
 
@@ -210,6 +213,7 @@ in-process.
 | The daemon serves ordinary length-prefixed Signal frames through the actor root. | `persona_spirit_daemon_serves_signal_frames_through_actor_root` writes and reads through the ordinary Unix socket. |
 | The daemon can serve public Signal frames from a Persona-handed-off file descriptor. | `persona_spirit_daemon_serves_signal_frames_from_handed_off_file_descriptor` sends an accepted client stream over a handoff-control socket with `SCM_RIGHTS` and receives the ordinary reply directly from the daemon. |
 | The Spirit CLI can use a Persona-owned public socket while the daemon receives the descriptor over the private control socket. | `persona_spirit_cli_reaches_daemon_through_persona_handoff_router` starts Persona's handoff router, starts Spirit with a handoff-control connection, routes `spirit` `Record` and `Observe` CLI calls through the Persona-owned public socket, and proves the daemon replies directly after descriptor handoff. |
+| Persona can flip the active version selector while old handed-off Spirit clients drain. | `persona_handoff_router_routes_new_connections_after_selector_flip_and_old_connections_drain` seeds v0.1.0, copies the store to v0.1.1, routes an old pre-flip descriptor to v0.1.0, drives `AttemptHandover` through real upgrade sockets, then proves a new `spirit` CLI call on the same Persona public socket routes to v0.1.1. |
 | The daemon serves owner length-prefixed Signal frames through `OwnerPlane`. | `persona_spirit_daemon_serves_owner_signal_frames_through_owner_plane` writes and reads through the owner Unix socket. |
 | The ordinary socket rejects owner Signal frames. | `persona_spirit_ordinary_socket_rejects_owner_signal_frames` writes an owner frame to the ordinary socket and expects decode rejection. |
 | The owner socket rejects ordinary Signal frames. | `persona_spirit_owner_socket_rejects_ordinary_signal_frames` writes an ordinary frame to the owner socket and expects decode rejection. |

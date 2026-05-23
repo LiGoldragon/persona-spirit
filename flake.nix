@@ -95,6 +95,10 @@
             inherit cargoArtifacts;
             cargoTestExtraArgs = "--test design_d_routing persona_spirit_cli_reaches_daemon_through_persona_handoff_router -- --exact";
           });
+          test-design-d-selector-flip-routes-new-connections = craneLib.cargoTest (commonArguments // {
+            inherit cargoArtifacts;
+            cargoTestExtraArgs = "--test design_d_routing persona_handoff_router_routes_new_connections_after_selector_flip_and_old_connections_drain -- --exact";
+          });
           test-upgrade-completion-requires-readiness = craneLib.cargoTest (commonArguments // {
             inherit cargoArtifacts;
             cargoTestExtraArgs = "--test daemon persona_spirit_upgrade_completion_requires_accepted_readiness -- --exact";

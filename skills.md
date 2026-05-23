@@ -37,7 +37,9 @@ Contract records stay in `signal-persona-spirit` and
   connects to Persona's control socket and can receive public-client file
   descriptors over `SCM_RIGHTS`; each received descriptor is served as the same
   ordinary length-prefixed Signal stream. Persona is not on the byte path after
-  the descriptor handoff.
+  the descriptor handoff. The handoff descriptor is an already-admitted client
+  connection, so it can drain even if the daemon later closes direct public
+  sockets during version handover.
 - The CLI request path never opens `SpiritActorRuntime` directly. It decodes
   NOTA into the selected working or owner request type, sends a Signal frame to
   the selected daemon socket, and renders the daemon's Signal reply back to

@@ -649,6 +649,7 @@ impl BoundDaemon {
             self.runtime.clone(),
             self.codec,
             self.public_sockets.clone(),
+            OrdinaryAdmission::CurrentPublicSocketState,
         )
     }
 
@@ -666,6 +667,7 @@ impl BoundDaemon {
             self.runtime.clone(),
             self.codec,
             self.public_sockets.clone(),
+            OrdinaryAdmission::AcceptedHandoffDescriptor,
         )
     }
 
@@ -733,6 +735,42 @@ impl BoundDaemon {
             (Ok(served), Ok(())) => Ok(served),
             (Err(error), _) => Err(error),
             (Ok(_served), Err(error)) => Err(error),
+        }
+    }
+
+    pub fn serve_handoff_and_upgrade_counts(
+        mut self,
+        handoff_count: usize,
+        upgrade_count: usize,
+    ) -> Result<(Vec<ServedExchange>, Vec<ServedUpgradeExchange>)> {
+        let control = self.handoff_control.take().ok_or_else(|| {
+            Error::input_output(std::io::Error::new(
+                ErrorKind::NotConnected,
+                "handoff control socket is not configured",
+            ))
+        })?;
+        let handoff = HandoffControlServer::new(
+            control,
+            self.root.clone(),
+            self.runtime.clone(),
+            self.codec,
+            self.public_sockets.clone(),
+        );
+        let handoff_handle = thread::spawn(move || {
+            (0..handoff_count)
+                .map(|_| handoff.serve_one())
+                .collect::<Result<Vec<_>>>()
+        });
+        let upgrade_result = (0..upgrade_count)
+            .map(|_| self.serve_upgrade_one())
+            .collect::<Result<Vec<_>>>();
+        let handoff_result = handoff_handle
+            .join()
+            .map_err(|_| Error::actor_runtime("handoff control thread panicked"))?;
+        let shutdown = self.shutdown();
+        match (handoff_result, upgrade_result, shutdown) {
+            (Ok(handoff), Ok(upgrade), Ok(())) => Ok((handoff, upgrade)),
+            (Err(error), _, _) | (_, Err(error), _) | (_, _, Err(error)) => Err(error),
         }
     }
 
@@ -877,6 +915,12 @@ struct UpgradeExchangeHandler {
     public_sockets: PublicSockets,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OrdinaryAdmission {
+    CurrentPublicSocketState,
+    AcceptedHandoffDescriptor,
+}
+
 impl SocketServer {
     fn new(
         listener: UnixListener,
@@ -910,6 +954,7 @@ impl SocketServer {
             self.runtime.clone(),
             self.codec,
             self.public_sockets.clone(),
+            OrdinaryAdmission::CurrentPublicSocketState,
         )
     }
 }
@@ -947,6 +992,7 @@ impl HandoffControlServer {
             self.runtime.clone(),
             self.codec,
             self.public_sockets.clone(),
+            OrdinaryAdmission::AcceptedHandoffDescriptor,
         )
     }
 }
@@ -1159,10 +1205,17 @@ fn serve_ordinary_stream(
     runtime: Arc<tokio::runtime::Runtime>,
     codec: ordinary::FrameCodec,
     public_sockets: PublicSockets,
+    admission: OrdinaryAdmission,
 ) -> Result<ServedExchange> {
     let frame = codec.read_frame(stream)?;
     let received = codec.request_from_frame(frame)?;
-    let reply = if public_sockets.accepts_request(&received.request) {
+    let accepted = match admission {
+        OrdinaryAdmission::CurrentPublicSocketState => {
+            public_sockets.accepts_request(&received.request)
+        }
+        OrdinaryAdmission::AcceptedHandoffDescriptor => true,
+    };
+    let reply = if accepted {
         OrdinaryExchangeHandler::new(root, runtime).reply_to_request(received.request)?
     } else {
         Reply::rejected(RequestRejectionReason::Internal)
