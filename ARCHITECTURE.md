@@ -126,6 +126,12 @@ surface used by `persona` supervision: `Announce` identifies the component as
 returns `Running`, and `Stop` acknowledges the lifecycle request. Domain
 Spirit operations never cross this socket.
 
+The `persona-spirit-daemon` binary is also a single-argument component binary.
+It resolves that argument as either a raw NOTA `DaemonConfiguration` record
+(argument begins with `(`) or a path to a NOTA configuration file. Both forms
+produce the same `DaemonConfiguration` before sockets, store paths, or
+bootstrap-policy sources are opened.
+
 The upgrade socket reads length-prefixed `signal-version-handover::Frame`
 values. It is the private handover surface for a staged Spirit replacement:
 `AskHandoverMarker` reads the store's current commit sequence and last record
@@ -178,6 +184,7 @@ in-process.
 |---|---|
 | The `spirit` CLI accepts exactly one argument. | `tests/boundary.rs` checks missing and extra arguments. |
 | The daemon binary accepts exactly one argument. | `tests/boundary.rs` checks the shared argument parser. |
+| The daemon binary accepts raw NOTA `DaemonConfiguration` or a path to a NOTA configuration file as its single argument. | `persona_spirit_daemon_accepts_configuration_file_path_argument` writes a configuration file and checks `DaemonRuntime::from_argument` loads it. |
 | The CLI routes request heads through generated working/owner contract metadata before full decode. | `persona_spirit_generated_dispatch_routes_working_and_owner_heads` and `persona_spirit_request_head_uses_generated_dispatch_before_full_decode` check the generated table. |
 | The CLI type-checks one selected contract request. | `tests/boundary.rs` checks valid working `State`, `Record`, and `Observe` requests and owner `Register` requests before daemon submission. |
 | The CLI requires the selected daemon socket instead of using an in-process store fallback. | `persona_spirit_binary_requires_socket_environment` runs a working request without `PERSONA_SPIRIT_SOCKET`; `persona_spirit_binary_requires_owner_socket_for_owner_requests` runs an owner request without `PERSONA_SPIRIT_OWNER_SOCKET`. |
