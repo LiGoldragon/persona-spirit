@@ -21,7 +21,7 @@ use persona_spirit::{
     DaemonConfiguration, DaemonRuntime, ServedExchange, SocketMode, SocketPath, StorePath, ordinary,
 };
 use signal_frame::{Reply, SubReply};
-use signal_persona_auth::EngineId;
+use signal_persona_origin::EngineIdentifier;
 use signal_persona_spirit::{
     Observation, Operation as SpiritOperation, RecordQuery, Reply as SpiritReply,
 };
@@ -350,7 +350,7 @@ fn persona_handoff_router_routes_new_connections_after_selector_flip_and_old_con
         thread::spawn(move || current_daemon.serve_handoff_and_upgrade_counts(2, 3));
     let next_thread = thread::spawn(move || next_daemon.serve_handoff_and_upgrade_counts(1, 1));
 
-    let engine = EngineId::new("selector-flip-engine");
+    let engine = EngineIdentifier::new("selector-flip-engine");
     let store = runtime
         .block_on(async {
             ManagerStore::start(ManagerStoreLocation::new(root.join("manager.redb")))

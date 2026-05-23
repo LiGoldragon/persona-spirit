@@ -41,7 +41,7 @@ version-projection          = { git = "https://github.com/LiGoldragon/version-pr
 [dev-dependencies]
 owner-signal-version-handover = { git = "https://github.com/LiGoldragon/owner-signal-version-handover.git", branch = "main" }
 persona = { git = "https://github.com/LiGoldragon/persona.git", branch = "main" }
-signal-persona-auth = { git = "https://github.com/LiGoldragon/signal-persona-auth.git" }
+signal-persona-origin = { git = "https://github.com/LiGoldragon/signal-persona-origin.git" }
 
 [lints.rust]
 unsafe_code = "forbid"
