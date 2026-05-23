@@ -29,7 +29,7 @@ use signal_version_handover::{
     HandoverAcceptance, HandoverFinalization, HandoverRejection, HandoverRejectionReason,
     MarkerRequest, Operation as UpgradeOperation, Reply as UpgradeReply,
 };
-use version_projection::{ComponentName, ContractVersion, RecordKind};
+use version_projection::{ComponentName, ContractVersion, Projected, RecordKind};
 
 #[derive(Debug, Clone)]
 struct DaemonFixture {
@@ -964,7 +964,7 @@ fn persona_spirit_upgrade_mirror_applies_stamped_entry_after_completion() {
             signal_version_handover::MirrorPayload {
                 component: component_for_mirror,
                 source_version: ContractVersion::new([2; 32]),
-                target_version: ContractVersion::new([1; 32]),
+                target_version: <StampedEntry as Projected>::CONTRACT_VERSION,
                 kind: RecordKind::new("StampedEntry"),
                 payload: mirrored_stamped_entry_payload("mirrored after completion"),
             },
@@ -1009,6 +1009,133 @@ fn persona_spirit_upgrade_mirror_applies_stamped_entry_after_completion() {
         !fixture.ordinary_socket.as_path().exists(),
         "ordinary socket remains closed while mirror uses private upgrade socket"
     );
+
+    daemon.shutdown().expect("daemon shuts down");
+}
+
+#[test]
+fn persona_spirit_upgrade_mirror_rejects_wrong_target_version() {
+    let fixture = DaemonFixture::new("upgrade-mirror-wrong-target");
+    let mut daemon = DaemonRuntime::from_configuration(fixture.configuration())
+        .bind()
+        .expect("daemon binds");
+    let client = fixture.upgrade_client();
+    let component = ComponentName::new("persona-spirit");
+
+    let marker_client = client.clone();
+    let component_for_marker = component.clone();
+    let marker_handle = thread::spawn(move || {
+        marker_client.submit(UpgradeOperation::AskHandoverMarker(MarkerRequest {
+            component: component_for_marker,
+        }))
+    });
+    daemon
+        .serve_upgrade_one()
+        .expect("daemon serves marker exchange");
+    let marker_reply = marker_handle
+        .join()
+        .expect("marker client exits")
+        .expect("marker reply received");
+    let UpgradeReply::HandoverMarker(marker) = marker_reply else {
+        panic!("expected handover marker, got {marker_reply:?}");
+    };
+
+    let readiness_client = client.clone();
+    let component_for_readiness = component.clone();
+    let marker_for_readiness = marker.clone();
+    let readiness_handle = thread::spawn(move || {
+        readiness_client.submit(UpgradeOperation::ReadyToHandover(
+            signal_version_handover::ReadinessReport {
+                component: component_for_readiness,
+                source_marker: marker_for_readiness,
+            },
+        ))
+    });
+    daemon
+        .serve_upgrade_one()
+        .expect("daemon serves readiness exchange");
+    let readiness_reply = readiness_handle
+        .join()
+        .expect("readiness client exits")
+        .expect("readiness reply received");
+    let UpgradeReply::HandoverAccepted(HandoverAcceptance { accepted_marker }) = readiness_reply
+    else {
+        panic!("expected handover accepted, got {readiness_reply:?}");
+    };
+
+    let completion_client = client.clone();
+    let component_for_completion = component.clone();
+    let marker_for_completion = accepted_marker.clone();
+    let completion_handle = thread::spawn(move || {
+        completion_client.submit(UpgradeOperation::HandoverCompleted(
+            signal_version_handover::CompletionReport {
+                component: component_for_completion,
+                accepted_marker: marker_for_completion,
+            },
+        ))
+    });
+    daemon
+        .serve_upgrade_one()
+        .expect("daemon serves completion exchange");
+    let completion_reply = completion_handle
+        .join()
+        .expect("completion client exits")
+        .expect("completion reply received");
+    assert_eq!(
+        completion_reply,
+        UpgradeReply::HandoverFinalized(HandoverFinalization {
+            finalized_marker: accepted_marker,
+        })
+    );
+
+    let mirror_client = client.clone();
+    let component_for_mirror = component.clone();
+    let mirror_handle = thread::spawn(move || {
+        mirror_client.submit(UpgradeOperation::Mirror(
+            signal_version_handover::MirrorPayload {
+                component: component_for_mirror,
+                source_version: ContractVersion::new([2; 32]),
+                target_version: ContractVersion::new([9; 32]),
+                kind: RecordKind::new("StampedEntry"),
+                payload: mirrored_stamped_entry_payload("rejected wrong target"),
+            },
+        ))
+    });
+    daemon
+        .serve_upgrade_one()
+        .expect("daemon serves mirror exchange");
+    let mirror_reply = mirror_handle
+        .join()
+        .expect("mirror client exits")
+        .expect("mirror reply received");
+    assert_eq!(
+        mirror_reply,
+        UpgradeReply::HandoverRejected(HandoverRejection {
+            component: component.clone(),
+            reason: HandoverRejectionReason::SchemaMismatch,
+        })
+    );
+
+    let marker_client = client.clone();
+    let component_for_marker = component.clone();
+    let marker_handle = thread::spawn(move || {
+        marker_client.submit(UpgradeOperation::AskHandoverMarker(MarkerRequest {
+            component: component_for_marker,
+        }))
+    });
+    daemon
+        .serve_upgrade_one()
+        .expect("daemon serves post-rejection marker exchange");
+    let marker_reply = marker_handle
+        .join()
+        .expect("marker client exits")
+        .expect("marker reply received");
+    let UpgradeReply::HandoverMarker(marker) = marker_reply else {
+        panic!("expected post-rejection marker, got {marker_reply:?}");
+    };
+    assert_eq!(marker.commit_sequence, 0);
+    assert_eq!(marker.write_counter, 0);
+    assert_eq!(marker.last_record_identifier, None);
 
     daemon.shutdown().expect("daemon shuts down");
 }

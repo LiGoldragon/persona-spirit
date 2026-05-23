@@ -308,7 +308,9 @@ impl SpiritRoot {
                         payload.component,
                         signal_version_handover::HandoverRejectionReason::NotReady,
                     )
-                } else if payload.kind.as_str() != MIRROR_KIND_STAMPED_ENTRY {
+                } else if payload.target_version != crate::store::spirit_contract_version()
+                    || payload.kind.as_str() != MIRROR_KIND_STAMPED_ENTRY
+                {
                     Self::handover_rejected(
                         payload.component,
                         signal_version_handover::HandoverRejectionReason::SchemaMismatch,

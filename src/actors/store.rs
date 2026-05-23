@@ -4,9 +4,11 @@ use signal_persona_spirit::{
     RecordObservation, RecordSubscription, RecordSummary, Reply as WorkingReply,
 };
 use signal_version_handover::{HandoverMarker, MarkerRequest};
-use version_projection::ContractVersion;
 
-use crate::{Result, SpiritStore, StoreLocation, store::StampedEntry};
+use crate::{
+    Result, SpiritStore, StoreLocation,
+    store::{StampedEntry, spirit_contract_version},
+};
 
 use super::pipeline::PipelineReply;
 use super::trace::{ActorTrace, TraceAction, TraceNode};
@@ -124,13 +126,6 @@ impl RecordStore {
         trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReplied);
         Ok(HandoverMarkerSnapshot { marker, trace })
     }
-}
-
-fn spirit_contract_version() -> ContractVersion {
-    ContractVersion::new([
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-        1, 0,
-    ])
 }
 
 impl Actor for RecordStore {

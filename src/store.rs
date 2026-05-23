@@ -13,11 +13,14 @@ use signal_persona_spirit::{
     Reply as WorkingReply, Time, Topic, TopicCount, TopicsObserved,
 };
 use signal_version_handover::{HandoverMarker, MarkerRequest};
-use version_projection::ContractVersion;
+use version_projection::{ComponentName, ContractVersion, Projected};
 
 use crate::{Result, error::Error};
 
 const SPIRIT_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
+const SPIRIT_CONTRACT_VERSION: ContractVersion = ContractVersion::new([
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0,
+]);
 const RECORDS: TableName = TableName::new("records");
 const DEFAULT_STORE_PATH: &str = "/tmp/persona-spirit.redb";
 const STORE_ENVIRONMENT_VARIABLE: &str = "PERSONA_SPIRIT_STORE";
@@ -191,6 +194,10 @@ impl SpiritStore {
     }
 }
 
+pub const fn spirit_contract_version() -> ContractVersion {
+    SPIRIT_CONTRACT_VERSION
+}
+
 struct HandoverClock;
 
 struct HandoverClockReading {
@@ -324,6 +331,14 @@ impl StampedEntry {
 
     pub fn quote(&self) -> &Quote {
         &self.entry.quote
+    }
+}
+
+impl Projected for StampedEntry {
+    const CONTRACT_VERSION: ContractVersion = SPIRIT_CONTRACT_VERSION;
+
+    fn component() -> ComponentName {
+        ComponentName::new("persona-spirit")
     }
 }
 
