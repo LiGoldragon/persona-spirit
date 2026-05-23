@@ -1,3 +1,4 @@
+use std::fs;
 use std::io::ErrorKind;
 use std::io::{Read, Write};
 use std::os::unix::fs::PermissionsExt;
@@ -569,8 +570,9 @@ impl DaemonRuntime {
     }
 
     pub fn from_argument(argument: crate::SingleArgument) -> Result<Self> {
+        let text = daemon_configuration_argument_text(argument)?;
         Ok(Self::from_configuration(DaemonConfiguration::from_text(
-            argument.as_str(),
+            &text,
         )?))
     }
 
@@ -694,6 +696,15 @@ impl DaemonRuntime {
                 self.configuration.owner_socket_path.clone(),
             ),
         })
+    }
+}
+
+fn daemon_configuration_argument_text(argument: crate::SingleArgument) -> Result<String> {
+    let value = argument.as_str();
+    if value.starts_with('(') {
+        Ok(value.to_string())
+    } else {
+        fs::read_to_string(value).map_err(Error::input_output)
     }
 }
 

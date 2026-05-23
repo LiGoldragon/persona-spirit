@@ -233,6 +233,33 @@ fn persona_spirit_daemon_configuration_is_one_nota_record() {
 }
 
 #[test]
+fn persona_spirit_daemon_accepts_configuration_file_path_argument() {
+    let fixture = DaemonFixture::new("configuration-file-path");
+    let mut encoder = Encoder::new();
+    fixture
+        .configuration()
+        .encode(&mut encoder)
+        .expect("configuration encodes");
+    let mut path = std::env::temp_dir();
+    path.push(format!(
+        "persona-spirit-configuration-file-path-{}.nota",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock after epoch")
+            .as_nanos()
+    ));
+    fs::write(&path, encoder.into_string()).expect("configuration file written");
+
+    let argument = SingleArgument::from_arguments([
+        "persona-spirit-daemon".to_string(),
+        path.to_string_lossy().into_owned(),
+    ])
+    .expect("single configuration path accepted");
+
+    DaemonRuntime::from_argument(argument).expect("daemon loads configuration file path");
+}
+
+#[test]
 fn persona_spirit_daemon_serves_engine_management_socket_for_supervision() {
     let fixture = DaemonFixture::new("engine-management");
     let mut daemon =
