@@ -37,6 +37,9 @@ tokio                       = { version = "1", default-features = false, feature
 unix-ancillary              = "0.2"
 version-projection          = { git = "https://github.com/LiGoldragon/version-projection.git", branch = "main" }
 
+[dev-dependencies]
+persona = { git = "https://github.com/LiGoldragon/persona.git", branch = "main" }
+
 [lints.rust]
 unsafe_code = "forbid"
 unused      = { level = "warn", priority = -1 }
