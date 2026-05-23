@@ -1,9 +1,7 @@
 pub mod actors;
-pub mod argument;
 pub mod daemon;
 pub mod error;
 pub mod observation;
-pub mod runtime;
 pub mod store;
 
 pub use actors::policy::BootstrapPolicySource;
@@ -12,7 +10,6 @@ pub use actors::root::{
     SpiritActorRuntime,
 };
 pub use actors::trace::{ActorTrace, TraceAction, TraceNode};
-pub use argument::SingleArgument;
 pub use daemon::{
     BootstrapPolicyPath, BoundDaemon, DaemonConfiguration, DaemonRuntime,
     ServedEngineManagementExchange, ServedExchange, ServedOwnerExchange, ServedUpgradeExchange,
@@ -20,19 +17,15 @@ pub use daemon::{
 };
 pub use error::{Error, Result};
 pub use observation::{Command, Effect};
+pub use signal_frame::SingleArgument;
 pub use store::{SpiritStore, StoreLocation};
 
 pub mod ordinary {
     pub use crate::daemon::ordinary::{FrameCodec, SignalClient};
-    pub use crate::runtime::{
-        Client, CommandLineDispatch, CommandLineSockets, ReplyText, RequestHead, RequestInput,
-        RequestText,
-    };
 }
 
 pub mod owner {
     pub use crate::daemon::owner::{FrameCodec, SignalClient};
-    pub use crate::runtime::{OwnerReplyText as ReplyText, OwnerRequestText as RequestText};
 }
 
 pub mod upgrade {

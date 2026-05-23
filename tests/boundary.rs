@@ -3,11 +3,12 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use persona_spirit::{
-    DaemonConfiguration, DaemonRuntime, Error, SingleArgument, SocketMode, SocketPath, StorePath,
-    ordinary::{Client, CommandLineDispatch, RequestHead, RequestInput, RequestText},
-    owner,
+    DaemonConfiguration, DaemonRuntime, Error, SocketMode, SocketPath, StorePath,
 };
-use signal_frame::CommandLineSocket;
+use signal_frame::{
+    ClientShape, CommandLineDispatch, CommandLineSocket, CommandLineSockets, RequestHead,
+    RequestInput, RequestText, SingleArgument, SingleArgumentError,
+};
 
 #[derive(Debug, Clone)]
 struct StoreFixture {
@@ -41,9 +42,13 @@ impl StoreFixture {
 
     fn reply_text(&self, text: &str) -> persona_spirit::Result<String> {
         let argument = SingleArgument::from_arguments(["spirit".to_string(), text.to_string()])
-            .expect("single argument accepted");
-        let request_text = RequestInput::new(argument.clone()).text()?;
-        RequestText::new(request_text).decode_request()?;
+            .map_err(Error::from)?;
+        let request_text = RequestInput::new(argument.clone())
+            .text()
+            .map_err(Error::from)?;
+        RequestText::<signal_persona_spirit::Operation>::new(request_text)
+            .decode_request()
+            .map_err(Error::from)?;
         let daemon = DaemonRuntime::from_configuration(DaemonConfiguration::new(
             self.ordinary_socket.clone(),
             self.owner_socket.clone(),
@@ -54,7 +59,11 @@ impl StoreFixture {
         .bind()
         .expect("daemon binds");
         let handle = std::thread::spawn(move || daemon.serve_count(1));
-        let reply = Client::with_socket(argument, self.ordinary_socket.clone()).reply_text();
+        let client =
+            ClientShape::<signal_persona_spirit::Frame, owner_signal_persona_spirit::Frame>::new(
+                CommandLineSockets::working_only(self.ordinary_socket.as_path().to_path_buf()),
+            );
+        let reply = client.reply_text(argument).map_err(Error::from);
         handle
             .join()
             .expect("daemon thread exits")
@@ -80,7 +89,7 @@ fn persona_spirit_binary_rejects_missing_argument() {
 
     assert_eq!(
         error,
-        Error::WrongArgumentCount {
+        SingleArgumentError::WrongArgumentCount {
             program: "spirit".to_string(),
             found: 0,
         }
@@ -98,7 +107,7 @@ fn persona_spirit_binary_rejects_extra_argument() {
 
     assert_eq!(
         error,
-        Error::WrongArgumentCount {
+        SingleArgumentError::WrongArgumentCount {
             program: "spirit".to_string(),
             found: 2,
         }
@@ -112,7 +121,7 @@ fn persona_spirit_binary_rejects_flag_style_argument() {
 
     assert_eq!(
         error,
-        Error::FlagArgument {
+        SingleArgumentError::FlagArgument {
             program: "spirit".to_string(),
             argument: "--help".to_string(),
         }
@@ -129,7 +138,7 @@ fn persona_spirit_binary_requires_socket_environment() {
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("MissingSpiritSocket"));
+    assert!(stderr.contains("missing socket environment variable PERSONA_SPIRIT_SOCKET"));
 }
 
 #[test]
@@ -143,12 +152,15 @@ fn persona_spirit_binary_requires_owner_socket_for_owner_requests() {
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("MissingOwnerSpiritSocket"));
+    assert!(stderr.contains("missing socket environment variable PERSONA_SPIRIT_OWNER_SOCKET"));
 }
 
 #[test]
 fn persona_spirit_generated_dispatch_routes_working_and_owner_heads() {
-    let dispatch = CommandLineDispatch::new();
+    let dispatch = CommandLineDispatch::<
+        signal_persona_spirit::Operation,
+        owner_signal_persona_spirit::Operation,
+    >::new();
 
     assert_eq!(
         dispatch.route_head("Record"),
@@ -173,8 +185,14 @@ fn persona_spirit_request_head_uses_generated_dispatch_before_full_decode() {
             .expect("working head reads");
     let owner = RequestHead::from_text("(Register (operator))").expect("owner head reads");
 
-    assert_eq!(working.route(), Ok(CommandLineSocket::Working));
-    assert_eq!(owner.route(), Ok(CommandLineSocket::Owner));
+    assert_eq!(
+        working.route::<signal_persona_spirit::Operation, owner_signal_persona_spirit::Operation>(),
+        Ok(CommandLineSocket::Working)
+    );
+    assert_eq!(
+        owner.route::<signal_persona_spirit::Operation, owner_signal_persona_spirit::Operation>(),
+        Ok(CommandLineSocket::Owner)
+    );
 }
 
 #[test]
@@ -238,7 +256,7 @@ fn persona_spirit_client_accepts_high_magnitude_and_observes_it_back() {
 
 #[test]
 fn persona_spirit_client_rejects_opaque_integer_timestamp_shape() {
-    RequestText::new(
+    RequestText::<signal_persona_spirit::Operation>::new(
         "(Record (workspace Decision [summary only] [current implementation context] Maximum 1779000000 [first statement]))",
     )
     .decode_request()
@@ -247,7 +265,7 @@ fn persona_spirit_client_rejects_opaque_integer_timestamp_shape() {
 
 #[test]
 fn persona_spirit_client_rejects_parenthesized_date_time_shape() {
-    RequestText::new(
+    RequestText::<signal_persona_spirit::Operation>::new(
         "(Record (workspace Decision [summary only] [current implementation context] Maximum (2026 5 20) (14 30 0) [first statement]))",
     )
     .decode_request()
@@ -468,13 +486,14 @@ fn persona_spirit_client_rejects_unknown_record_shape() {
 
 #[test]
 fn persona_spirit_owner_request_text_decodes_owner_contract_only() {
-    let owner = owner::RequestText::new("(Register (operator))")
+    let owner = RequestText::<owner_signal_persona_spirit::Operation>::new("(Register (operator))")
         .decode_request()
         .expect("owner request decodes");
-    let ordinary = RequestText::new("(Register (operator))").decode_request();
+    let ordinary = RequestText::<signal_persona_spirit::Operation>::new("(Register (operator))")
+        .decode_request();
 
     assert!(matches!(
-        owner,
+        owner.payloads().head(),
         owner_signal_persona_spirit::Operation::Register(_)
     ));
     assert!(ordinary.is_err());

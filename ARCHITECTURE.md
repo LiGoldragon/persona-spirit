@@ -181,7 +181,7 @@ in-process.
 | The CLI routes request heads through generated working/owner contract metadata before full decode. | `persona_spirit_generated_dispatch_routes_working_and_owner_heads` and `persona_spirit_request_head_uses_generated_dispatch_before_full_decode` check the generated table. |
 | The CLI type-checks one selected contract request. | `tests/boundary.rs` checks valid working `State`, `Record`, and `Observe` requests and owner `Register` requests before daemon submission. |
 | The CLI requires the selected daemon socket instead of using an in-process store fallback. | `persona_spirit_binary_requires_socket_environment` runs a working request without `PERSONA_SPIRIT_SOCKET`; `persona_spirit_binary_requires_owner_socket_for_owner_requests` runs an owner request without `PERSONA_SPIRIT_OWNER_SOCKET`. |
-| The CLI path only translates NOTA to Signal frames and Signal replies to NOTA. | `persona_spirit_command_line_path_does_not_use_actor_runtime_directly` checks `runtime.rs` uses working/owner request text, signal clients, generated dispatch, and reply text, and not `SpiritActorRuntime` or `StoreLocation`. |
+| The CLI path only translates NOTA to Signal frames and Signal replies to NOTA. | `persona_spirit_command_line_path_does_not_use_actor_runtime_directly` checks `src/bin/spirit.rs` is a one-line `signal_frame::signal_cli!` invocation and does not mention `SpiritActorRuntime` or `StoreLocation`. |
 | The CLI accepts a path to a NOTA request file. | `persona_spirit_client_accepts_request_file_path_argument` writes a request file, invokes the same client path, and checks daemon-backed persistence. |
 | Spirit-local commands project to payloadless Sema operation labels. | `tests/sema_projection.rs` checks `Command::from_request` and `ToSemaOperation` through real actor-runtime requests. |
 | Spirit-local effects project to payloadless Sema outcome labels. | `tests/sema_projection.rs` checks `Effect::from_reply`, `ToSemaOutcome`, and `SemaObservation` after real actor-runtime replies. |
@@ -244,11 +244,9 @@ in-process.
 
 ```text
 src/lib.rs                         — module entry
-src/argument.rs                    — one-argument boundary
 src/daemon.rs                      — daemon configuration, bootstrap-policy source selection, socket binding, ordinary/owner/upgrade frame codecs, Design D handoff-control receive path, signal clients
 src/error.rs                       — typed error
 src/observation.rs                 — Spirit-local Command/Effect to payloadless signal-sema observation projection
-src/runtime.rs                     — CLI boundary that routes NOTA request heads through generated working/owner dispatch, converts selected request text to signal-frame traffic, and renders typed replies back to NOTA
 src/store.rs                       — sema-engine backed entry store and record queries
 src/actors/root.rs                 — Kameo root and blocking actor-runtime helper
 src/actors/ingress.rs              — text ingress phase
@@ -264,7 +262,7 @@ src/actors/store.rs                — sema-engine store actor
 src/actors/reply.rs                — unimplemented reply shaper + NOTA reply encoder actors
 src/actors/trace.rs                — actor-path witness values
 src/actors/pipeline.rs             — typed in-process pipeline carriers
-src/bin/spirit.rs                  — thin CLI binary
+src/bin/spirit.rs                  — one-line `signal_frame::signal_cli!` thin CLI binary
 src/bin/persona-spirit-daemon.rs   — daemon binary
 bootstrap-policy.nota              — first policy seed
 tests/boundary.rs                  — argument-boundary witnesses
@@ -279,14 +277,15 @@ Implemented now:
 
 - repo scaffold;
 - daemon binary and `spirit` CLI binary names;
-- one-argument boundary parser;
-- generated CLI head dispatch from the working and owner signal contracts;
+- shared `signal-frame::SingleArgument` one-argument boundary parser;
+- one-line generated CLI head dispatch from the working and owner signal
+  contracts through `signal_frame::signal_cli!(spirit, signal_persona_spirit)`;
 - typed CLI request decoding for `signal-persona-spirit::Operation` and
-  `owner-signal-persona-spirit::Operation` from a raw NOTA argument or
-  a NOTA request file path;
-- CLI daemon-client mode that requires the selected working or owner socket and
-  performs only NOTA request decoding, signal-frame submission, and NOTA reply
-  encoding;
+  `owner-signal-persona-spirit::Operation` from a raw NOTA argument or a NOTA
+  request file path, using the shared signal-frame client;
+- CLI daemon-client mode that requires the selected working or owner socket,
+  injects advisory `Caller` context, and performs only NOTA request decoding,
+  signal-frame submission, and NOTA reply encoding;
 - provisional classifier for `State` statements that preserves the raw quote as
   a minimum-certainty `Clarification` record under topic `unclassified`;
 - `persona-spirit-daemon` typed configuration and ordinary/owner Unix socket

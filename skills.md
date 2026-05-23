@@ -26,9 +26,9 @@ Contract records stay in `signal-persona-spirit` and
 - The CLI peeks the NOTA request head and routes it through generated
   `signal-frame::signal_cli!` metadata from the working and owner contracts.
 - The CLI decodes that argument as either a
-  `signal-persona-spirit::SpiritRequest` or an
-  `owner-signal-persona-spirit::OwnerSpiritRequest`, depending on the
-  generated route decision.
+  `signal-persona-spirit::Operation` request or an
+  `owner-signal-persona-spirit::Operation` request, depending on the generated
+  route decision.
 - The daemon decodes that argument as `DaemonConfiguration`, selects the
   embedded or configured bootstrap-policy source, then binds one ordinary
   socket for `signal-persona-spirit::Frame` values and one owner socket for
@@ -41,9 +41,10 @@ Contract records stay in `signal-persona-spirit` and
   connection, so it can drain even if the daemon later closes direct public
   sockets during version handover.
 - The CLI request path never opens `SpiritActorRuntime` directly. It decodes
-  NOTA into the selected working or owner request type, sends a Signal frame to
-  the selected daemon socket, and renders the daemon's Signal reply back to
-  NOTA.
+  NOTA into the selected working or owner request type through
+  `signal_frame::ClientShape`, injects advisory `Caller` context, sends a
+  Signal frame to the selected daemon socket, and renders the daemon's Signal
+  reply back to NOTA.
 - When a daemon socket is selected, the CLI decodes NOTA once against that
   socket's contract and sends a Signal frame to the daemon rather than opening
   the store itself.
@@ -52,7 +53,7 @@ Contract records stay in `signal-persona-spirit` and
 - Signal-frame ingress submits typed requests directly to `SpiritRoot`; it does
   not go back through the NOTA decoder actor.
 - Ordinary request execution passes through `signal-executor`: dispatch lowers
-  `SpiritRequest` into Spirit-local `Command`, executes through the Kameo actor
+  the working contract operation into Spirit-local `Command`, executes through the Kameo actor
   planes as `CommandExecutor`, and publishes `signal-sema` observations.
 - Spirit's current `CommandExecutor` implementation is degenerate-atomic:
   each accepted operation lowers to one command, and multi-operation batches

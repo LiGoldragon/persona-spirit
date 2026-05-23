@@ -186,6 +186,12 @@ impl SpiritRoot {
     ) -> Result<RootFrameReply> {
         let mut trace = ActorTrace::new();
         trace.record(TraceNode::SPIRIT_ROOT, TraceAction::MessageReceived);
+        if request
+            .caller()
+            .is_some_and(|caller| caller.pid.value() != 1)
+        {
+            trace.record(TraceNode::SPIRIT_ROOT, TraceAction::CallerObserved);
+        }
         let frame = self
             .dispatch
             .ask(dispatch::RouteFrameRequest { request, trace })

@@ -569,7 +569,7 @@ impl DaemonRuntime {
         Self { configuration }
     }
 
-    pub fn from_argument(argument: crate::SingleArgument) -> Result<Self> {
+    pub fn from_argument(argument: signal_frame::SingleArgument) -> Result<Self> {
         let text = daemon_configuration_argument_text(argument)?;
         Ok(Self::from_configuration(DaemonConfiguration::from_text(
             &text,
@@ -699,7 +699,7 @@ impl DaemonRuntime {
     }
 }
 
-fn daemon_configuration_argument_text(argument: crate::SingleArgument) -> Result<String> {
+fn daemon_configuration_argument_text(argument: signal_frame::SingleArgument) -> Result<String> {
     let value = argument.as_str();
     if value.starts_with('(') {
         Ok(value.to_string())

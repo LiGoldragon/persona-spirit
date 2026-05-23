@@ -1,6 +1,1 @@
-use persona_spirit::{Result, SingleArgument, ordinary::Client};
-
-fn main() -> Result<()> {
-    let argument = SingleArgument::from_environment()?;
-    Client::from_argument(argument)?.run()
-}
+signal_frame::signal_cli!(spirit, signal_persona_spirit);

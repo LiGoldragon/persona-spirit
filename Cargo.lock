@@ -566,6 +566,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f38d5652c16fde515bb1ecef450ab0f6a219d619a7274976324d5e377f7dceba"
 
 [[package]]
+name = "paste"
+version = "1.0.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
+
+[[package]]
 name = "persona"
 version = "0.1.0"
 source = "git+https://github.com/LiGoldragon/persona.git?branch=main#12b9352d5d4e58afbcdd1f88bef835f1fbd5fed1"
@@ -884,9 +890,10 @@ dependencies = [
 [[package]]
 name = "signal-frame"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#653773b7d4c18d16efd977ada4d280876debefd7"
+source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#468357ef2fb20d9e4e28033feb19eca49617df46"
 dependencies = [
  "nota-codec",
+ "paste",
  "rkyv",
  "signal-frame-macros",
  "thiserror",
@@ -895,7 +902,7 @@ dependencies = [
 [[package]]
 name = "signal-frame-macros"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#653773b7d4c18d16efd977ada4d280876debefd7"
+source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#468357ef2fb20d9e4e28033feb19eca49617df46"
 dependencies = [
  "proc-macro2",
  "quote",

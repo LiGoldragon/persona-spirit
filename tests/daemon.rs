@@ -16,9 +16,9 @@ use persona_spirit::{
     SocketPath, StorePath, ordinary, owner, store::StampedEntry, upgrade,
 };
 use signal_frame::{
-    AcceptedOutcome, BatchFailureReason, CommitStatus, ExchangeIdentifier, ExchangeLane,
-    LaneSequence, NonEmpty, Reply, RequestBuilder, RequestPayload, RetryClassification,
-    SessionEpoch, SubReply,
+    AcceptedOutcome, BatchFailureReason, ClientShape, CommandLineSockets, CommitStatus,
+    ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, RequestBuilder,
+    RequestPayload, RetryClassification, SessionEpoch, SubReply,
 };
 use signal_persona::engine_management::{
     Frame as EngineManagementFrame, FrameBody as EngineManagementFrameBody,
@@ -1508,9 +1508,10 @@ fn persona_spirit_client_can_send_nota_request_to_running_daemon() {
     ])
     .expect("single request argument");
 
-    let reply = ordinary::Client::with_socket(argument, fixture.ordinary_socket.clone())
-        .reply_text()
-        .expect("client sends to daemon");
+    let client = ClientShape::<Frame, owner_signal_persona_spirit::Frame>::new(
+        CommandLineSockets::working_only(fixture.ordinary_socket.as_path().to_path_buf()),
+    );
+    let reply = client.reply_text(argument).expect("client sends to daemon");
 
     assert_eq!(reply, "(RecordAccepted 1)");
     handle

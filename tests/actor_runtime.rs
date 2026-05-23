@@ -8,6 +8,7 @@ use owner_signal_persona_spirit::{
 use persona_spirit::{
     BootstrapPolicySource, Error, SpiritActorRuntime, StoreLocation, TraceAction, TraceNode,
 };
+use signal_frame::{Caller, ProcessIdentifier, Request};
 use signal_persona_spirit::{
     ObserverFilter, Operation as WorkingOperation, Reply as WorkingReply,
     RequestUnimplemented as SpiritRequestUnimplemented,
@@ -124,6 +125,34 @@ async fn persona_spirit_ordinary_request_path_uses_signal_executor_and_sema_obse
         TraceNode::SEMA_OBSERVER,
         TraceNode::SPIRIT_ROOT,
     ]));
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn persona_spirit_frame_request_observes_non_init_caller() {
+    let fixture = SpiritRuntimeFixture::new("caller");
+    let runtime = fixture.runtime().await;
+    let request = Request::from_payload(WorkingOperation::Record(signal_persona_spirit::Entry {
+        topic: signal_persona_spirit::Topic::new("workspace"),
+        kind: signal_persona_spirit::Kind::Decision,
+        summary: signal_persona_spirit::Summary::new("caller witness"),
+        context: signal_persona_spirit::Context::new("actor context"),
+        certainty: signal_sema::Magnitude::Maximum,
+        quote: signal_persona_spirit::Quote::new("actor quote"),
+    }))
+    .with_caller(Some(Caller::new(ProcessIdentifier::new(42), None, None)));
+
+    let reply = runtime
+        .submit_frame_request(request)
+        .await
+        .expect("frame request accepted");
+
+    assert!(
+        reply
+            .trace()
+            .contains_action(TraceNode::SPIRIT_ROOT, TraceAction::CallerObserved)
+    );
 
     runtime.stop().await.expect("runtime stops");
 }
@@ -544,16 +573,14 @@ async fn persona_spirit_invalid_text_keeps_typed_decode_error() {
 
 #[test]
 fn persona_spirit_command_line_path_does_not_use_actor_runtime_directly() {
-    let source = std::fs::read_to_string(format!("{}/src/runtime.rs", env!("CARGO_MANIFEST_DIR")))
-        .expect("runtime source is readable");
+    let source =
+        std::fs::read_to_string(format!("{}/src/bin/spirit.rs", env!("CARGO_MANIFEST_DIR")))
+            .expect("spirit binary source is readable");
 
-    assert!(source.contains("RequestText::new"));
-    assert!(source.contains("OwnerRequestText::new"));
-    assert!(source.contains("CommandLineDispatch::new"));
-    assert!(source.contains("daemon_ordinary::SignalClient::new"));
-    assert!(source.contains("daemon_owner::SignalClient::new"));
-    assert!(source.contains("ReplyText::new"));
-    assert!(source.contains("OwnerReplyText::new"));
+    assert_eq!(
+        source.trim(),
+        "signal_frame::signal_cli!(spirit, signal_persona_spirit);"
+    );
     assert!(!source.contains("SpiritActorRuntime"));
     assert!(!source.contains("StoreLocation"));
 }

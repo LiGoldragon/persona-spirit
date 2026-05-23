@@ -117,6 +117,52 @@ impl Error {
     }
 }
 
+impl From<signal_frame::SingleArgumentError> for Error {
+    fn from(error: signal_frame::SingleArgumentError) -> Self {
+        match error {
+            signal_frame::SingleArgumentError::WrongArgumentCount { program, found } => {
+                Self::WrongArgumentCount { program, found }
+            }
+            signal_frame::SingleArgumentError::FlagArgument { program, argument } => {
+                Self::FlagArgument { program, argument }
+            }
+        }
+    }
+}
+
+impl From<signal_frame::CommandLineError> for Error {
+    fn from(error: signal_frame::CommandLineError) -> Self {
+        match error {
+            signal_frame::CommandLineError::Argument(error) => Self::from(error),
+            signal_frame::CommandLineError::MissingSocket { variable } => match variable.as_str() {
+                "PERSONA_SPIRIT_SOCKET" => Self::MissingSpiritSocket,
+                "PERSONA_SPIRIT_OWNER_SOCKET" => Self::MissingOwnerSpiritSocket,
+                _ => Self::InputOutput {
+                    reason: format!("missing socket environment variable {variable}"),
+                },
+            },
+            signal_frame::CommandLineError::Route { reason } => Self::CommandLineRoute { reason },
+            signal_frame::CommandLineError::InvalidRequest { reason } => {
+                Self::InvalidSpiritRequest { reason }
+            }
+            signal_frame::CommandLineError::InvalidReply { reason } => {
+                Self::InvalidSpiritReply { reason }
+            }
+            signal_frame::CommandLineError::InputOutput { reason } => Self::InputOutput { reason },
+            signal_frame::CommandLineError::SignalFrame { reason } => Self::SignalFrame { reason },
+            signal_frame::CommandLineError::FrameTooLarge { found, limit } => {
+                Self::FrameTooLarge { found, limit }
+            }
+            signal_frame::CommandLineError::UnexpectedFrame { expected, got } => {
+                Self::UnexpectedFrame { expected, got }
+            }
+            signal_frame::CommandLineError::RequestRejected { reason } => {
+                Self::RequestRejected { reason }
+            }
+        }
+    }
+}
+
 impl BatchErrorClassification for Error {
     fn batch_failure_reason(&self) -> BatchFailureReason {
         match self {

@@ -35,6 +35,7 @@ impl TraceNode {
 pub enum TraceAction {
     ActorStarted,
     MessageReceived,
+    CallerObserved,
     RequestDecoded,
     OperationReceived,
     ObservationProjected,
