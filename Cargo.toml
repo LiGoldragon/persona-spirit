@@ -34,6 +34,7 @@ signal-sema                 = { git = "https://github.com/LiGoldragon/signal-sem
 signal-version-handover     = { git = "https://github.com/LiGoldragon/signal-version-handover.git", branch = "main" }
 thiserror                   = "2"
 tokio                       = { version = "1", default-features = false, features = ["macros", "rt-multi-thread"] }
+unix-ancillary              = "0.2"
 version-projection          = { git = "https://github.com/LiGoldragon/version-projection.git", branch = "main" }
 
 [lints.rust]

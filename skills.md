@@ -33,6 +33,11 @@ Contract records stay in `signal-persona-spirit` and
   embedded or configured bootstrap-policy source, then binds one ordinary
   socket for `signal-persona-spirit::Frame` values and one owner socket for
   `owner-signal-persona-spirit::Frame` values.
+- If `DaemonConfiguration` includes a handoff-control socket, the daemon
+  connects to Persona's control socket and can receive public-client file
+  descriptors over `SCM_RIGHTS`; each received descriptor is served as the same
+  ordinary length-prefixed Signal stream. Persona is not on the byte path after
+  the descriptor handoff.
 - The CLI request path never opens `SpiritActorRuntime` directly. It decodes
   NOTA into the selected working or owner request type, sends a Signal frame to
   the selected daemon socket, and renders the daemon's Signal reply back to

@@ -106,9 +106,14 @@ expected actor path for each constraint.
 The daemon socket path does not pretend RKYV Signal traffic is text. The
 ordinary socket reads length-prefixed `signal-persona-spirit::Frame` values,
 checks the `signal-frame::Request`, and submits each working-contract
-`Operation` directly to `SpiritRoot` through the dispatch plane. The owner socket reads
-length-prefixed `owner-signal-persona-spirit::Frame` values and submits each
-owner-contract `Operation` directly to `OwnerPlane`.
+`Operation` directly to `SpiritRoot` through the dispatch plane. When
+`DaemonConfiguration` names a handoff-control socket, the daemon also connects
+to Persona's control socket and can receive accepted public-client file
+descriptors by `SCM_RIGHTS`; each received descriptor is treated as the same
+ordinary length-prefixed Signal stream, so Persona is not on the byte path after
+handoff. The owner socket reads length-prefixed
+`owner-signal-persona-spirit::Frame` values and submits each owner-contract
+`Operation` directly to `OwnerPlane`.
 
 The upgrade socket reads length-prefixed `signal-version-handover::Frame`
 values. It is the private handover surface for a staged Spirit replacement:
@@ -203,6 +208,7 @@ in-process.
 | Daemon configuration selects the bootstrap-policy source. | `persona_spirit_daemon_configuration_controls_bootstrap_policy_source` starts a daemon with an explicit policy path and reloads through the owner socket. |
 | The daemon configuration is a single untagged NOTA struct record. | `persona_spirit_daemon_configuration_is_one_nota_record` round-trips the config and rejects a variant wrapper shape. |
 | The daemon serves ordinary length-prefixed Signal frames through the actor root. | `persona_spirit_daemon_serves_signal_frames_through_actor_root` writes and reads through the ordinary Unix socket. |
+| The daemon can serve public Signal frames from a Persona-handed-off file descriptor. | `persona_spirit_daemon_serves_signal_frames_from_handed_off_file_descriptor` sends an accepted client stream over a handoff-control socket with `SCM_RIGHTS` and receives the ordinary reply directly from the daemon. |
 | The daemon serves owner length-prefixed Signal frames through `OwnerPlane`. | `persona_spirit_daemon_serves_owner_signal_frames_through_owner_plane` writes and reads through the owner Unix socket. |
 | The ordinary socket rejects owner Signal frames. | `persona_spirit_ordinary_socket_rejects_owner_signal_frames` writes an owner frame to the ordinary socket and expects decode rejection. |
 | The owner socket rejects ordinary Signal frames. | `persona_spirit_owner_socket_rejects_ordinary_signal_frames` writes an ordinary frame to the owner socket and expects decode rejection. |
@@ -225,7 +231,7 @@ in-process.
 ```text
 src/lib.rs                         — module entry
 src/argument.rs                    — one-argument boundary
-src/daemon.rs                      — daemon configuration, bootstrap-policy source selection, socket binding, ordinary/owner/upgrade frame codecs, signal clients
+src/daemon.rs                      — daemon configuration, bootstrap-policy source selection, socket binding, ordinary/owner/upgrade frame codecs, Design D handoff-control receive path, signal clients
 src/error.rs                       — typed error
 src/observation.rs                 — Spirit-local Command/Effect to payloadless signal-sema observation projection
 src/runtime.rs                     — CLI boundary that routes NOTA request heads through generated working/owner dispatch, converts selected request text to signal-frame traffic, and renders typed replies back to NOTA

@@ -1,5 +1,5 @@
 use std::fs;
-use std::os::unix::net::UnixStream;
+use std::os::unix::net::{UnixListener, UnixStream};
 use std::process::Command;
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -29,6 +29,7 @@ use signal_version_handover::{
     HandoverAcceptance, HandoverFinalization, HandoverRejection, HandoverRejectionReason,
     MarkerRequest, Operation as UpgradeOperation, Reply as UpgradeReply,
 };
+use unix_ancillary::UnixStreamExt;
 use version_projection::{ComponentName, ContractVersion, Projected, RecordKind};
 
 #[derive(Debug, Clone)]
@@ -36,6 +37,7 @@ struct DaemonFixture {
     ordinary_socket: SocketPath,
     owner_socket: SocketPath,
     upgrade_socket: SocketPath,
+    handoff_control_socket: SocketPath,
     store: StorePath,
 }
 
@@ -51,12 +53,19 @@ impl DaemonFixture {
         owner_socket.push(format!("persona-spirit-{test_name}-{nanos}-owner.sock"));
         let mut upgrade_socket = std::env::temp_dir();
         upgrade_socket.push(format!("persona-spirit-{test_name}-{nanos}-upgrade.sock"));
+        let mut handoff_control_socket = std::env::temp_dir();
+        handoff_control_socket.push(format!(
+            "persona-spirit-{test_name}-{nanos}-handoff-control.sock"
+        ));
         let mut store = std::env::temp_dir();
         store.push(format!("persona-spirit-{test_name}-{nanos}.redb"));
         Self {
             ordinary_socket: SocketPath::new(socket.to_string_lossy().into_owned()),
             owner_socket: SocketPath::new(owner_socket.to_string_lossy().into_owned()),
             upgrade_socket: SocketPath::new(upgrade_socket.to_string_lossy().into_owned()),
+            handoff_control_socket: SocketPath::new(
+                handoff_control_socket.to_string_lossy().into_owned(),
+            ),
             store: StorePath::new(store.to_string_lossy().into_owned()),
         }
     }
@@ -81,6 +90,11 @@ impl DaemonFixture {
 
     fn upgrade_client(&self) -> upgrade::SignalClient {
         upgrade::SignalClient::new(self.upgrade_socket.clone())
+    }
+
+    fn handoff_control_listener(&self) -> UnixListener {
+        UnixListener::bind(self.handoff_control_socket.as_path())
+            .expect("handoff control listener binds")
     }
 }
 
@@ -141,8 +155,8 @@ fn persona_spirit_daemon_configuration_is_one_nota_record() {
         "daemon configuration is a struct record, not a variant wrapper"
     );
     assert!(
-        text.ends_with(" None)"),
-        "daemon configuration carries an explicit optional bootstrap-policy path"
+        text.ends_with(" None None)"),
+        "daemon configuration carries explicit optional bootstrap-policy and handoff control paths"
     );
 }
 
@@ -199,6 +213,56 @@ fn persona_spirit_daemon_serves_signal_frames_through_actor_root() {
         !upgrade_socket.as_path().exists(),
         "daemon shutdown removes the upgrade socket path"
     );
+}
+
+#[test]
+fn persona_spirit_daemon_serves_signal_frames_from_handed_off_file_descriptor() {
+    let fixture = DaemonFixture::new("handoff-control");
+    let control_listener = fixture.handoff_control_listener();
+    let mut daemon = DaemonRuntime::from_configuration(
+        fixture
+            .configuration()
+            .with_handoff_control_socket_path(fixture.handoff_control_socket.clone()),
+    )
+    .bind()
+    .expect("daemon binds");
+    let (persona_control, _address) = control_listener
+        .accept()
+        .expect("daemon connects to Persona control socket");
+
+    let codec = ordinary::FrameCodec::default();
+    let (mut client_stream, daemon_stream) =
+        UnixStream::pair().expect("client and handed-off stream pair");
+    persona_control
+        .send_fds(b"spirit-public-fd", &[&daemon_stream])
+        .expect("Persona sends accepted client fd");
+    drop(daemon_stream);
+
+    let client_handle = thread::spawn(move || {
+        let frame = codec.request_frame(WorkingOperation::Record(entry("handoff accepted")));
+        codec
+            .write_frame(&mut client_stream, &frame)
+            .expect("handoff request writes");
+        codec
+            .reply_from_frame(codec.read_frame(&mut client_stream).expect("reply reads"))
+            .expect("reply decodes")
+    });
+
+    let served = daemon
+        .serve_handoff_one()
+        .expect("daemon serves handed-off stream");
+    let reply = client_handle.join().expect("client exits");
+    assert_eq!(served.reply(), &reply);
+    assert_eq!(
+        reply,
+        Reply::committed(NonEmpty::single(SubReply::Ok(
+            WorkingReply::RecordAccepted(signal_persona_spirit::RecordAccepted::new(
+                signal_persona_spirit::RecordIdentifier::new(1)
+            ))
+        )))
+    );
+
+    daemon.shutdown().expect("daemon shuts down");
 }
 
 #[test]

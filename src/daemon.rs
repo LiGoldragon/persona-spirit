@@ -1,3 +1,4 @@
+use std::io::ErrorKind;
 use std::io::{Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -24,6 +25,7 @@ use signal_version_handover::{
     Frame as UpgradeFrame, FrameBody as UpgradeFrameBody, Operation as UpgradeOperation,
     Reply as UpgradeReply,
 };
+use unix_ancillary::UnixStreamExt;
 
 use crate::{
     Error, Result, StoreLocation,
@@ -40,6 +42,7 @@ pub struct DaemonConfiguration {
     pub store_path: StorePath,
     pub socket_mode: SocketMode,
     pub bootstrap_policy_path: Option<BootstrapPolicyPath>,
+    pub handoff_control_socket_path: Option<SocketPath>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, NotaTransparent)]
@@ -128,6 +131,7 @@ pub struct BoundDaemon {
     ordinary_listener: UnixListener,
     owner_listener: UnixListener,
     upgrade_listener: UnixListener,
+    handoff_control: Option<UnixStream>,
     runtime: Arc<tokio::runtime::Runtime>,
     root: kameo::actor::ActorRef<SpiritRoot>,
     codec: ordinary::FrameCodec,
@@ -198,6 +202,7 @@ impl DaemonConfiguration {
             store_path,
             socket_mode,
             bootstrap_policy_path: None,
+            handoff_control_socket_path: None,
         }
     }
 
@@ -206,6 +211,14 @@ impl DaemonConfiguration {
         bootstrap_policy_path: BootstrapPolicyPath,
     ) -> Self {
         self.bootstrap_policy_path = Some(bootstrap_policy_path);
+        self
+    }
+
+    pub fn with_handoff_control_socket_path(
+        mut self,
+        handoff_control_socket_path: SocketPath,
+    ) -> Self {
+        self.handoff_control_socket_path = Some(handoff_control_socket_path);
         self
     }
 
@@ -553,6 +566,12 @@ impl DaemonRuntime {
             .map_err(Error::input_output)?;
         let upgrade_listener = UnixListener::bind(self.configuration.upgrade_socket_path.as_path())
             .map_err(Error::input_output)?;
+        let handoff_control = self
+            .configuration
+            .handoff_control_socket_path
+            .as_ref()
+            .map(|socket| UnixStream::connect(socket.as_path()).map_err(Error::input_output))
+            .transpose()?;
         std::fs::set_permissions(
             self.configuration.ordinary_socket_path.as_path(),
             std::fs::Permissions::from_mode(self.configuration.socket_mode.as_octal()),
@@ -588,6 +607,7 @@ impl DaemonRuntime {
             ordinary_listener,
             owner_listener,
             upgrade_listener,
+            handoff_control,
             runtime,
             root,
             codec: ordinary::FrameCodec::default(),
@@ -623,16 +643,30 @@ impl BoundDaemon {
             .ordinary_listener
             .accept()
             .map_err(Error::input_output)?;
-        let frame = self.codec.read_frame(&mut stream)?;
-        let received = self.codec.request_from_frame(frame)?;
-        let reply = if self.public_sockets.accepts_request(&received.request) {
-            self.reply_to_request(received.request)?
-        } else {
-            Reply::rejected(RequestRejectionReason::Internal)
-        };
-        let frame = self.codec.reply_frame(received.exchange, reply.clone());
-        self.codec.write_frame(&mut stream, &frame)?;
-        Ok(ServedExchange::new(reply))
+        serve_ordinary_stream(
+            &mut stream,
+            self.root.clone(),
+            self.runtime.clone(),
+            self.codec,
+            self.public_sockets.clone(),
+        )
+    }
+
+    pub fn serve_handoff_one(&mut self) -> Result<ServedExchange> {
+        let control = self.handoff_control.as_ref().ok_or_else(|| {
+            Error::input_output(std::io::Error::new(
+                ErrorKind::NotConnected,
+                "handoff control socket is not configured",
+            ))
+        })?;
+        let mut stream = receive_handoff_stream(control)?;
+        serve_ordinary_stream(
+            &mut stream,
+            self.root.clone(),
+            self.runtime.clone(),
+            self.codec,
+            self.public_sockets.clone(),
+        )
     }
 
     pub fn serve_owner_one(&mut self) -> Result<ServedOwnerExchange> {
@@ -730,6 +764,16 @@ impl BoundDaemon {
             self.upgrade_codec,
             self.public_sockets.clone(),
         );
+        let handoff_handle = self.handoff_control.map(|control| {
+            let handoff = HandoffControlServer::new(
+                control,
+                self.root.clone(),
+                self.runtime.clone(),
+                self.codec,
+                self.public_sockets.clone(),
+            );
+            thread::spawn(move || handoff.serve_forever())
+        });
         let ordinary_handle = thread::spawn(move || ordinary.serve_forever());
         let owner_handle = thread::spawn(move || owner.serve_forever());
         let upgrade_result = upgrade.serve_forever();
@@ -739,7 +783,16 @@ impl BoundDaemon {
         let owner_result = owner_handle
             .join()
             .map_err(|_| Error::actor_runtime("owner socket thread panicked"))?;
-        upgrade_result.and(owner_result).and(ordinary_result)
+        let handoff_result = match handoff_handle {
+            Some(handle) => handle
+                .join()
+                .map_err(|_| Error::actor_runtime("handoff control thread panicked"))?,
+            None => Ok(()),
+        };
+        upgrade_result
+            .and(owner_result)
+            .and(ordinary_result)
+            .and(handoff_result)
     }
 
     pub fn shutdown(self) -> Result<()> {
@@ -754,14 +807,6 @@ impl BoundDaemon {
             (Ok(()), Ok(()), Err(error), _) => Err(error),
             (Ok(()), Ok(()), Ok(()), Err(error)) => Err(error),
         }
-    }
-
-    fn reply_to_request(
-        &self,
-        request: signal_frame::Request<WorkingOperation>,
-    ) -> Result<Reply<WorkingReply>> {
-        OrdinaryExchangeHandler::new(self.root.clone(), self.runtime.clone())
-            .reply_to_request(request)
     }
 
     fn reply_to_owner_request(
@@ -808,6 +853,14 @@ struct UpgradeSocketServer {
     public_sockets: PublicSockets,
 }
 
+struct HandoffControlServer {
+    control: UnixStream,
+    root: kameo::actor::ActorRef<SpiritRoot>,
+    runtime: Arc<tokio::runtime::Runtime>,
+    codec: ordinary::FrameCodec,
+    public_sockets: PublicSockets,
+}
+
 struct OrdinaryExchangeHandler {
     root: kameo::actor::ActorRef<SpiritRoot>,
     runtime: Arc<tokio::runtime::Runtime>,
@@ -851,17 +904,50 @@ impl SocketServer {
 
     fn serve_one(&self) -> Result<ServedExchange> {
         let (mut stream, _address) = self.listener.accept().map_err(Error::input_output)?;
-        let frame = self.codec.read_frame(&mut stream)?;
-        let received = self.codec.request_from_frame(frame)?;
-        let reply = if self.public_sockets.accepts_request(&received.request) {
-            OrdinaryExchangeHandler::new(self.root.clone(), self.runtime.clone())
-                .reply_to_request(received.request)?
-        } else {
-            Reply::rejected(RequestRejectionReason::Internal)
-        };
-        let frame = self.codec.reply_frame(received.exchange, reply.clone());
-        self.codec.write_frame(&mut stream, &frame)?;
-        Ok(ServedExchange::new(reply))
+        serve_ordinary_stream(
+            &mut stream,
+            self.root.clone(),
+            self.runtime.clone(),
+            self.codec,
+            self.public_sockets.clone(),
+        )
+    }
+}
+
+impl HandoffControlServer {
+    fn new(
+        control: UnixStream,
+        root: kameo::actor::ActorRef<SpiritRoot>,
+        runtime: Arc<tokio::runtime::Runtime>,
+        codec: ordinary::FrameCodec,
+        public_sockets: PublicSockets,
+    ) -> Self {
+        Self {
+            control,
+            root,
+            runtime,
+            codec,
+            public_sockets,
+        }
+    }
+
+    fn serve_forever(self) -> Result<()> {
+        loop {
+            if let Err(error) = self.serve_one() {
+                eprintln!("persona-spirit-daemon handoff control error: {error}");
+            }
+        }
+    }
+
+    fn serve_one(&self) -> Result<ServedExchange> {
+        let mut stream = receive_handoff_stream(&self.control)?;
+        serve_ordinary_stream(
+            &mut stream,
+            self.root.clone(),
+            self.runtime.clone(),
+            self.codec,
+            self.public_sockets.clone(),
+        )
     }
 }
 
@@ -1065,6 +1151,36 @@ impl UpgradeExchangeHandler {
         }
         Ok(SubReply::Ok(reply))
     }
+}
+
+fn serve_ordinary_stream(
+    stream: &mut UnixStream,
+    root: kameo::actor::ActorRef<SpiritRoot>,
+    runtime: Arc<tokio::runtime::Runtime>,
+    codec: ordinary::FrameCodec,
+    public_sockets: PublicSockets,
+) -> Result<ServedExchange> {
+    let frame = codec.read_frame(stream)?;
+    let received = codec.request_from_frame(frame)?;
+    let reply = if public_sockets.accepts_request(&received.request) {
+        OrdinaryExchangeHandler::new(root, runtime).reply_to_request(received.request)?
+    } else {
+        Reply::rejected(RequestRejectionReason::Internal)
+    };
+    let frame = codec.reply_frame(received.exchange, reply.clone());
+    codec.write_frame(stream, &frame)?;
+    Ok(ServedExchange::new(reply))
+}
+
+fn receive_handoff_stream(control: &UnixStream) -> Result<UnixStream> {
+    let received = control.recv_fds::<1>().map_err(Error::input_output)?;
+    let Some(file_descriptor) = received.fds.into_iter().next() else {
+        return Err(Error::input_output(std::io::Error::new(
+            ErrorKind::InvalidData,
+            "handoff control message did not carry a client file descriptor",
+        )));
+    };
+    Ok(UnixStream::from(file_descriptor))
 }
 
 impl PublicSockets {
