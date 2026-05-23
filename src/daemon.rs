@@ -19,15 +19,12 @@ use signal_frame::{
     ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, RequestPayload,
     RequestRejectionReason, SessionEpoch, SubReply,
 };
-use signal_persona::engine_management::{
-    Frame as EngineManagementFrame, FrameBody as EngineManagementFrameBody,
-    Operation as EngineManagementOperation, Query as EngineManagementQuery,
-    Reply as EngineManagementReply,
-};
-use signal_persona::{
+use signal_persona_engine_management::{
     ComponentHealth, ComponentHealthReport, ComponentIdentity, ComponentKind,
     ComponentName as EngineManagementComponentName, ComponentReady,
-    EngineManagementProtocolVersion, StopAcknowledgement,
+    EngineManagementProtocolVersion, Frame as EngineManagementFrame,
+    FrameBody as EngineManagementFrameBody, Operation as EngineManagementOperation,
+    Query as EngineManagementQuery, Reply as EngineManagementReply, StopAcknowledgement,
 };
 use signal_persona_spirit::{
     Frame, FrameBody, Operation as WorkingOperation, Reply as WorkingReply,

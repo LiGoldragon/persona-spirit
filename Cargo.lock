@@ -590,7 +590,7 @@ dependencies = [
  "signal-persona-introspect",
  "signal-persona-message 0.1.0 (git+https://github.com/LiGoldragon/signal-persona-message.git)",
  "signal-persona-mind",
- "signal-persona-origin",
+ "signal-persona-origin 0.1.0 (git+https://github.com/LiGoldragon/signal-persona-origin.git)",
  "signal-persona-router",
  "signal-persona-system",
  "signal-persona-terminal",
@@ -617,8 +617,8 @@ dependencies = [
  "sema-engine",
  "signal-executor",
  "signal-frame",
- "signal-persona",
- "signal-persona-origin",
+ "signal-persona-engine-management",
+ "signal-persona-origin 0.1.0 (git+https://github.com/LiGoldragon/signal-persona-origin.git)",
  "signal-persona-spirit",
  "signal-sema 0.1.0 (git+https://github.com/LiGoldragon/signal-sema.git?branch=main)",
  "signal-version-handover",
@@ -927,8 +927,19 @@ dependencies = [
  "nota-codec",
  "rkyv",
  "signal-frame",
- "signal-persona-origin",
+ "signal-persona-origin 0.1.0 (git+https://github.com/LiGoldragon/signal-persona-origin.git)",
  "signal-sema 0.1.0 (git+https://github.com/LiGoldragon/signal-sema.git?branch=main)",
+]
+
+[[package]]
+name = "signal-persona-engine-management"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/signal-persona-engine-management.git?branch=main#b166988d6b77c0c5502241142d4192b6d992388a"
+dependencies = [
+ "nota-codec",
+ "rkyv",
+ "signal-frame",
+ "signal-persona-origin 0.1.0 (git+https://github.com/LiGoldragon/signal-persona-origin.git?branch=main)",
 ]
 
 [[package]]
@@ -941,7 +952,7 @@ dependencies = [
  "rkyv",
  "signal-core",
  "signal-persona",
- "signal-persona-origin",
+ "signal-persona-origin 0.1.0 (git+https://github.com/LiGoldragon/signal-persona-origin.git)",
  "thiserror",
 ]
 
@@ -956,7 +967,7 @@ dependencies = [
  "signal-core",
  "signal-persona",
  "signal-persona-message 0.1.0 (git+https://github.com/LiGoldragon/signal-persona-message.git?branch=main)",
- "signal-persona-origin",
+ "signal-persona-origin 0.1.0 (git+https://github.com/LiGoldragon/signal-persona-origin.git)",
  "thiserror",
 ]
 
@@ -970,7 +981,7 @@ dependencies = [
  "rkyv",
  "signal-core",
  "signal-persona",
- "signal-persona-origin",
+ "signal-persona-origin 0.1.0 (git+https://github.com/LiGoldragon/signal-persona-origin.git)",
  "thiserror",
 ]
 
@@ -984,7 +995,7 @@ dependencies = [
  "rkyv",
  "signal-core",
  "signal-persona",
- "signal-persona-origin",
+ "signal-persona-origin 0.1.0 (git+https://github.com/LiGoldragon/signal-persona-origin.git)",
  "thiserror",
 ]
 
@@ -996,9 +1007,18 @@ dependencies = [
  "nota-codec",
  "rkyv",
  "signal-core",
- "signal-persona-origin",
+ "signal-persona-origin 0.1.0 (git+https://github.com/LiGoldragon/signal-persona-origin.git)",
  "signal-sema 0.1.0 (git+https://github.com/LiGoldragon/signal-sema.git)",
  "thiserror",
+]
+
+[[package]]
+name = "signal-persona-origin"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/signal-persona-origin.git?branch=main#12bab3206a3034bf9e508c1064e749daa9340615"
+dependencies = [
+ "nota-codec",
+ "rkyv",
 ]
 
 [[package]]
@@ -1021,7 +1041,7 @@ dependencies = [
  "signal-core",
  "signal-persona",
  "signal-persona-message 0.1.0 (git+https://github.com/LiGoldragon/signal-persona-message.git)",
- "signal-persona-origin",
+ "signal-persona-origin 0.1.0 (git+https://github.com/LiGoldragon/signal-persona-origin.git)",
  "thiserror",
 ]
 
@@ -1047,7 +1067,7 @@ dependencies = [
  "rkyv",
  "signal-core",
  "signal-persona",
- "signal-persona-origin",
+ "signal-persona-origin 0.1.0 (git+https://github.com/LiGoldragon/signal-persona-origin.git)",
  "thiserror",
 ]
 
@@ -1061,7 +1081,7 @@ dependencies = [
  "rkyv",
  "signal-core",
  "signal-persona",
- "signal-persona-origin",
+ "signal-persona-origin 0.1.0 (git+https://github.com/LiGoldragon/signal-persona-origin.git)",
  "thiserror",
 ]
 

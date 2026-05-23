@@ -87,6 +87,10 @@
             inherit cargoArtifacts;
             cargoTestExtraArgs = "--test daemon";
           });
+          test-engine-management-socket = craneLib.cargoTest (commonArguments // {
+            inherit cargoArtifacts;
+            cargoTestExtraArgs = "--test daemon persona_spirit_daemon_serves_engine_management_socket_for_supervision -- --exact";
+          });
           test-handoff-control-serves-fd = craneLib.cargoTest (commonArguments // {
             inherit cargoArtifacts;
             cargoTestExtraArgs = "--test daemon persona_spirit_daemon_serves_signal_frames_from_handed_off_file_descriptor -- --exact";
