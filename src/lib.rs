@@ -14,8 +14,9 @@ pub use actors::root::{
 pub use actors::trace::{ActorTrace, TraceAction, TraceNode};
 pub use argument::SingleArgument;
 pub use daemon::{
-    BootstrapPolicyPath, BoundDaemon, DaemonConfiguration, DaemonRuntime, ServedExchange,
-    ServedOwnerExchange, ServedUpgradeExchange, SocketMode, SocketPath, StorePath,
+    BootstrapPolicyPath, BoundDaemon, DaemonConfiguration, DaemonRuntime,
+    ServedEngineManagementExchange, ServedExchange, ServedOwnerExchange, ServedUpgradeExchange,
+    SocketMode, SocketPath, StorePath,
 };
 pub use error::{Error, Result};
 pub use observation::{Command, Effect};

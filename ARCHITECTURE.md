@@ -45,7 +45,8 @@ downstream owner-Mutate audit once the runtime lands.
 
 ## Actor topology
 
-The daemon keeps the Kameo actor tree alive behind three typed Unix sockets:
+The daemon keeps the Kameo actor tree alive behind three domain Unix sockets
+plus an optional engine-management socket:
 
 ```mermaid
 flowchart LR
@@ -117,6 +118,13 @@ ordinary-socket traffic still obeys the daemon's current public-socket state.
 The owner socket reads length-prefixed
 `owner-signal-persona-spirit::Frame` values and submits each owner-contract
 `Operation` directly to `OwnerPlane`.
+
+When `DaemonConfiguration` names an engine-management socket, the daemon also
+binds `signal-persona::EngineManagement` there. This is the manager lifecycle
+surface used by `persona` supervision: `Announce` identifies the component as
+`persona-spirit` / `ComponentKind::Spirit`, readiness returns `Ready`, health
+returns `Running`, and `Stop` acknowledges the lifecycle request. Domain
+Spirit operations never cross this socket.
 
 The upgrade socket reads length-prefixed `signal-version-handover::Frame`
 values. It is the private handover surface for a staged Spirit replacement:
@@ -215,6 +223,7 @@ in-process.
 | The Spirit CLI can use a Persona-owned public socket while the daemon receives the descriptor over the private control socket. | `persona_spirit_cli_reaches_daemon_through_persona_handoff_router` starts Persona's handoff router, starts Spirit with a handoff-control connection, routes `spirit` `Record` and `Observe` CLI calls through the Persona-owned public socket, and proves the daemon replies directly after descriptor handoff. |
 | Persona can flip the active version selector while old handed-off Spirit clients drain. | `persona_handoff_router_routes_new_connections_after_selector_flip_and_old_connections_drain` seeds v0.1.0, copies the store to v0.1.1, routes an old pre-flip descriptor to v0.1.0, drives `AttemptHandover` through real upgrade sockets, then proves a new `spirit` CLI call on the same Persona public socket routes to v0.1.1. |
 | The daemon serves owner length-prefixed Signal frames through `OwnerPlane`. | `persona_spirit_daemon_serves_owner_signal_frames_through_owner_plane` writes and reads through the owner Unix socket. |
+| The daemon can expose the manager lifecycle socket when supervised by `persona`. | `persona_spirit_daemon_serves_engine_management_socket_for_supervision` verifies `Announce`, readiness, and health replies over `signal-persona::EngineManagement`. |
 | The ordinary socket rejects owner Signal frames. | `persona_spirit_ordinary_socket_rejects_owner_signal_frames` writes an owner frame to the ordinary socket and expects decode rejection. |
 | The owner socket rejects ordinary Signal frames. | `persona_spirit_owner_socket_rejects_ordinary_signal_frames` writes an ordinary frame to the owner socket and expects decode rejection. |
 | The daemon serves private upgrade length-prefixed Signal frames through the actor root and store plane. | `persona_spirit_daemon_serves_version_handover_frames_through_upgrade_socket` asks for a handover marker, performs readiness, and completes handover through the upgrade socket. |

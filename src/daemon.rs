@@ -18,6 +18,16 @@ use signal_frame::{
     ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, RequestPayload,
     RequestRejectionReason, SessionEpoch, SubReply,
 };
+use signal_persona::engine_management::{
+    Frame as EngineManagementFrame, FrameBody as EngineManagementFrameBody,
+    Operation as EngineManagementOperation, Query as EngineManagementQuery,
+    Reply as EngineManagementReply,
+};
+use signal_persona::{
+    ComponentHealth, ComponentHealthReport, ComponentIdentity, ComponentKind,
+    ComponentName as EngineManagementComponentName, ComponentReady,
+    EngineManagementProtocolVersion, StopAcknowledgement,
+};
 use signal_persona_spirit::{
     Frame, FrameBody, Operation as WorkingOperation, Reply as WorkingReply,
 };
@@ -43,6 +53,8 @@ pub struct DaemonConfiguration {
     pub socket_mode: SocketMode,
     pub bootstrap_policy_path: Option<BootstrapPolicyPath>,
     pub handoff_control_socket_path: Option<SocketPath>,
+    pub engine_management_socket_path: Option<SocketPath>,
+    pub engine_management_socket_mode: Option<SocketMode>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, NotaTransparent)]
@@ -128,15 +140,18 @@ pub struct BoundDaemon {
     ordinary_socket: SocketPath,
     owner_socket: SocketPath,
     upgrade_socket: SocketPath,
+    engine_management_socket: Option<SocketPath>,
     ordinary_listener: UnixListener,
     owner_listener: UnixListener,
     upgrade_listener: UnixListener,
+    engine_management_listener: Option<UnixListener>,
     handoff_control: Option<UnixStream>,
     runtime: Arc<tokio::runtime::Runtime>,
     root: kameo::actor::ActorRef<SpiritRoot>,
     codec: ordinary::FrameCodec,
     owner_codec: owner::FrameCodec,
     upgrade_codec: upgrade::FrameCodec,
+    engine_management_codec: EngineManagementFrameCodec,
     public_sockets: PublicSockets,
 }
 
@@ -173,6 +188,11 @@ pub struct ServedUpgradeExchange {
     reply: Reply<UpgradeReply>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ServedEngineManagementExchange {
+    reply: EngineManagementReply,
+}
+
 #[derive(Debug, Clone)]
 struct PublicSockets {
     ordinary_socket: SocketPath,
@@ -203,6 +223,8 @@ impl DaemonConfiguration {
             socket_mode,
             bootstrap_policy_path: None,
             handoff_control_socket_path: None,
+            engine_management_socket_path: None,
+            engine_management_socket_mode: None,
         }
     }
 
@@ -219,6 +241,16 @@ impl DaemonConfiguration {
         handoff_control_socket_path: SocketPath,
     ) -> Self {
         self.handoff_control_socket_path = Some(handoff_control_socket_path);
+        self
+    }
+
+    pub fn with_engine_management_socket_path(
+        mut self,
+        engine_management_socket_path: SocketPath,
+        engine_management_socket_mode: SocketMode,
+    ) -> Self {
+        self.engine_management_socket_path = Some(engine_management_socket_path);
+        self.engine_management_socket_mode = Some(engine_management_socket_mode);
         self
     }
 
@@ -559,6 +591,31 @@ impl DaemonRuntime {
             &self.configuration.upgrade_socket_path,
             self.configuration.socket_mode,
         )?;
+        let engine_management_socket_mode = match (
+            &self.configuration.engine_management_socket_path,
+            self.configuration.engine_management_socket_mode,
+        ) {
+            (Some(_), Some(mode)) => Some(mode),
+            (None, None) => None,
+            (Some(_), None) => {
+                return Err(Error::InvalidDaemonConfiguration {
+                    reason: "engine management socket mode is required when engine management socket path is set"
+                        .to_string(),
+                });
+            }
+            (None, Some(_)) => {
+                return Err(Error::InvalidDaemonConfiguration {
+                    reason: "engine management socket path is required when engine management socket mode is set"
+                        .to_string(),
+                });
+            }
+        };
+        if let (Some(path), Some(mode)) = (
+            &self.configuration.engine_management_socket_path,
+            engine_management_socket_mode,
+        ) {
+            SocketBinding::bind(path, mode)?;
+        }
         let ordinary_listener =
             UnixListener::bind(self.configuration.ordinary_socket_path.as_path())
                 .map_err(Error::input_output)?;
@@ -566,6 +623,12 @@ impl DaemonRuntime {
             .map_err(Error::input_output)?;
         let upgrade_listener = UnixListener::bind(self.configuration.upgrade_socket_path.as_path())
             .map_err(Error::input_output)?;
+        let engine_management_listener = self
+            .configuration
+            .engine_management_socket_path
+            .as_ref()
+            .map(|path| UnixListener::bind(path.as_path()).map_err(Error::input_output))
+            .transpose()?;
         let handoff_control = self
             .configuration
             .handoff_control_socket_path
@@ -587,6 +650,16 @@ impl DaemonRuntime {
             std::fs::Permissions::from_mode(self.configuration.socket_mode.as_octal()),
         )
         .map_err(Error::input_output)?;
+        if let (Some(path), Some(mode)) = (
+            &self.configuration.engine_management_socket_path,
+            engine_management_socket_mode,
+        ) {
+            std::fs::set_permissions(
+                path.as_path(),
+                std::fs::Permissions::from_mode(mode.as_octal()),
+            )
+            .map_err(Error::input_output)?;
+        }
         let runtime = Arc::new(
             tokio::runtime::Builder::new_multi_thread()
                 .worker_threads(2)
@@ -604,15 +677,18 @@ impl DaemonRuntime {
             ordinary_socket: self.configuration.ordinary_socket_path.clone(),
             owner_socket: self.configuration.owner_socket_path.clone(),
             upgrade_socket: self.configuration.upgrade_socket_path,
+            engine_management_socket: self.configuration.engine_management_socket_path,
             ordinary_listener,
             owner_listener,
             upgrade_listener,
+            engine_management_listener,
             handoff_control,
             runtime,
             root,
             codec: ordinary::FrameCodec::default(),
             owner_codec: owner::FrameCodec::default(),
             upgrade_codec: upgrade::FrameCodec::default(),
+            engine_management_codec: EngineManagementFrameCodec::default(),
             public_sockets: PublicSockets::open(
                 self.configuration.ordinary_socket_path.clone(),
                 self.configuration.owner_socket_path.clone(),
@@ -636,6 +712,12 @@ impl BoundDaemon {
 
     pub fn upgrade_socket_path(&self) -> &Path {
         self.upgrade_socket.as_path()
+    }
+
+    pub fn engine_management_socket_path(&self) -> Option<&Path> {
+        self.engine_management_socket
+            .as_ref()
+            .map(SocketPath::as_path)
     }
 
     pub fn serve_one(&mut self) -> Result<ServedExchange> {
@@ -700,6 +782,20 @@ impl BoundDaemon {
             .reply_frame(received.exchange, reply.clone());
         self.upgrade_codec.write_frame(&mut stream, &frame)?;
         Ok(ServedUpgradeExchange::new(reply))
+    }
+
+    pub fn serve_engine_management_one(&mut self) -> Result<Vec<ServedEngineManagementExchange>> {
+        let listener = self.engine_management_listener.as_ref().ok_or_else(|| {
+            Error::InvalidDaemonConfiguration {
+                reason: "engine management socket is not configured".to_string(),
+            }
+        })?;
+        let (mut stream, _address) = listener.accept().map_err(Error::input_output)?;
+        EngineManagementSocketServer::new(
+            listener.try_clone().map_err(Error::input_output)?,
+            self.engine_management_codec,
+        )
+        .serve_connection(&mut stream)
     }
 
     pub fn serve_count(mut self, count: usize) -> Result<Vec<ServedExchange>> {
@@ -802,6 +898,22 @@ impl BoundDaemon {
             self.upgrade_codec,
             self.public_sockets.clone(),
         );
+        let engine_management_handle = self
+            .engine_management_listener
+            .as_ref()
+            .map(|listener| {
+                listener
+                    .try_clone()
+                    .map(|listener| {
+                        let engine_management = EngineManagementSocketServer::new(
+                            listener,
+                            self.engine_management_codec,
+                        );
+                        thread::spawn(move || engine_management.serve_forever())
+                    })
+                    .map_err(Error::input_output)
+            })
+            .transpose()?;
         let handoff_handle = self.handoff_control.map(|control| {
             let handoff = HandoffControlServer::new(
                 control,
@@ -827,10 +939,17 @@ impl BoundDaemon {
                 .map_err(|_| Error::actor_runtime("handoff control thread panicked"))?,
             None => Ok(()),
         };
+        let engine_management_result = match engine_management_handle {
+            Some(handle) => handle
+                .join()
+                .map_err(|_| Error::actor_runtime("engine management socket thread panicked"))?,
+            None => Ok(()),
+        };
         upgrade_result
             .and(owner_result)
             .and(ordinary_result)
             .and(handoff_result)
+            .and(engine_management_result)
     }
 
     pub fn shutdown(self) -> Result<()> {
@@ -838,12 +957,24 @@ impl BoundDaemon {
         let remove_ordinary = SocketBinding::remove(&self.ordinary_socket);
         let remove_owner = SocketBinding::remove(&self.owner_socket);
         let remove_upgrade = SocketBinding::remove(&self.upgrade_socket);
-        match (stop, remove_ordinary, remove_owner, remove_upgrade) {
-            (Ok(()), Ok(()), Ok(()), Ok(())) => Ok(()),
-            (Err(error), _, _, _) => Err(error),
-            (Ok(()), Err(error), _, _) => Err(error),
-            (Ok(()), Ok(()), Err(error), _) => Err(error),
-            (Ok(()), Ok(()), Ok(()), Err(error)) => Err(error),
+        let remove_engine_management = self
+            .engine_management_socket
+            .as_ref()
+            .map(SocketBinding::remove)
+            .unwrap_or(Ok(()));
+        match (
+            stop,
+            remove_ordinary,
+            remove_owner,
+            remove_upgrade,
+            remove_engine_management,
+        ) {
+            (Ok(()), Ok(()), Ok(()), Ok(()), Ok(())) => Ok(()),
+            (Err(error), _, _, _, _) => Err(error),
+            (Ok(()), Err(error), _, _, _) => Err(error),
+            (Ok(()), Ok(()), Err(error), _, _) => Err(error),
+            (Ok(()), Ok(()), Ok(()), Err(error), _) => Err(error),
+            (Ok(()), Ok(()), Ok(()), Ok(()), Err(error)) => Err(error),
         }
     }
 
@@ -891,6 +1022,11 @@ struct UpgradeSocketServer {
     public_sockets: PublicSockets,
 }
 
+struct EngineManagementSocketServer {
+    listener: UnixListener,
+    codec: EngineManagementFrameCodec,
+}
+
 struct HandoffControlServer {
     control: UnixStream,
     root: kameo::actor::ActorRef<SpiritRoot>,
@@ -913,6 +1049,16 @@ struct UpgradeExchangeHandler {
     root: kameo::actor::ActorRef<SpiritRoot>,
     runtime: Arc<tokio::runtime::Runtime>,
     public_sockets: PublicSockets,
+}
+
+#[derive(Clone, Copy)]
+struct EngineManagementFrameCodec {
+    maximum_frame_bytes: usize,
+}
+
+struct ReceivedEngineManagementRequest {
+    exchange: ExchangeIdentifier,
+    request: EngineManagementOperation,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1076,6 +1222,81 @@ impl UpgradeSocketServer {
         let frame = self.codec.reply_frame(received.exchange, reply.clone());
         self.codec.write_frame(&mut stream, &frame)?;
         Ok(ServedUpgradeExchange::new(reply))
+    }
+}
+
+impl EngineManagementSocketServer {
+    fn new(listener: UnixListener, codec: EngineManagementFrameCodec) -> Self {
+        Self { listener, codec }
+    }
+
+    fn serve_forever(self) -> Result<()> {
+        loop {
+            match self.listener.accept() {
+                Ok((mut stream, _address)) => {
+                    if let Err(error) = self.serve_connection(&mut stream) {
+                        eprintln!("persona-spirit-daemon engine-management client error: {error}");
+                    }
+                }
+                Err(error) => {
+                    eprintln!("persona-spirit-daemon engine-management accept error: {error}")
+                }
+            }
+        }
+    }
+
+    fn serve_connection(
+        &self,
+        stream: &mut UnixStream,
+    ) -> Result<Vec<ServedEngineManagementExchange>> {
+        let mut served = Vec::new();
+        loop {
+            let received = match self.codec.read_request(stream) {
+                Ok(received) => received,
+                Err(error) if Self::is_connection_closed(&error) => return Ok(served),
+                Err(error) => return Err(Error::input_output(error)),
+            };
+            let reply = Self::reply_to_operation(received.request);
+            self.codec
+                .write_reply(stream, received.exchange, reply.clone())
+                .map_err(Error::input_output)?;
+            served.push(ServedEngineManagementExchange::new(reply));
+        }
+    }
+
+    fn reply_to_operation(operation: EngineManagementOperation) -> EngineManagementReply {
+        match operation {
+            EngineManagementOperation::Announce(_) => {
+                EngineManagementReply::Identified(ComponentIdentity {
+                    name: EngineManagementComponentName::new("persona-spirit"),
+                    kind: ComponentKind::Spirit,
+                    engine_management_protocol_version: EngineManagementProtocolVersion::new(1),
+                    last_fatal_startup_error: None,
+                })
+            }
+            EngineManagementOperation::Query(EngineManagementQuery::ReadinessStatus(_)) => {
+                EngineManagementReply::Ready(ComponentReady {
+                    component_started_at: None,
+                })
+            }
+            EngineManagementOperation::Query(EngineManagementQuery::HealthStatus(_)) => {
+                EngineManagementReply::HealthReport(ComponentHealthReport {
+                    health: ComponentHealth::Running,
+                })
+            }
+            EngineManagementOperation::Stop(_) => {
+                EngineManagementReply::StopAcknowledged(StopAcknowledgement {
+                    drain_completed_at: None,
+                })
+            }
+        }
+    }
+
+    fn is_connection_closed(error: &std::io::Error) -> bool {
+        matches!(
+            error.kind(),
+            ErrorKind::UnexpectedEof | ErrorKind::ConnectionReset | ErrorKind::BrokenPipe
+        )
     }
 }
 
@@ -1397,6 +1618,89 @@ impl upgrade::SignalClient {
     }
 }
 
+impl Default for EngineManagementFrameCodec {
+    fn default() -> Self {
+        Self::new(DEFAULT_MAXIMUM_FRAME_BYTES)
+    }
+}
+
+impl EngineManagementFrameCodec {
+    const fn new(maximum_frame_bytes: usize) -> Self {
+        Self {
+            maximum_frame_bytes,
+        }
+    }
+
+    fn read_request(
+        &self,
+        stream: &mut UnixStream,
+    ) -> std::io::Result<ReceivedEngineManagementRequest> {
+        let frame = self.read_frame(stream)?;
+        match frame.into_body() {
+            EngineManagementFrameBody::Request { exchange, request } => {
+                let mut operations = request.payloads.into_vec();
+                if operations.len() != 1 {
+                    return Err(io_error(format!(
+                        "engine management expects one request operation, got {}",
+                        operations.len()
+                    )));
+                }
+                Ok(ReceivedEngineManagementRequest {
+                    exchange,
+                    request: operations.remove(0),
+                })
+            }
+            other => Err(io_error(format!(
+                "unexpected engine management frame: {other:?}"
+            ))),
+        }
+    }
+
+    fn write_reply(
+        &self,
+        stream: &mut UnixStream,
+        exchange: ExchangeIdentifier,
+        reply: EngineManagementReply,
+    ) -> std::io::Result<()> {
+        let frame = EngineManagementFrame::new(EngineManagementFrameBody::Reply {
+            exchange,
+            reply: Reply::committed(NonEmpty::single(SubReply::Ok(reply))),
+        });
+        self.write_frame(stream, &frame)
+    }
+
+    fn read_frame(&self, stream: &mut UnixStream) -> std::io::Result<EngineManagementFrame> {
+        let mut prefix = [0_u8; 4];
+        stream.read_exact(&mut prefix)?;
+        let length = u32::from_be_bytes(prefix) as usize;
+        if length > self.maximum_frame_bytes {
+            return Err(io_error(format!(
+                "engine management frame too large: found {length} bytes, limit {}",
+                self.maximum_frame_bytes,
+            )));
+        }
+
+        let mut bytes = Vec::with_capacity(4 + length);
+        bytes.extend_from_slice(&prefix);
+        bytes.resize(4 + length, 0);
+        stream.read_exact(&mut bytes[4..])?;
+        EngineManagementFrame::decode_length_prefixed(&bytes)
+            .map_err(|error| io_error(format!("decode engine management frame: {error}")))
+    }
+
+    fn write_frame(
+        &self,
+        stream: &mut UnixStream,
+        frame: &EngineManagementFrame,
+    ) -> std::io::Result<()> {
+        let bytes = frame
+            .encode_length_prefixed()
+            .map_err(|error| io_error(format!("encode engine management frame: {error}")))?;
+        stream.write_all(&bytes)?;
+        stream.flush()
+    }
+}
+
 impl ServedExchange {
     fn new(reply: Reply<WorkingReply>) -> Self {
         Self { reply }
@@ -1425,6 +1729,20 @@ impl ServedUpgradeExchange {
     pub fn reply(&self) -> &Reply<UpgradeReply> {
         &self.reply
     }
+}
+
+impl ServedEngineManagementExchange {
+    fn new(reply: EngineManagementReply) -> Self {
+        Self { reply }
+    }
+
+    pub fn reply(&self) -> &EngineManagementReply {
+        &self.reply
+    }
+}
+
+fn io_error(error: impl std::fmt::Display) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::InvalidData, error.to_string())
 }
 
 struct SocketBinding;

@@ -29,6 +29,7 @@ sema                        = { git = "https://github.com/LiGoldragon/sema.git" 
 sema-engine                 = { git = "https://github.com/LiGoldragon/sema-engine.git", branch = "main" }
 signal-frame                = { git = "https://github.com/LiGoldragon/signal-frame.git", branch = "main" }
 signal-executor             = { git = "https://github.com/LiGoldragon/signal-executor.git", branch = "main" }
+signal-persona              = { git = "https://github.com/LiGoldragon/signal-persona.git" }
 signal-persona-spirit       = { git = "https://github.com/LiGoldragon/signal-persona-spirit.git", branch = "main" }
 signal-sema                 = { git = "https://github.com/LiGoldragon/signal-sema.git", branch = "main" }
 signal-version-handover     = { git = "https://github.com/LiGoldragon/signal-version-handover.git", branch = "main" }

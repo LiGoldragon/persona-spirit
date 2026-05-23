@@ -611,6 +611,7 @@ dependencies = [
  "sema-engine",
  "signal-executor",
  "signal-frame",
+ "signal-persona",
  "signal-persona-auth",
  "signal-persona-spirit",
  "signal-sema 0.1.0 (git+https://github.com/LiGoldragon/signal-sema.git?branch=main)",
@@ -914,7 +915,7 @@ dependencies = [
 [[package]]
 name = "signal-persona"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona.git#67a5519619e4b36eee4dffb3bd869e77beac9f79"
+source = "git+https://github.com/LiGoldragon/signal-persona.git#4e6d22b3a000cc461a441f157fb87bcedd685470"
 dependencies = [
  "nota-codec",
  "rkyv",
@@ -926,7 +927,7 @@ dependencies = [
 [[package]]
 name = "signal-persona-auth"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-auth.git#962123592955ef1d922159cf09b9874da0f7dfcf"
+source = "git+https://github.com/LiGoldragon/signal-persona-auth.git#31e994be5fba3b41e71fe4fa63adb73fe8cb400f"
 dependencies = [
  "nota-codec",
  "rkyv",

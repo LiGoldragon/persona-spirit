@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::{Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::process::Command;
 use std::thread;
@@ -19,6 +20,15 @@ use signal_frame::{
     LaneSequence, NonEmpty, Reply, RequestBuilder, RequestPayload, RetryClassification,
     SessionEpoch, SubReply,
 };
+use signal_persona::engine_management::{
+    Frame as EngineManagementFrame, FrameBody as EngineManagementFrameBody,
+    Operation as EngineManagementOperation, Query as EngineManagementQuery,
+    Reply as EngineManagementReply,
+};
+use signal_persona::{
+    ComponentHealth, ComponentKind, ComponentName as EngineManagementComponentName,
+    EngineManagementProtocolVersion, Presence,
+};
 use signal_persona_spirit::{
     Context, Date, Entry, Frame, FrameBody, Kind, Observation, ObservationMode,
     Operation as WorkingOperation, Quote, RecordQuery, Reply as WorkingReply, Statement,
@@ -37,6 +47,7 @@ struct DaemonFixture {
     ordinary_socket: SocketPath,
     owner_socket: SocketPath,
     upgrade_socket: SocketPath,
+    engine_management_socket: SocketPath,
     handoff_control_socket: SocketPath,
     store: StorePath,
 }
@@ -53,6 +64,10 @@ impl DaemonFixture {
         owner_socket.push(format!("persona-spirit-{test_name}-{nanos}-owner.sock"));
         let mut upgrade_socket = std::env::temp_dir();
         upgrade_socket.push(format!("persona-spirit-{test_name}-{nanos}-upgrade.sock"));
+        let mut engine_management_socket = std::env::temp_dir();
+        engine_management_socket.push(format!(
+            "persona-spirit-{test_name}-{nanos}-engine-management.sock"
+        ));
         let mut handoff_control_socket = std::env::temp_dir();
         handoff_control_socket.push(format!(
             "persona-spirit-{test_name}-{nanos}-handoff-control.sock"
@@ -63,6 +78,9 @@ impl DaemonFixture {
             ordinary_socket: SocketPath::new(socket.to_string_lossy().into_owned()),
             owner_socket: SocketPath::new(owner_socket.to_string_lossy().into_owned()),
             upgrade_socket: SocketPath::new(upgrade_socket.to_string_lossy().into_owned()),
+            engine_management_socket: SocketPath::new(
+                engine_management_socket.to_string_lossy().into_owned(),
+            ),
             handoff_control_socket: SocketPath::new(
                 handoff_control_socket.to_string_lossy().into_owned(),
             ),
@@ -76,6 +94,13 @@ impl DaemonFixture {
             self.owner_socket.clone(),
             self.upgrade_socket.clone(),
             self.store.clone(),
+            SocketMode::from_octal(0o600),
+        )
+    }
+
+    fn configuration_with_engine_management(&self) -> DaemonConfiguration {
+        self.configuration().with_engine_management_socket_path(
+            self.engine_management_socket.clone(),
             SocketMode::from_octal(0o600),
         )
     }
@@ -125,6 +150,53 @@ fn observe_all() -> WorkingOperation {
     }))
 }
 
+fn engine_management_request_frame(operation: EngineManagementOperation) -> EngineManagementFrame {
+    EngineManagementFrame::new(EngineManagementFrameBody::Request {
+        exchange: ExchangeIdentifier::new(
+            SessionEpoch::new(1),
+            ExchangeLane::Connector,
+            LaneSequence::first(),
+        ),
+        request: signal_frame::Request::from_payload(operation),
+    })
+}
+
+fn write_engine_management_request(stream: &mut UnixStream, operation: EngineManagementOperation) {
+    let bytes = engine_management_request_frame(operation)
+        .encode_length_prefixed()
+        .expect("engine management request encodes");
+    stream
+        .write_all(&bytes)
+        .expect("engine management request writes");
+    stream.flush().expect("engine management request flushes");
+}
+
+fn read_engine_management_reply(stream: &mut UnixStream) -> EngineManagementReply {
+    let mut prefix = [0_u8; 4];
+    stream
+        .read_exact(&mut prefix)
+        .expect("engine management reply length reads");
+    let length = u32::from_be_bytes(prefix) as usize;
+    let mut bytes = Vec::with_capacity(4 + length);
+    bytes.extend_from_slice(&prefix);
+    bytes.resize(4 + length, 0);
+    stream
+        .read_exact(&mut bytes[4..])
+        .expect("engine management reply body reads");
+    let frame =
+        EngineManagementFrame::decode_length_prefixed(&bytes).expect("engine management decodes");
+    match frame.into_body() {
+        EngineManagementFrameBody::Reply { reply, .. } => match reply {
+            Reply::Accepted { per_operation, .. } => match per_operation.into_head() {
+                SubReply::Ok(payload) => payload,
+                other => panic!("expected engine management reply payload, got {other:?}"),
+            },
+            other => panic!("expected accepted engine management reply, got {other:?}"),
+        },
+        other => panic!("expected engine management reply frame, got {other:?}"),
+    }
+}
+
 fn observe_topics() -> WorkingOperation {
     WorkingOperation::Observe(Observation::Topics)
 }
@@ -155,9 +227,81 @@ fn persona_spirit_daemon_configuration_is_one_nota_record() {
         "daemon configuration is a struct record, not a variant wrapper"
     );
     assert!(
-        text.ends_with(" None None)"),
-        "daemon configuration carries explicit optional bootstrap-policy and handoff control paths"
+        text.ends_with(" None None None None)"),
+        "daemon configuration carries explicit optional bootstrap-policy, handoff control, and engine-management paths"
     );
+}
+
+#[test]
+fn persona_spirit_daemon_serves_engine_management_socket_for_supervision() {
+    let fixture = DaemonFixture::new("engine-management");
+    let mut daemon =
+        DaemonRuntime::from_configuration(fixture.configuration_with_engine_management())
+            .bind()
+            .expect("daemon binds with engine-management socket");
+    let socket = fixture.engine_management_socket.clone();
+    let handle = thread::spawn(move || {
+        let served = daemon.serve_engine_management_one()?;
+        daemon.shutdown()?;
+        Ok::<_, persona_spirit::Error>(served)
+    });
+
+    let mut stream =
+        UnixStream::connect(socket.as_path()).expect("engine-management client connects");
+    write_engine_management_request(
+        &mut stream,
+        EngineManagementOperation::Announce(Presence {
+            expected_component: EngineManagementComponentName::new("persona-spirit"),
+            expected_kind: ComponentKind::Spirit,
+            engine_management_protocol_version: EngineManagementProtocolVersion::new(1),
+        }),
+    );
+    let identity = read_engine_management_reply(&mut stream);
+    match identity {
+        EngineManagementReply::Identified(identity) => {
+            assert_eq!(
+                identity.name,
+                EngineManagementComponentName::new("persona-spirit")
+            );
+            assert_eq!(identity.kind, ComponentKind::Spirit);
+            assert_eq!(
+                identity.engine_management_protocol_version,
+                EngineManagementProtocolVersion::new(1)
+            );
+        }
+        other => panic!("expected identified reply, got {other:?}"),
+    }
+
+    write_engine_management_request(
+        &mut stream,
+        EngineManagementOperation::Query(EngineManagementQuery::ReadinessStatus(
+            EngineManagementComponentName::new("persona-spirit"),
+        )),
+    );
+    assert!(matches!(
+        read_engine_management_reply(&mut stream),
+        EngineManagementReply::Ready(_)
+    ));
+
+    write_engine_management_request(
+        &mut stream,
+        EngineManagementOperation::Query(EngineManagementQuery::HealthStatus(
+            EngineManagementComponentName::new("persona-spirit"),
+        )),
+    );
+    match read_engine_management_reply(&mut stream) {
+        EngineManagementReply::HealthReport(report) => {
+            assert_eq!(report.health, ComponentHealth::Running);
+        }
+        other => panic!("expected health report, got {other:?}"),
+    }
+
+    drop(stream);
+    let served = handle
+        .join()
+        .expect("engine-management server thread joins")
+        .expect("engine-management exchange succeeds");
+    assert_eq!(served.len(), 3);
 }
 
 #[test]
