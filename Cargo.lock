@@ -492,7 +492,7 @@ dependencies = [
 [[package]]
 name = "nota-codec"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/nota-codec.git?branch=main#538555e895529e2884b7d37d20c66aadc2a49c08"
+source = "git+https://github.com/LiGoldragon/nota-codec.git?branch=main#38f5e41543fa3de85561881b8dbd20640dbb061b"
 dependencies = [
  "camino",
  "nota-derive",
@@ -512,7 +512,7 @@ dependencies = [
 [[package]]
 name = "nota-derive"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/nota-derive.git?branch=main#8323149593b95d6e90c1fdde54e9aba58803337c"
+source = "git+https://github.com/LiGoldragon/nota-derive.git?branch=main#f22a947a94024be2d9b60eba3ee51dd492b29852"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -901,7 +901,7 @@ dependencies = [
 [[package]]
 name = "signal-frame"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#2313c5ed41d156eb916934f7a0b23e07c7d7209c"
+source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#569ee09a0d1f78e40ef008f0f678e9b6eb20bf8e"
 dependencies = [
  "nota-codec",
  "paste",
@@ -913,8 +913,9 @@ dependencies = [
 [[package]]
 name = "signal-frame-macros"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#2313c5ed41d156eb916934f7a0b23e07c7d7209c"
+source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#569ee09a0d1f78e40ef008f0f678e9b6eb20bf8e"
 dependencies = [
+ "nota-codec",
  "proc-macro2",
  "quote",
  "syn",
@@ -1048,7 +1049,7 @@ dependencies = [
 [[package]]
 name = "signal-persona-spirit"
 version = "0.1.1"
-source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#60394925d47833c58677402256bf2a7489fceffe"
+source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#b86a78553a177b46d79d9c9ba982b03c94678d65"
 dependencies = [
  "nota-codec",
  "rkyv",
@@ -1088,10 +1089,11 @@ dependencies = [
 [[package]]
 name = "signal-sema"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-sema.git?branch=main#1604cceb787389274127df7e3a273c164db61feb"
+source = "git+https://github.com/LiGoldragon/signal-sema.git?branch=main#e48223dab695d03c55fb6e7cee7d85c7e8d99ac2"
 dependencies = [
  "nota-codec",
  "rkyv",
+ "signal-frame",
  "thiserror",
 ]
 
