@@ -1049,13 +1049,14 @@ dependencies = [
 [[package]]
 name = "signal-persona-spirit"
 version = "0.1.1"
-source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#b86a78553a177b46d79d9c9ba982b03c94678d65"
+source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#c9cf88a323da0f76d9e19d256a1631a820a32f58"
 dependencies = [
  "nota-codec",
  "rkyv",
  "signal-frame",
  "signal-sema 0.1.0 (git+https://github.com/LiGoldragon/signal-sema.git?branch=main)",
  "thiserror",
+ "version-projection",
 ]
 
 [[package]]
