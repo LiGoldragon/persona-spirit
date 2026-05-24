@@ -901,7 +901,7 @@ dependencies = [
 [[package]]
 name = "signal-frame"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#f6ff41e42603978083bfb1ba70ed6c3f7dd92a62"
+source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#8dc8acf40f29da2924412a89103f7f5807e2bf9f"
 dependencies = [
  "nota-codec",
  "paste",
@@ -913,7 +913,7 @@ dependencies = [
 [[package]]
 name = "signal-frame-macros"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#f6ff41e42603978083bfb1ba70ed6c3f7dd92a62"
+source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#8dc8acf40f29da2924412a89103f7f5807e2bf9f"
 dependencies = [
  "nota-codec",
  "proc-macro2",
@@ -1049,7 +1049,7 @@ dependencies = [
 [[package]]
 name = "signal-persona-spirit"
 version = "0.1.1"
-source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#a66c8748410974a2075fc72c4cc3a43df0e11bd1"
+source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#655cc6fb2b4e57f41be910206867d68effea2a85"
 dependencies = [
  "nota-codec",
  "rkyv",
