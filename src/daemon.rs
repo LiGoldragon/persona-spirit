@@ -23,8 +23,8 @@ use signal_engine_management::{
     Query as EngineManagementQuery, Reply as EngineManagementReply, StopAcknowledgement,
 };
 use signal_frame::{
-    ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, RequestPayload,
-    RequestRejectionReason, SessionEpoch, SubReply,
+    ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, OperationDispatchError, Reply,
+    RequestPayload, RequestRejectionReason, SessionEpoch, ShortHeader, SubReply,
 };
 use signal_persona_spirit::{
     Frame, FrameBody, Operation as WorkingOperation, Reply as WorkingReply,
@@ -356,10 +356,7 @@ impl ordinary::FrameCodec {
     }
 
     pub fn request_frame(&self, request: WorkingOperation) -> Frame {
-        Frame::new(FrameBody::Request {
-            exchange: self.exchange(),
-            request: request.into_request(),
-        })
+        request.into_frame(self.exchange())
     }
 
     pub fn reply_frame(&self, exchange: ExchangeIdentifier, reply: Reply<WorkingReply>) -> Frame {
@@ -367,13 +364,39 @@ impl ordinary::FrameCodec {
     }
 
     pub fn request_from_frame(&self, frame: Frame) -> Result<ReceivedRequest> {
+        let short_header = frame.short_header();
         match frame.into_body() {
-            FrameBody::Request { exchange, request } => Ok(ReceivedRequest { exchange, request }),
+            FrameBody::Request { exchange, request } => {
+                self.validate_request_header(short_header, &request)?;
+                Ok(ReceivedRequest { exchange, request })
+            }
             other => Err(Error::UnexpectedFrame {
                 expected: "request",
                 got: format!("{other:?}"),
             }),
         }
+    }
+
+    fn validate_request_header(
+        &self,
+        short_header: ShortHeader,
+        request: &signal_frame::Request<WorkingOperation>,
+    ) -> Result<()> {
+        let expected = short_header.to_le_bytes()[0];
+        let expected_kind =
+            WorkingOperation::kind_from_short_header(short_header).ok_or_else(|| {
+                Error::signal_frame(OperationDispatchError::UnknownOperationRoot { root: expected })
+            })?;
+        let actual_kind = request.payloads().head().kind();
+        if actual_kind != expected_kind {
+            return Err(Error::signal_frame(
+                OperationDispatchError::HeaderOperationMismatch {
+                    expected,
+                    actual: actual_kind as u8,
+                },
+            ));
+        }
+        Ok(())
     }
 
     pub fn reply_from_frame(&self, frame: Frame) -> Result<Reply<WorkingReply>> {

@@ -13,7 +13,8 @@ use owner_signal_persona_spirit::{
 };
 use persona_spirit::{
     BootstrapPolicyPath, DaemonConfiguration, DaemonRuntime, SingleArgument, SocketMode,
-    SocketPath, StorePath, ordinary, owner, store::StampedEntry, upgrade,
+    SocketPath, StoreLocation, StorePath, ordinary, owner, store::SpiritStore, store::StampedEntry,
+    upgrade,
 };
 use signal_engine_management::{
     ComponentHealth, ComponentKind, ComponentName as EngineManagementComponentName,
@@ -23,7 +24,7 @@ use signal_engine_management::{
 };
 use signal_frame::{
     AcceptedOutcome, BatchFailureReason, ClientShape, CommandLineSockets, CommitStatus,
-    ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, RequestBuilder,
+    ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, Request, RequestBuilder,
     RequestPayload, RetryClassification, SessionEpoch, SubReply,
 };
 use signal_persona_spirit::{
@@ -203,6 +204,17 @@ fn exchange() -> ExchangeIdentifier {
         SessionEpoch::new(0),
         ExchangeLane::Connector,
         LaneSequence::first(),
+    )
+}
+
+fn working_request_frame(request: Request<WorkingOperation>) -> Frame {
+    let short_header = request.short_header();
+    Frame::with_short_header(
+        short_header,
+        FrameBody::Request {
+            exchange: exchange(),
+            request,
+        },
     )
 }
 
@@ -449,10 +461,7 @@ fn persona_spirit_daemon_rejects_multi_operation_batches_before_any_commit() {
         .build()
         .expect("non-empty multi operation request");
     let mut stream = UnixStream::connect(ordinary_socket.as_path()).expect("client connects");
-    let frame = Frame::new(FrameBody::Request {
-        exchange: exchange(),
-        request,
-    });
+    let frame = working_request_frame(request);
     codec
         .write_frame(&mut stream, &frame)
         .expect("multi operation request writes");
@@ -490,6 +499,52 @@ fn persona_spirit_daemon_rejects_multi_operation_batches_before_any_commit() {
         .join()
         .expect("daemon thread exits")
         .expect("daemon served batch and observe frames");
+}
+
+#[test]
+fn persona_spirit_daemon_rejects_mismatched_short_header_before_dispatch() {
+    let fixture = DaemonFixture::new("short-header-mismatch");
+    let mut daemon = DaemonRuntime::from_configuration(fixture.configuration())
+        .bind()
+        .expect("daemon binds");
+    let ordinary_socket = fixture.ordinary_socket.clone();
+    let store_path = fixture.store.clone();
+    let handle = thread::spawn(move || {
+        let served = daemon.serve_one();
+        daemon.shutdown().expect("daemon shuts down");
+        served
+    });
+
+    let codec = ordinary::FrameCodec::default();
+    let mut stream = UnixStream::connect(ordinary_socket.as_path()).expect("client connects");
+    let request = WorkingOperation::Record(entry("must not be committed")).into_request();
+    let frame = Frame::with_short_header(
+        signal_frame::ShortHeader::new(0),
+        FrameBody::Request {
+            exchange: exchange(),
+            request,
+        },
+    );
+    codec
+        .write_frame(&mut stream, &frame)
+        .expect("mismatched request frame writes");
+
+    let error = handle
+        .join()
+        .expect("daemon thread exits")
+        .expect_err("daemon rejects header/body mismatch")
+        .to_string();
+    assert!(
+        error.contains("short-header operation root mismatch") || error.contains("expected 0"),
+        "unexpected mismatch error: {error}"
+    );
+
+    let store = SpiritStore::open(&StoreLocation::new(store_path.as_path()))
+        .expect("store opens after rejected request");
+    assert_eq!(
+        store.observe_topics().expect("topics observed"),
+        WorkingReply::TopicsObserved(signal_persona_spirit::TopicsObserved { topics: vec![] })
+    );
 }
 
 #[test]
