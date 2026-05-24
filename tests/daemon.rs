@@ -15,16 +15,16 @@ use persona_spirit::{
     BootstrapPolicyPath, DaemonConfiguration, DaemonRuntime, SingleArgument, SocketMode,
     SocketPath, StorePath, ordinary, owner, store::StampedEntry, upgrade,
 };
-use signal_frame::{
-    AcceptedOutcome, BatchFailureReason, ClientShape, CommandLineSockets, CommitStatus,
-    ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, RequestBuilder,
-    RequestPayload, RetryClassification, SessionEpoch, SubReply,
-};
-use signal_persona_engine_management::{
+use signal_engine_management::{
     ComponentHealth, ComponentKind, ComponentName as EngineManagementComponentName,
     EngineManagementProtocolVersion, Frame as EngineManagementFrame,
     FrameBody as EngineManagementFrameBody, Operation as EngineManagementOperation, Presence,
     Query as EngineManagementQuery, Reply as EngineManagementReply,
+};
+use signal_frame::{
+    AcceptedOutcome, BatchFailureReason, ClientShape, CommandLineSockets, CommitStatus,
+    ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, RequestBuilder,
+    RequestPayload, RetryClassification, SessionEpoch, SubReply,
 };
 use signal_persona_spirit::{
     Context, Date, Entry, Frame, FrameBody, Kind, Observation, ObservationMode,

@@ -615,9 +615,9 @@ dependencies = [
  "rkyv",
  "sema",
  "sema-engine",
+ "signal-engine-management",
  "signal-executor",
  "signal-frame",
- "signal-persona-engine-management",
  "signal-persona-origin 0.1.0 (git+https://github.com/LiGoldragon/signal-persona-origin.git)",
  "signal-persona-spirit",
  "signal-sema 0.1.0 (git+https://github.com/LiGoldragon/signal-sema.git?branch=main)",
@@ -877,6 +877,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "signal-engine-management"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/signal-engine-management.git?branch=main#14d2436e8c29bc000f8b505df0611ae9538d7309"
+dependencies = [
+ "nota-codec",
+ "rkyv",
+ "signal-frame",
+ "signal-persona-origin 0.1.0 (git+https://github.com/LiGoldragon/signal-persona-origin.git?branch=main)",
+]
+
+[[package]]
 name = "signal-executor"
 version = "0.1.0"
 source = "git+https://github.com/LiGoldragon/signal-executor.git?branch=main#7b0ca56a7b0ce5d7c5c53fe36a2acc5d9df090e2"
@@ -929,17 +940,6 @@ dependencies = [
  "signal-frame",
  "signal-persona-origin 0.1.0 (git+https://github.com/LiGoldragon/signal-persona-origin.git)",
  "signal-sema 0.1.0 (git+https://github.com/LiGoldragon/signal-sema.git?branch=main)",
-]
-
-[[package]]
-name = "signal-persona-engine-management"
-version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-engine-management.git?branch=main#b166988d6b77c0c5502241142d4192b6d992388a"
-dependencies = [
- "nota-codec",
- "rkyv",
- "signal-frame",
- "signal-persona-origin 0.1.0 (git+https://github.com/LiGoldragon/signal-persona-origin.git?branch=main)",
 ]
 
 [[package]]
