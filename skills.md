@@ -71,8 +71,8 @@ Contract records stay in `signal-persona-spirit` and
   `PolicyPlane`; it does not silently fall back to the embedded seed.
 - `Entry` assertions persist one top-level record in the local sema-engine
   store and return `RecordAccepted`.
-- `Entry` requests never carry client-provided capture time. They carry topic,
-  kind, one clarified description, and certainty.
+- `Entry` requests never carry client-provided capture time. They carry one or
+  more topics, kind, one clarified description, and certainty.
 - Capture time is daemon-owned. `ClockPlane` stamps submitted entries before
   `RecordStore` persists them; provenance replies expose the daemon-produced
   bare `YYYY-MM-DD` date and bare `HH:MM:SS` time.
@@ -89,8 +89,8 @@ Contract records stay in `signal-persona-spirit` and
 - Subscription retractions return typed close acknowledgements through
   `SubscriptionPlane`.
 - `RecordObservation` queries return descriptions by default and provenance only
-  when the caller asks for it. They filter by optional topic and optional kind
-  inside the daemon's read path.
+  when the caller asks for it. They filter by optional topic membership and
+  optional kind inside the daemon's read path.
 - Valid but unimplemented requests use `ReplyShaper` and do not touch
   `RecordStore`.
 - Valid but unimplemented CLI requests emit a typed NOTA

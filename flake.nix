@@ -55,6 +55,10 @@
           mkdir -p "$out/bin"
           ln -s "${fullPackage}/bin/spirit-migrate-0-1-to-0-2" "$out/bin/spirit-migrate-0-1-to-0-2"
         '';
+        nextMigrationPackage = pkgs.runCommand "spirit-migrate-0-2-to-next" { } ''
+          mkdir -p "$out/bin"
+          ln -s "${fullPackage}/bin/spirit-migrate-0-2-to-next" "$out/bin/spirit-migrate-0-2-to-next"
+        '';
         splitPackageWitness = pkgs.runCommand "test-split-packages" { } ''
           test -x "${spiritPackage}/bin/spirit"
           test ! -e "${spiritPackage}/bin/persona-spirit-daemon"
@@ -67,6 +71,9 @@
           test -x "${migrationPackage}/bin/spirit-migrate-0-1-to-0-2"
           test ! -e "${migrationPackage}/bin/spirit"
           test ! -e "${migrationPackage}/bin/persona-spirit-daemon"
+          test -x "${nextMigrationPackage}/bin/spirit-migrate-0-2-to-next"
+          test ! -e "${nextMigrationPackage}/bin/spirit"
+          test ! -e "${nextMigrationPackage}/bin/persona-spirit-daemon"
           touch "$out"
         '';
       in
@@ -77,6 +84,7 @@
           spirit-next = spiritNextPackage;
           persona-spirit-daemon = daemonPackage;
           spirit-migrate-0-1-to-0-2 = migrationPackage;
+          spirit-migrate-0-2-to-next = nextMigrationPackage;
           full = fullPackage;
         };
         apps = {
@@ -95,6 +103,10 @@
           spirit-migrate-0-1-to-0-2 = flake-utils.lib.mkApp {
             drv = migrationPackage;
             name = "spirit-migrate-0-1-to-0-2";
+          };
+          spirit-migrate-0-2-to-next = flake-utils.lib.mkApp {
+            drv = nextMigrationPackage;
+            name = "spirit-migrate-0-2-to-next";
           };
         };
         checks = {

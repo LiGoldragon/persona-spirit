@@ -31,7 +31,7 @@ use signal_frame::{
 use signal_persona_spirit::{
     Date, Description, Entry, Frame, FrameBody, Kind, Observation, ObservationMode,
     Operation as WorkingOperation, RecordQuery, Reply as WorkingReply, Statement, StatementText,
-    Time, Topic,
+    Time, Topic, Topics,
 };
 use signal_sema::Magnitude;
 use signal_version_handover::{
@@ -123,7 +123,7 @@ impl DaemonFixture {
 
 fn entry(description: &str) -> Entry {
     Entry {
-        topic: Topic::new("workspace"),
+        topics: Topics::single(Topic::new("workspace")),
         kind: Kind::Decision,
         description: Description::new(description),
         certainty: Magnitude::Maximum,
@@ -370,7 +370,7 @@ fn persona_spirit_daemon_serves_signal_frames_through_actor_root() {
         WorkingReply::RecordsObserved(signal_persona_spirit::RecordsObserved {
             records: vec![signal_persona_spirit::RecordDescription {
                 identifier: signal_persona_spirit::RecordIdentifier::new(1),
-                topic: Topic::new("workspace"),
+                topics: Topics::single(Topic::new("workspace")),
                 kind: Kind::Decision,
                 description: Description::new("daemon accepted"),
                 certainty: Magnitude::Maximum,
@@ -576,7 +576,7 @@ fn persona_spirit_daemon_classifies_state_frames_through_actor_root() {
         WorkingReply::RecordsObserved(signal_persona_spirit::RecordsObserved {
             records: vec![signal_persona_spirit::RecordDescription {
                 identifier: signal_persona_spirit::RecordIdentifier::new(1),
-                topic: Topic::new("unclassified"),
+                topics: Topics::single(Topic::new("unclassified")),
                 kind: Kind::Clarification,
                 description: Description::new("daemon raw intent"),
                 certainty: Magnitude::Minimum,
@@ -604,7 +604,7 @@ fn persona_spirit_daemon_serves_topic_catalog_through_signal_frames() {
         .expect("first entry accepted through signal frame");
     client
         .submit(WorkingOperation::Record(Entry {
-            topic: Topic::new("naming"),
+            topics: Topics::single(Topic::new("naming")),
             kind: Kind::Correction,
             description: Description::new("naming entry"),
             certainty: Magnitude::Maximum,
@@ -1555,7 +1555,7 @@ fn persona_spirit_client_can_send_nota_request_to_running_daemon() {
     let handle = thread::spawn(move || daemon.serve_count(1));
     let argument = SingleArgument::from_arguments([
         "spirit".to_string(),
-        "(Record (workspace Decision [client socket] Maximum))".to_string(),
+        "(Record ([workspace] Decision [client socket] Maximum))".to_string(),
     ])
     .expect("single request argument");
 
@@ -1586,7 +1586,7 @@ fn spirit_binary_can_send_request_file_to_running_daemon() {
     request_path.push(format!("persona-spirit-cli-request-{nanos}.nota"));
     fs::write(
         &request_path,
-        "(Record (workspace Decision [binary file] Maximum))",
+        "(Record ([workspace] Decision [binary file] Maximum))",
     )
     .expect("request file written");
 

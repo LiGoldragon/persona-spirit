@@ -7,7 +7,7 @@ use sema_engine::{
 };
 use signal_persona_spirit::{
     Date, Entry, RecordIdentifier, Time,
-    migration::{V010ToV011, v010},
+    migration::{V010ToV011, V020ToV030, v010, v020},
 };
 use version_projection::VersionProjection;
 
@@ -17,6 +17,7 @@ use crate::{
 };
 
 const V010_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
+const V020_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(2);
 const RECORDS: TableName = TableName::new("records");
 
 #[derive(Debug, Clone, PartialEq, Eq, NotaRecord)]
@@ -48,6 +49,19 @@ struct V010StampedEntry {
     time: Time,
 }
 
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+struct V020StoredRecord {
+    identifier: RecordIdentifier,
+    entry: V020StampedEntry,
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+struct V020StampedEntry {
+    entry: v020::Entry,
+    date: Date,
+    time: Time,
+}
+
 impl MigrationConfiguration {
     pub fn new(source: StorePath, target: StorePath) -> Self {
         Self { source, target }
@@ -73,6 +87,10 @@ impl MigrationConfiguration {
 
     pub fn migrate(self) -> Result<MigrationOutcome> {
         migrate_v010_to_v020(&self.source, &self.target)
+    }
+
+    pub fn migrate_v020_to_next(self) -> Result<MigrationOutcome> {
+        migrate_v020_to_next(&self.source, &self.target)
     }
 }
 
@@ -101,7 +119,24 @@ pub fn migrate_v010_to_v020(source: &StorePath, target: &StorePath) -> Result<Mi
     let target_store = SpiritStore::open(&StoreLocation::new(target.as_path()))?;
     if !target_store.is_empty()? {
         return Err(Error::migration(
-            "target v0.2 database must be empty before timestamp-preserving migration",
+            "target database must be empty before timestamp-preserving migration",
+        ));
+    }
+
+    let mut migrated = 0;
+    for record in source_records {
+        target_store.import_migrated_record(record.identifier, record.project()?)?;
+        migrated += 1;
+    }
+    Ok(MigrationOutcome::new(migrated))
+}
+
+pub fn migrate_v020_to_next(source: &StorePath, target: &StorePath) -> Result<MigrationOutcome> {
+    let source_records = V020Store::open(source)?.all_records()?;
+    let target_store = SpiritStore::open(&StoreLocation::new(target.as_path()))?;
+    if !target_store.is_empty()? {
+        return Err(Error::migration(
+            "target next database must be empty before multi-topic migration",
         ));
     }
 
@@ -126,6 +161,11 @@ struct V010Store {
     records: sema_engine::TableReference<V010StoredRecord>,
 }
 
+struct V020Store {
+    engine: Engine,
+    records: sema_engine::TableReference<V020StoredRecord>,
+}
+
 impl V010Store {
     fn open(path: &StorePath) -> Result<Self> {
         let mut engine = Engine::open(EngineOpen::new(path.as_path(), V010_SCHEMA_VERSION))
@@ -148,6 +188,28 @@ impl V010Store {
     }
 }
 
+impl V020Store {
+    fn open(path: &StorePath) -> Result<Self> {
+        let mut engine = Engine::open(EngineOpen::new(path.as_path(), V020_SCHEMA_VERSION))
+            .map_err(Error::spirit_store)?;
+        let records = engine
+            .register_table(TableDescriptor::new(RECORDS))
+            .map_err(Error::spirit_store)?;
+        Ok(Self { engine, records })
+    }
+
+    fn all_records(&self) -> Result<Vec<V020StoredRecord>> {
+        let mut records = self
+            .engine
+            .match_records(QueryPlan::all(self.records))
+            .map_err(Error::spirit_store)?
+            .records()
+            .to_vec();
+        records.sort_by_key(|record| record.identifier.value());
+        Ok(records)
+    }
+}
+
 impl V010StoredRecord {
     fn project(self) -> Result<StampedEntry> {
         Ok(StampedEntry::new(
@@ -159,7 +221,24 @@ impl V010StoredRecord {
     }
 }
 
+impl V020StoredRecord {
+    fn project(self) -> Result<StampedEntry> {
+        Ok(StampedEntry::new(
+            <V020ToV030 as VersionProjection<v020::Entry, Entry>>::project(self.entry.entry)
+                .map_err(|error| Error::migration(error.to_string()))?,
+            self.entry.date,
+            self.entry.time,
+        ))
+    }
+}
+
 impl EngineRecord for V010StoredRecord {
+    fn record_key(&self) -> RecordKey {
+        RecordKey::new(self.identifier.value().to_string())
+    }
+}
+
+impl EngineRecord for V020StoredRecord {
     fn record_key(&self) -> RecordKey {
         RecordKey::new(self.identifier.value().to_string())
     }

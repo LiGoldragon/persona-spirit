@@ -492,7 +492,7 @@ dependencies = [
 [[package]]
 name = "nota-box"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/nota.git?branch=main#286af46edd65371c1f01083694bb987e38674ab0"
+source = "git+https://github.com/LiGoldragon/nota.git?branch=main#8c23f39a2bd31a9ae1f366af1f7943bde4ef0ab3"
 dependencies = [
  "nota-codec",
  "thiserror",
@@ -501,7 +501,7 @@ dependencies = [
 [[package]]
 name = "nota-codec"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/nota-codec.git?branch=main#9e855d4775ec1d9c1d5685439aa7083fe4d4646e"
+source = "git+https://github.com/LiGoldragon/nota-codec.git?branch=main#f761421c383121a04df761a444a3778d1c0b137d"
 dependencies = [
  "camino",
  "nota-derive",
@@ -614,7 +614,7 @@ dependencies = [
 
 [[package]]
 name = "persona-spirit"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "kameo 0.20.0 (git+https://github.com/LiGoldragon/kameo?branch=persona-lifecycle-terminal-outcome)",
  "nota-codec",
@@ -1077,8 +1077,8 @@ dependencies = [
 
 [[package]]
 name = "signal-persona-spirit"
-version = "0.2.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#6a220349ba7f006858bd9784a551941571ebc2b8"
+version = "0.3.0"
+source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#026d38fb8be4b24f903bbb0eb82551787dea5042"
 dependencies = [
  "nota-box",
  "nota-codec",

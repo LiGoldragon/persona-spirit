@@ -10,16 +10,16 @@ use sema_engine::{
 use signal_persona_spirit::{
     Date, Entry, Kind, ObservationMode, RecordAccepted, RecordDescription, RecordIdentifier,
     RecordObservation, RecordProvenance, RecordProvenancesObserved, RecordQuery, RecordsObserved,
-    Reply as WorkingReply, Time, Topic, TopicCount, TopicsObserved,
+    Reply as WorkingReply, Time, Topic, TopicCount, Topics, TopicsObserved,
 };
 use signal_version_handover::{HandoverMarker, MarkerRequest};
 use version_projection::{ComponentName, ContractVersion, Projected};
 
 use crate::{Result, error::Error};
 
-const SPIRIT_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(2);
+const SPIRIT_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(3);
 const SPIRIT_CONTRACT_VERSION: ContractVersion = ContractVersion::new([
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0,
 ]);
 const RECORDS: TableName = TableName::new("records");
 const DEFAULT_STORE_PATH: &str = "/tmp/persona-spirit.redb";
@@ -85,6 +85,7 @@ impl SpiritStore {
     }
 
     pub fn assert_entry(&self, entry: StampedEntry) -> Result<RecordAccepted> {
+        Self::validate_topics(&entry.entry.topics)?;
         let stored = StoredRecord::new(self.next_identifier()?, entry);
         self.engine
             .assert(Assertion::new(self.records, stored.clone()))
@@ -97,6 +98,7 @@ impl SpiritStore {
         identifier: RecordIdentifier,
         entry: StampedEntry,
     ) -> Result<()> {
+        Self::validate_topics(&entry.entry.topics)?;
         self.engine
             .assert(Assertion::new(
                 self.records,
@@ -200,9 +202,9 @@ impl SpiritStore {
     fn topic_counts(&self) -> Result<Vec<TopicCount>> {
         let mut counts = BTreeMap::<String, u64>::new();
         for record in self.all_records()? {
-            *counts
-                .entry(record.entry.entry.topic.as_str().to_owned())
-                .or_insert(0) += 1;
+            for topic in record.entry.entry.topics.as_slice() {
+                *counts.entry(topic.as_str().to_owned()).or_insert(0) += 1;
+            }
         }
         Ok(counts
             .into_iter()
@@ -211,6 +213,23 @@ impl SpiritStore {
                 entries,
             })
             .collect())
+    }
+
+    fn validate_topics(topics: &Topics) -> Result<()> {
+        if topics.is_empty() {
+            return Err(Error::RequestRejected {
+                reason: "record must carry at least one topic".to_string(),
+            });
+        }
+        let mut seen = std::collections::BTreeSet::<&str>::new();
+        for topic in topics.as_slice() {
+            if !seen.insert(topic.as_str()) {
+                return Err(Error::RequestRejected {
+                    reason: format!("record repeats topic {}", topic.as_str()),
+                });
+            }
+        }
+        Ok(())
     }
 }
 
@@ -301,7 +320,7 @@ impl StoredRecord {
     fn description(&self) -> RecordDescription {
         RecordDescription {
             identifier: self.identifier,
-            topic: self.entry.entry.topic.clone(),
+            topics: self.entry.entry.topics.clone(),
             kind: self.entry.entry.kind,
             description: self.entry.entry.description.clone(),
             certainty: self.entry.entry.certainty,
@@ -331,7 +350,7 @@ impl<'query> RecordFilter<'query> {
 
     fn matches_topic(&self, record: &StoredRecord) -> bool {
         self.topic
-            .map(|expected| &record.entry.entry.topic == expected)
+            .map(|expected| record.entry.entry.topics.contains(expected))
             .unwrap_or(true)
     }
 
@@ -388,7 +407,7 @@ mod tests {
     #[test]
     fn stamped_entry_composes_entry_with_daemon_date_and_time() {
         let entry = Entry {
-            topic: Topic::new("workspace"),
+            topics: Topics::single(Topic::new("workspace")),
             kind: Kind::Decision,
             description: Description::new("composition"),
             certainty: Magnitude::Maximum,

@@ -62,14 +62,14 @@ certainty-lowering / escalation lifecycle — is a future arc
 that lands with the multi-agent auditing system. It is not part
 of today's spirit.
 
-## Query surface is summary-first
+## Query surface is description-first
 
-Routine queries return record summaries — topic, kind, summary,
-certainty, identifier. *"any agent reading [the intent file] is
+Routine queries return record descriptions — topics, kind,
+description, certainty, identifier. *"any agent reading [the intent file] is
 going to get a lot of noise. Like the timestamps isn't always
 useful. … most of the time just the summary is enough."*
-Verbatim, context, and timestamp are available on demand
-through provenance variants for verification.
+Daemon-stamped date and time are available on demand through
+provenance variants for verification.
 
 ## Restatement is signal by repetition
 
@@ -238,19 +238,20 @@ v0.1.0 while v0.2.0 ran in parallel for explicit testing through
 2026-05-25) is the cutover trigger; the side-by-side substrate is
 what makes that cutover safe.
 
-## v0.2.0 wire discipline — description-only, terse, daemon-stamped
+## v0.3.0 wire discipline — multi-topic, description-only, terse, daemon-stamped
 
-The v0.2.0 record shape carries one agent-clarified `Description`,
-a `Kind`, a `Magnitude`, and a daemon-stamped timestamp. *"Spirit
-next entries carry one clarified description and no verbatim
-field."* The verbatim/context payloads from earlier shapes are
-gone; the agent's job is to **clarify the psyche's wording into the
-description** before recording. The forcing function is intent
-density: *intent capture should become denser and less verbose;
-durable records preserve clarified intent without large verbatim
-blocks that bloat output and become lossy to work with.*
+The v0.3.0 record shape carries one or more user-created `Topic`
+values, one agent-clarified `Description`, a `Kind`, a
+`Magnitude`, and daemon-stamped capture time. *"Spirit next entries
+carry one clarified description and no verbatim field."* The
+verbatim/context payloads from earlier shapes are gone; the agent's
+job is to **clarify the psyche's wording into the description**
+before recording. The forcing function is intent density: *intent
+capture should become denser and less verbose; durable records
+preserve clarified intent without large verbatim blocks that bloat
+output and become lossy to work with.*
 
-Three related v0.2.0 disciplines:
+Four related v0.3.0 disciplines:
 
 - **Daemon-stamped timestamps.** *"Spirit timestamp is
   daemon-stamped."* Clients do not supply capture time; the daemon
@@ -259,11 +260,11 @@ Three related v0.2.0 disciplines:
   terse."* The wire reply to a `Record` is `(RecordAccepted N)` —
   no echo of the submitted content; the acknowledgement is
   token-cheap.
-- **User-creatable single-string topics.** *"Spirit topics are
-  user-creatable single strings."* Any new topic word a `Record`
-  uses is registered at the wire layer; no pre-declared enum.
-  (Multi-topic-per-record is a proposed future extension, not the
-  current shape.)
+- **User-creatable topic strings.** Any new topic word a `Record`
+  uses is registered by use; topics are not a pre-declared enum.
+- **Multi-topic records.** A `Record` carries a non-empty topic
+  vector; filters match membership, and the topic catalog counts
+  topic memberships.
 
 ## Daemon configuration — 9-field positional argument
 

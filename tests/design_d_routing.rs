@@ -253,7 +253,7 @@ fn persona_spirit_cli_reaches_daemon_through_persona_handoff_router() {
 
     let record_output = spawn_spirit(
         fixture.public_socket.clone(),
-        "(Record (workspace Decision [design d route] Maximum))",
+        "(Record ([workspace] Decision [design d route] Maximum))",
     );
     runtime
         .block_on(router.handoff_one(&version))
@@ -272,7 +272,7 @@ fn persona_spirit_cli_reaches_daemon_through_persona_handoff_router() {
         .expect("Persona hands observe client descriptor to Spirit");
     assert_spirit_output(
         observe_output.join().expect("observe client exits"),
-        "(RecordsObserved ([(1 workspace Decision [design d route] Maximum)]))",
+        "(RecordsObserved ([(1 [workspace] Decision [design d route] Maximum)]))",
     );
 
     let served = daemon_thread
@@ -301,7 +301,7 @@ fn persona_handoff_router_routes_new_connections_after_selector_flip_and_old_con
     let seed_thread = thread::spawn(move || seed_daemon.serve_count(1));
     let seed_output = spawn_spirit(
         current.ordinary_socket.as_path().to_path_buf(),
-        "(Record (workspace Decision [selector seed] Maximum))",
+        "(Record ([workspace] Decision [selector seed] Maximum))",
     );
     assert_spirit_output(
         seed_output.join().expect("seed client exits"),
@@ -389,7 +389,7 @@ fn persona_handoff_router_routes_new_connections_after_selector_flip_and_old_con
         .expect("Persona routes steady-state client to current version");
     assert_spirit_output(
         steady_output.join().expect("steady-state client exits"),
-        "(RecordsObserved ([(1 workspace Decision [selector seed] Maximum)]))",
+        "(RecordsObserved ([(1 [workspace] Decision [selector seed] Maximum)]))",
     );
 
     let mut old_stream =
@@ -432,7 +432,7 @@ fn persona_handoff_router_routes_new_connections_after_selector_flip_and_old_con
         .expect("Persona routes new client to next version after selector flip");
     assert_spirit_output(
         new_output.join().expect("new client exits"),
-        "(RecordsObserved ([(1 workspace Decision [selector seed] Maximum)]))",
+        "(RecordsObserved ([(1 [workspace] Decision [selector seed] Maximum)]))",
     );
 
     let (current_handoffs, current_upgrades) = current_thread

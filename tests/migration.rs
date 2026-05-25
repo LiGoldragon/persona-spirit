@@ -11,7 +11,8 @@ use sema_engine::{
 };
 use signal_persona_spirit::{
     Date, Description, Entry, Kind, ObservationMode, RecordIdentifier, RecordObservation,
-    RecordQuery, Reply as WorkingReply, Time, Topic, migration::v010,
+    RecordQuery, Reply as WorkingReply, Time, Topic, Topics,
+    migration::{v010, v020},
 };
 use signal_sema::Magnitude;
 
@@ -27,6 +28,19 @@ struct V010StoredRecord {
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
 struct V010StampedEntry {
     entry: v010::Entry,
+    date: Date,
+    time: Time,
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+struct V020StoredRecord {
+    identifier: RecordIdentifier,
+    entry: V020StampedEntry,
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+struct V020StampedEntry {
+    entry: v020::Entry,
     date: Date,
     time: Time,
 }
@@ -119,7 +133,10 @@ fn spirit_migration_preserves_timestamp_and_identifier_order() {
     let records = target_provenances(&fixture.target);
     assert_eq!(records.len(), 2);
     assert_eq!(records[0].description.identifier, RecordIdentifier::new(1));
-    assert_eq!(records[0].description.topic, Topic::new("spirit"));
+    assert_eq!(
+        records[0].description.topics,
+        Topics::single(Topic::new("spirit"))
+    );
     assert_eq!(records[0].description.kind, Kind::Decision);
     assert_eq!(
         records[0].description.description,
@@ -129,7 +146,10 @@ fn spirit_migration_preserves_timestamp_and_identifier_order() {
     assert_eq!(records[0].date, Date::new(2026, 5, 19));
     assert_eq!(records[0].time, Time::new(10, 15, 1));
     assert_eq!(records[1].description.identifier, RecordIdentifier::new(2));
-    assert_eq!(records[1].description.topic, Topic::new("schema"));
+    assert_eq!(
+        records[1].description.topics,
+        Topics::single(Topic::new("schema"))
+    );
     assert_eq!(records[1].description.kind, Kind::Principle);
     assert_eq!(
         records[1].description.description,
@@ -144,7 +164,7 @@ fn spirit_migration_preserves_timestamp_and_identifier_order() {
     let accepted = target
         .assert_entry(StampedEntry::new(
             Entry {
-                topic: Topic::new("next"),
+                topics: Topics::single(Topic::new("next")),
                 kind: Kind::Clarification,
                 description: Description::new("post migration"),
                 certainty: Magnitude::High,
@@ -178,7 +198,7 @@ fn spirit_migration_refuses_non_empty_target() {
     target
         .assert_entry(StampedEntry::new(
             Entry {
-                topic: Topic::new("existing"),
+                topics: Topics::single(Topic::new("existing")),
                 kind: Kind::Correction,
                 description: Description::new("already here"),
                 certainty: Magnitude::Maximum,
@@ -192,10 +212,104 @@ fn spirit_migration_refuses_non_empty_target() {
     let error = fixture.configuration().migrate().unwrap_err();
 
     assert!(
-        error
-            .to_string()
-            .contains("target v0.2 database must be empty"),
+        error.to_string().contains("target database must be empty"),
         "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn spirit_next_migration_projects_v020_topic_to_topic_vector() {
+    let fixture = MigrationFixture::new("v020-to-next");
+    write_v020_source(
+        &fixture.source,
+        vec![
+            V020StoredRecord {
+                identifier: RecordIdentifier::new(1),
+                entry: V020StampedEntry {
+                    entry: v020::Entry {
+                        topic: v020::Topic::new("spirit"),
+                        kind: v020::Kind::Correction,
+                        description: v020::Description::new("single topic source"),
+                        certainty: Magnitude::High,
+                    },
+                    date: Date::new(2026, 5, 25),
+                    time: Time::new(21, 15, 0),
+                },
+            },
+            V020StoredRecord {
+                identifier: RecordIdentifier::new(2),
+                entry: V020StampedEntry {
+                    entry: v020::Entry {
+                        topic: v020::Topic::new("nota"),
+                        kind: v020::Kind::Principle,
+                        description: v020::Description::new("second source"),
+                        certainty: Magnitude::Maximum,
+                    },
+                    date: Date::new(2026, 5, 25),
+                    time: Time::new(21, 16, 0),
+                },
+            },
+        ],
+    );
+
+    let outcome = fixture
+        .configuration()
+        .migrate_v020_to_next()
+        .expect("migration succeeds");
+
+    assert_eq!(outcome.records(), 2);
+    let records = target_provenances(&fixture.target);
+    assert_eq!(
+        records[0].description.topics,
+        Topics::single(Topic::new("spirit"))
+    );
+    assert_eq!(records[0].description.certainty, Magnitude::High);
+    assert_eq!(records[0].date, Date::new(2026, 5, 25));
+    assert_eq!(records[0].time, Time::new(21, 15, 0));
+    assert_eq!(
+        records[1].description.topics,
+        Topics::single(Topic::new("nota"))
+    );
+}
+
+#[test]
+fn spirit_next_migration_binary_reads_one_nota_argument_and_writes_completed_reply() {
+    let fixture = MigrationFixture::new("v020-next-binary");
+    write_v020_source(
+        &fixture.source,
+        vec![V020StoredRecord {
+            identifier: RecordIdentifier::new(1),
+            entry: V020StampedEntry {
+                entry: v020::Entry {
+                    topic: v020::Topic::new("spirit"),
+                    kind: v020::Kind::Decision,
+                    description: v020::Description::new("binary next"),
+                    certainty: Magnitude::Maximum,
+                },
+                date: Date::new(2026, 5, 25),
+                time: Time::new(21, 20, 0),
+            },
+        }],
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_spirit-migrate-0-2-to-next"))
+        .arg(fixture.configuration_text())
+        .output()
+        .expect("migration binary runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "(MigrationCompleted 1)"
+    );
+    let records = target_provenances(&fixture.target);
+    assert_eq!(
+        records[0].description.topics,
+        Topics::single(Topic::new("spirit"))
     );
 }
 
@@ -305,6 +419,19 @@ fn write_v010_source(path: &StorePath, records: Vec<V010StoredRecord>) {
     }
 }
 
+fn write_v020_source(path: &StorePath, records: Vec<V020StoredRecord>) {
+    let mut engine = Engine::open(EngineOpen::new(path.as_path(), SchemaVersion::new(2)))
+        .expect("v0.2 engine opens");
+    let table = engine
+        .register_table(TableDescriptor::new(RECORDS))
+        .expect("v0.2 records table registers");
+    for record in records {
+        engine
+            .assert(Assertion::new(table, record))
+            .expect("v0.2 record writes");
+    }
+}
+
 fn old_record(input: OldRecordInput<'_>) -> V010StoredRecord {
     V010StoredRecord {
         identifier: RecordIdentifier::new(input.identifier),
@@ -341,6 +468,12 @@ fn target_provenances(target: &StorePath) -> Vec<signal_persona_spirit::RecordPr
 }
 
 impl EngineRecord for V010StoredRecord {
+    fn record_key(&self) -> RecordKey {
+        RecordKey::new(self.identifier.value().to_string())
+    }
+}
+
+impl EngineRecord for V020StoredRecord {
     fn record_key(&self) -> RecordKey {
         RecordKey::new(self.identifier.value().to_string())
     }

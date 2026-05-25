@@ -1,7 +1,7 @@
 use kameo::actor::{Actor, ActorRef};
 use kameo::error::Infallible;
 use kameo::message::{Context as ActorContext, Message};
-use signal_persona_spirit::{Description, Entry, Kind, Statement, Topic};
+use signal_persona_spirit::{Description, Entry, Kind, Statement, Topic, Topics};
 use signal_sema::Magnitude;
 
 use super::trace::{ActorTrace, TraceAction, TraceNode};
@@ -52,7 +52,7 @@ impl ClassifierPlane {
         trace.record(TraceNode::CLASSIFIER_PLANE, TraceAction::MessageReceived);
         let text = statement.text.as_str().to_string();
         let entry = Entry {
-            topic: self.policy.fallback_topic.clone(),
+            topics: Topics::single(self.policy.fallback_topic.clone()),
             kind: self.policy.fallback_kind,
             description: Description::new(text.clone()),
             certainty: self.policy.fallback_certainty,

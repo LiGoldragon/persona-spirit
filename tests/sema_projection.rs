@@ -6,6 +6,7 @@ use signal_persona_spirit::{
     Description, Entry, Kind, Observation, ObservationMode, ObserverFilter,
     ObserverSubscriptionToken, Operation as WorkingOperation, RecordQuery, Reply as WorkingReply,
     StateSubscriptionToken, Statement, StatementText, Subscription, SubscriptionToken, Topic,
+    Topics,
 };
 use signal_sema::{Magnitude, SemaObservation, SemaOperation, SemaOutcome};
 
@@ -38,7 +39,7 @@ impl RuntimeFixture {
 
 fn entry(description: &str) -> Entry {
     Entry {
-        topic: Topic::new("workspace"),
+        topics: Topics::single(Topic::new("workspace")),
         kind: Kind::Decision,
         description: Description::new(description),
         certainty: Magnitude::Maximum,
