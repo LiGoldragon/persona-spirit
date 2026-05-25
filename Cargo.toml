@@ -31,8 +31,10 @@ signal-frame                = { git = "https://github.com/LiGoldragon/signal-fra
 signal-executor             = { git = "https://github.com/LiGoldragon/signal-executor.git", branch = "main" }
 signal-persona-spirit       = { git = "https://github.com/LiGoldragon/signal-persona-spirit.git", branch = "main" }
 signal-sema                 = { git = "https://github.com/LiGoldragon/signal-sema.git", branch = "main" }
+signal-version-handover     = { git = "https://github.com/LiGoldragon/signal-version-handover.git", branch = "main" }
 thiserror                   = "2"
 tokio                       = { version = "1", default-features = false, features = ["macros", "rt-multi-thread"] }
+version-projection          = { git = "https://github.com/LiGoldragon/version-projection.git", branch = "main" }
 
 [lints.rust]
 unsafe_code = "forbid"

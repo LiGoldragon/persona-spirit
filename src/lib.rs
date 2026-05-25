@@ -8,13 +8,14 @@ pub mod store;
 
 pub use actors::policy::BootstrapPolicySource;
 pub use actors::root::{
-    RootFrameReply, RootOperationReply, RootOwnerReply, RootTextReply, SpiritActorRuntime,
+    RootFrameReply, RootOperationReply, RootOwnerReply, RootTextReply, RootUpgradeReply,
+    SpiritActorRuntime,
 };
 pub use actors::trace::{ActorTrace, TraceAction, TraceNode};
 pub use argument::SingleArgument;
 pub use daemon::{
     BootstrapPolicyPath, BoundDaemon, DaemonConfiguration, DaemonRuntime, ServedExchange,
-    ServedOwnerExchange, SocketMode, SocketPath, StorePath,
+    ServedOwnerExchange, ServedUpgradeExchange, SocketMode, SocketPath, StorePath,
 };
 pub use error::{Error, Result};
 pub use observation::{Command, Effect};
@@ -31,4 +32,8 @@ pub mod ordinary {
 pub mod owner {
     pub use crate::daemon::{OwnerFrameCodec as FrameCodec, OwnerSignalClient as SignalClient};
     pub use crate::runtime::{OwnerReplyText as ReplyText, OwnerRequestText as RequestText};
+}
+
+pub mod upgrade {
+    pub use crate::daemon::{UpgradeFrameCodec as FrameCodec, UpgradeSignalClient as SignalClient};
 }

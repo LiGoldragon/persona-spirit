@@ -87,6 +87,10 @@
             inherit cargoArtifacts;
             cargoTestExtraArgs = "--test daemon";
           });
+          test-v0-1-0-backport-client = craneLib.cargoTest (commonArguments // {
+            inherit cargoArtifacts;
+            cargoTestExtraArgs = "--test daemon persona_spirit_v0_1_0_backport_client_serves_version_handover_socket -- --exact";
+          });
           test-sema-projection = craneLib.cargoTest (commonArguments // {
             inherit cargoArtifacts;
             cargoTestExtraArgs = "--test sema_projection";

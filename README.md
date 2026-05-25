@@ -5,6 +5,9 @@ Persona component for the psyche ↔ mind interface.
 Current status: typed daemon foundation. The ordinary socket accepts
 length-prefixed `signal-persona-spirit` frames over `signal-frame`; the owner
 socket accepts `owner-signal-persona-spirit` frames over the owner contract.
+The private upgrade socket accepts `signal-version-handover` frames for the
+v0.1.0 maintenance handover path without changing the old Spirit working
+schema.
 The `spirit` CLI is only a NOTA-to-Signal client: it resolves one argument
 as either a raw NOTA request or a path to a NOTA request file, routes the
 record head through the generated working/owner contract table, sends the

@@ -3,6 +3,8 @@ use kameo::message::{Context, Message};
 use signal_persona_spirit::{
     RecordObservation, RecordSubscription, RecordSummary, Reply as WorkingReply,
 };
+use signal_version_handover::{HandoverMarker, MarkerRequest};
+use version_projection::ContractVersion;
 
 use crate::{Result, SpiritStore, StoreLocation, store::StampedEntry};
 
@@ -33,9 +35,20 @@ pub struct ReadRecordSnapshot {
     pub trace: ActorTrace,
 }
 
+pub struct ReadHandoverMarker {
+    pub request: MarkerRequest,
+    pub trace: ActorTrace,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, kameo::Reply)]
 pub struct RecordSnapshot {
     pub records: Vec<RecordSummary>,
+    pub trace: ActorTrace,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, kameo::Reply)]
+pub struct HandoverMarkerSnapshot {
+    pub marker: HandoverMarker,
     pub trace: ActorTrace,
 }
 
@@ -83,6 +96,28 @@ impl RecordStore {
         trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReplied);
         Ok(RecordSnapshot { records, trace })
     }
+
+    fn read_handover_marker(
+        &self,
+        request: MarkerRequest,
+        mut trace: ActorTrace,
+    ) -> Result<HandoverMarkerSnapshot> {
+        trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReceived);
+        trace.record(TraceNode::SEMA_READER, TraceAction::MessageReceived);
+        let marker = self
+            .store
+            .handover_marker(request, spirit_contract_version())?;
+        trace.record(TraceNode::SEMA_READER, TraceAction::RecordsRead);
+        trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReplied);
+        Ok(HandoverMarkerSnapshot { marker, trace })
+    }
+}
+
+fn spirit_contract_version() -> ContractVersion {
+    ContractVersion::new([
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+        0, 0,
+    ])
 }
 
 impl Actor for RecordStore {
@@ -127,5 +162,17 @@ impl Message<ReadRecordSnapshot> for RecordStore {
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.read_record_snapshot(message.subscription, message.trace)
+    }
+}
+
+impl Message<ReadHandoverMarker> for RecordStore {
+    type Reply = Result<HandoverMarkerSnapshot>;
+
+    async fn handle(
+        &mut self,
+        message: ReadHandoverMarker,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.read_handover_marker(message.request, message.trace)
     }
 }

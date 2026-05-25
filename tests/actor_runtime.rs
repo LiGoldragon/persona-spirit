@@ -60,7 +60,7 @@ async fn persona_spirit_entry_assertion_runs_through_actor_planes() {
 
     assert_eq!(
         reply.text(),
-        "(RecordAccepted ((1 workspace Decision \"actor path\" Maximum)))"
+        "(RecordAccepted ((1 workspace Decision [actor path] Maximum)))"
     );
     assert!(reply.trace().contains_ordered(&[
         TraceNode::SPIRIT_ROOT,
@@ -266,7 +266,7 @@ async fn persona_spirit_record_subscription_uses_read_plane_then_subscription_pl
 
     assert_eq!(
         reply.text(),
-        "(SubscriptionOpened ((Records (1)) (Records [(1 workspace Decision \"subscription path\" Maximum)])))"
+        "(SubscriptionOpened ((Records (1)) (Records [(1 workspace Decision [subscription path] Maximum)])))"
     );
     assert!(reply.trace().contains_ordered(&[
         TraceNode::RECORD_STORE,
@@ -456,7 +456,7 @@ async fn persona_spirit_state_statement_uses_classifier_before_store() {
 
     assert_eq!(
         reply.text(),
-        "(RecordAccepted ((1 unclassified Clarification \"capture this intent\" Minimum)))"
+        "(RecordAccepted ((1 unclassified Clarification [capture this intent] Minimum)))"
     );
     assert!(reply.trace().contains_ordered(&[
         TraceNode::DISPATCH_PHASE,
@@ -495,7 +495,7 @@ async fn persona_spirit_shutdown_releases_store_for_restart() {
 
     assert_eq!(
         reply.text(),
-        "(RecordsObserved ([(1 workspace Decision \"restart survives\" Maximum)]))"
+        "(RecordsObserved ([(1 workspace Decision [restart survives] Maximum)]))"
     );
 
     second_runtime.stop().await.expect("second runtime stops");

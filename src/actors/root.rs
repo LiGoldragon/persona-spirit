@@ -23,6 +23,7 @@ pub struct SpiritRoot {
     ingress: ActorRef<ingress::IngressPhase>,
     dispatch: ActorRef<dispatch::DispatchPhase>,
     encoder: ActorRef<reply::ReplyTextEncoder>,
+    store: ActorRef<store::RecordStore>,
 }
 
 #[derive(Clone)]
@@ -47,6 +48,10 @@ pub struct SubmitOwnerRequest {
     pub request: owner_signal_persona_spirit::Operation,
 }
 
+pub struct SubmitUpgradeRequest {
+    pub request: signal_version_handover::Operation,
+}
+
 #[derive(Debug, kameo::Reply)]
 pub struct RootTextReply {
     text: String,
@@ -68,6 +73,12 @@ pub struct RootFrameReply {
 #[derive(Debug, kameo::Reply)]
 pub struct RootOwnerReply {
     reply: owner_signal_persona_spirit::Reply,
+    trace: ActorTrace,
+}
+
+#[derive(Debug, kameo::Reply)]
+pub struct RootUpgradeReply {
+    reply: signal_version_handover::Reply,
     trace: ActorTrace,
 }
 
@@ -100,12 +111,14 @@ impl SpiritRoot {
         ingress: ActorRef<ingress::IngressPhase>,
         dispatch: ActorRef<dispatch::DispatchPhase>,
         encoder: ActorRef<reply::ReplyTextEncoder>,
+        store: ActorRef<store::RecordStore>,
     ) -> Self {
         Self {
             owner,
             ingress,
             dispatch,
             encoder,
+            store,
         }
     }
 
@@ -184,6 +197,85 @@ impl SpiritRoot {
         let mut trace = owner.trace;
         trace.record(TraceNode::SPIRIT_ROOT, TraceAction::MessageReplied);
         Ok(RootOwnerReply::new(owner.reply, trace))
+    }
+
+    async fn submit_upgrade_request(
+        &self,
+        request: signal_version_handover::Operation,
+    ) -> Result<RootUpgradeReply> {
+        let mut trace = ActorTrace::new();
+        trace.record(TraceNode::SPIRIT_ROOT, TraceAction::MessageReceived);
+        let reply = match request {
+            signal_version_handover::Operation::AskHandoverMarker(request) => {
+                let marker = self
+                    .store
+                    .ask(store::ReadHandoverMarker { request, trace })
+                    .await
+                    .map_err(Self::pipeline_send_error)?;
+                trace = marker.trace;
+                signal_version_handover::Reply::HandoverMarker(marker.marker)
+            }
+            signal_version_handover::Operation::ReadyToHandover(report) => {
+                let marker = self
+                    .store
+                    .ask(store::ReadHandoverMarker {
+                        request: signal_version_handover::MarkerRequest {
+                            component: report.component.clone(),
+                        },
+                        trace,
+                    })
+                    .await
+                    .map_err(Self::pipeline_send_error)?;
+                trace = marker.trace;
+                if marker.marker.commit_sequence == report.source_marker.commit_sequence {
+                    signal_version_handover::Reply::HandoverAccepted(
+                        signal_version_handover::HandoverAcceptance {
+                            accepted_marker: marker.marker,
+                        },
+                    )
+                } else {
+                    signal_version_handover::Reply::HandoverRejected(
+                        signal_version_handover::HandoverRejection {
+                            component: report.component,
+                            reason: signal_version_handover::HandoverRejectionReason::CommitSequenceAdvanced,
+                        },
+                    )
+                }
+            }
+            signal_version_handover::Operation::HandoverCompleted(report) => {
+                signal_version_handover::Reply::HandoverFinalized(
+                    signal_version_handover::HandoverFinalization {
+                        finalized_marker: report.accepted_marker,
+                    },
+                )
+            }
+            signal_version_handover::Operation::Mirror(payload) => {
+                signal_version_handover::Reply::HandoverRejected(
+                    signal_version_handover::HandoverRejection {
+                        component: payload.component,
+                        reason: signal_version_handover::HandoverRejectionReason::NotReady,
+                    },
+                )
+            }
+            signal_version_handover::Operation::Divergence(payload) => {
+                signal_version_handover::Reply::DivergenceAcknowledged(
+                    signal_version_handover::DivergenceAcknowledgement {
+                        component: payload.component,
+                        divergence_identifier: 0,
+                    },
+                )
+            }
+            signal_version_handover::Operation::RecoverFromFailure(request) => {
+                signal_version_handover::Reply::RecoveryCompleted(
+                    signal_version_handover::RecoveryResult {
+                        component: request.component,
+                        recovered: false,
+                    },
+                )
+            }
+        };
+        trace.record(TraceNode::SPIRIT_ROOT, TraceAction::MessageReplied);
+        Ok(RootUpgradeReply::new(reply, trace))
     }
 
     async fn encode(&self, pipeline: PipelineReply) -> Result<TextReply> {
@@ -292,6 +384,24 @@ impl RootOwnerReply {
     }
 }
 
+impl RootUpgradeReply {
+    fn new(reply: signal_version_handover::Reply, trace: ActorTrace) -> Self {
+        Self { reply, trace }
+    }
+
+    pub fn reply(&self) -> &signal_version_handover::Reply {
+        &self.reply
+    }
+
+    pub fn trace(&self) -> &ActorTrace {
+        &self.trace
+    }
+
+    pub fn into_reply(self) -> signal_version_handover::Reply {
+        self.reply
+    }
+}
+
 impl SpiritActorRuntime {
     pub async fn start(store: StoreLocation) -> Result<Self> {
         Self::start_with_arguments(Arguments::new(store)).await
@@ -347,6 +457,16 @@ impl SpiritActorRuntime {
     ) -> Result<RootOwnerReply> {
         self.root
             .ask(SubmitOwnerRequest { request })
+            .await
+            .map_err(Self::root_send_error)
+    }
+
+    pub async fn submit_upgrade_request(
+        &self,
+        request: signal_version_handover::Operation,
+    ) -> Result<RootUpgradeReply> {
+        self.root
+            .ask(SubmitUpgradeRequest { request })
             .await
             .map_err(Self::root_send_error)
     }
@@ -444,7 +564,7 @@ impl Actor for SpiritRoot {
             dispatch::Arguments {
                 classifier,
                 clock,
-                store,
+                store: store.clone(),
                 state,
                 subscription,
                 reply: shaper,
@@ -472,7 +592,7 @@ impl Actor for SpiritRoot {
         .spawn()
         .await;
 
-        Ok(Self::new(owner, ingress, dispatch, encoder))
+        Ok(Self::new(owner, ingress, dispatch, encoder, store))
     }
 }
 
@@ -521,5 +641,17 @@ impl Message<SubmitOwnerRequest> for SpiritRoot {
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.submit_owner_request(message.request).await
+    }
+}
+
+impl Message<SubmitUpgradeRequest> for SpiritRoot {
+    type Reply = Result<RootUpgradeReply>;
+
+    async fn handle(
+        &mut self,
+        message: SubmitUpgradeRequest,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.submit_upgrade_request(message.request).await
     }
 }

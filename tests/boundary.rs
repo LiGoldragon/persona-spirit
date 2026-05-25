@@ -13,6 +13,7 @@ use signal_frame::CommandLineSocket;
 struct StoreFixture {
     ordinary_socket: SocketPath,
     owner_socket: SocketPath,
+    upgrade_socket: SocketPath,
     store: StorePath,
 }
 
@@ -26,11 +27,14 @@ impl StoreFixture {
         ordinary_socket.push(format!("persona-spirit-{test_name}-{nanos}-ordinary.sock"));
         let mut owner_socket = std::env::temp_dir();
         owner_socket.push(format!("persona-spirit-{test_name}-{nanos}-owner.sock"));
+        let mut upgrade_socket = std::env::temp_dir();
+        upgrade_socket.push(format!("persona-spirit-{test_name}-{nanos}-upgrade.sock"));
         let mut store = std::env::temp_dir();
         store.push(format!("persona-spirit-{test_name}-{nanos}.redb"));
         Self {
             ordinary_socket: SocketPath::new(ordinary_socket.to_string_lossy().into_owned()),
             owner_socket: SocketPath::new(owner_socket.to_string_lossy().into_owned()),
+            upgrade_socket: SocketPath::new(upgrade_socket.to_string_lossy().into_owned()),
             store: StorePath::new(store.to_string_lossy().into_owned()),
         }
     }
@@ -43,6 +47,7 @@ impl StoreFixture {
         let daemon = DaemonRuntime::from_configuration(DaemonConfiguration::new(
             self.ordinary_socket.clone(),
             self.owner_socket.clone(),
+            self.upgrade_socket.clone(),
             self.store.clone(),
             SocketMode::from_octal(0o600),
         ))
@@ -194,7 +199,7 @@ fn persona_spirit_client_accepts_request_file_path_argument() {
 
     assert_eq!(
         reply,
-        "(RecordAccepted ((1 workspace Decision \"file request\" Maximum)))"
+        "(RecordAccepted ((1 workspace Decision [file request] Maximum)))"
     );
 }
 
@@ -207,7 +212,7 @@ fn persona_spirit_client_classifies_statement_as_provisional_record() {
 
     assert_eq!(
         reply,
-        "(RecordAccepted ((1 unclassified Clarification \"capture this intent\" Minimum)))"
+        "(RecordAccepted ((1 unclassified Clarification [capture this intent] Minimum)))"
     );
 }
 
@@ -220,7 +225,7 @@ fn persona_spirit_client_asserts_entry_and_mints_record_identifier() {
 
     assert_eq!(
         reply,
-        "(RecordAccepted ((1 workspace Decision \"summary only\" Maximum)))"
+        "(RecordAccepted ((1 workspace Decision [summary only] Maximum)))"
     );
 }
 
@@ -258,7 +263,7 @@ fn persona_spirit_client_persists_entries_for_later_summary_observation() {
 
     assert_eq!(
         reply,
-        "(RecordsObserved ([(1 workspace Decision \"first summary\" Maximum) (2 workspace Correction \"second summary\" Medium)]))"
+        "(RecordsObserved ([(1 workspace Decision [first summary] Maximum) (2 workspace Correction [second summary] Medium)]))"
     );
 }
 
@@ -315,7 +320,7 @@ fn persona_spirit_client_opens_record_subscription_with_summary_snapshot() {
 
     assert_eq!(
         opened,
-        "(SubscriptionOpened ((Records (1)) (Records [(1 workspace Decision \"subscription summary\" Maximum)])))"
+        "(SubscriptionOpened ((Records (1)) (Records [(1 workspace Decision [subscription summary] Maximum)])))"
     );
     assert_eq!(retracted, "(SubscriptionRetracted ((Records (1))))");
 }
@@ -336,7 +341,7 @@ fn persona_spirit_client_filters_record_observation_by_topic() {
 
     assert_eq!(
         reply,
-        "(RecordsObserved ([(2 naming Correction \"naming summary\" Maximum)]))"
+        "(RecordsObserved ([(2 naming Correction [naming summary] Maximum)]))"
     );
 }
 
@@ -356,7 +361,7 @@ fn persona_spirit_client_filters_record_observation_by_kind() {
 
     assert_eq!(
         reply,
-        "(RecordsObserved ([(1 workspace Principle \"workspace principle\" Maximum)]))"
+        "(RecordsObserved ([(1 workspace Principle [workspace principle] Maximum)]))"
     );
 }
 
@@ -379,7 +384,7 @@ fn persona_spirit_client_filters_record_observation_by_topic_and_kind() {
 
     assert_eq!(
         reply,
-        "(RecordsObserved ([(1 spirit Principle \"spirit principle\" Maximum)]))"
+        "(RecordsObserved ([(1 spirit Principle [spirit principle] Maximum)]))"
     );
 }
 
@@ -395,9 +400,9 @@ fn persona_spirit_client_returns_provenance_only_when_requested() {
         .expect("provenance observed");
 
     assert!(reply.starts_with(
-        "(RecordProvenancesObserved ([((1 workspace Decision \"summary only\" Maximum) \"current implementation context\" "
+        "(RecordProvenancesObserved ([((1 workspace Decision [summary only] Maximum) [current implementation context] "
     ));
-    assert!(reply.ends_with(" \"first statement\")]))"));
+    assert!(reply.ends_with(" [first statement])]))"));
 }
 
 #[test]
@@ -416,7 +421,7 @@ fn persona_spirit_client_repeated_entries_remain_distinct_records() {
 
     assert_eq!(
         reply,
-        "(RecordsObserved ([(1 naming Correction \"drop ancestor prefixes\" Maximum) (2 naming Correction \"drop ancestor prefixes\" Maximum)]))"
+        "(RecordsObserved ([(1 naming Correction [drop ancestor prefixes] Maximum) (2 naming Correction [drop ancestor prefixes] Maximum)]))"
     );
 }
 

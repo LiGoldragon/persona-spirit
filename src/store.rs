@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use sema::SchemaVersion;
 use sema_engine::{
@@ -10,6 +11,8 @@ use signal_persona_spirit::{
     RecordProvenance, RecordProvenancesObserved, RecordQuery, RecordSummary, RecordsObserved,
     Reply as WorkingReply, Time, Topic,
 };
+use signal_version_handover::{HandoverMarker, MarkerRequest};
+use version_projection::ContractVersion;
 
 use crate::{Result, error::Error};
 
@@ -114,8 +117,37 @@ impl SpiritStore {
             .collect())
     }
 
+    pub fn handover_marker(
+        &self,
+        request: MarkerRequest,
+        schema_hash: ContractVersion,
+    ) -> Result<HandoverMarker> {
+        let reading = HandoverClock::read();
+        let commit_sequence = self
+            .engine
+            .current_commit_sequence()
+            .map_err(Error::spirit_store)?
+            .value();
+        Ok(HandoverMarker {
+            component: request.component,
+            schema_hash,
+            commit_sequence,
+            write_counter: commit_sequence,
+            last_record_identifier: self.last_record_identifier()?,
+            recorded_at_date: reading.date,
+            recorded_at_time: reading.time,
+        })
+    }
+
     fn next_identifier(&self) -> Result<RecordIdentifier> {
         Ok(RecordIdentifierMint::from_records(&self.all_records()?).next_identifier())
+    }
+
+    fn last_record_identifier(&self) -> Result<Option<u64>> {
+        Ok(self
+            .all_records()?
+            .last()
+            .map(|record| record.identifier.value()))
     }
 
     fn records_for_query(&self, query: &RecordQuery) -> Result<Vec<StoredRecord>> {
@@ -138,9 +170,79 @@ impl SpiritStore {
     }
 }
 
+struct HandoverClock;
+
+struct HandoverClockReading {
+    date: signal_version_handover::Date,
+    time: signal_version_handover::Time,
+}
+
 struct RecordFilter<'query> {
     topic: Option<&'query Topic>,
     kind: Option<Kind>,
+}
+
+impl HandoverClock {
+    fn read() -> HandoverClockReading {
+        let seconds = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_secs())
+            .unwrap_or(0);
+        HandoverClockReading::from_unix_seconds(seconds)
+    }
+}
+
+impl HandoverClockReading {
+    fn from_unix_seconds(seconds: u64) -> Self {
+        let days = (seconds / 86_400) as i64;
+        let seconds_of_day = seconds % 86_400;
+        let (year, month, day) = HandoverCivilDate::from_unix_days(days).into_parts();
+        Self {
+            date: signal_version_handover::Date::new(year as u16, month as u8, day as u8),
+            time: signal_version_handover::Time::new(
+                (seconds_of_day / 3_600) as u8,
+                ((seconds_of_day % 3_600) / 60) as u8,
+                (seconds_of_day % 60) as u8,
+            ),
+        }
+    }
+}
+
+struct HandoverCivilDate {
+    year: i32,
+    month: u32,
+    day: u32,
+}
+
+impl HandoverCivilDate {
+    fn from_unix_days(days: i64) -> Self {
+        let zero_based_days = days + 719_468;
+        let era = if zero_based_days >= 0 {
+            zero_based_days
+        } else {
+            zero_based_days - 146_096
+        } / 146_097;
+        let day_of_era = zero_based_days - era * 146_097;
+        let year_of_era =
+            (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+        let mut year = year_of_era + era * 400;
+        let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+        let month_parameter = (5 * day_of_year + 2) / 153;
+        let day = day_of_year - (153 * month_parameter + 2) / 5 + 1;
+        let month = month_parameter + if month_parameter < 10 { 3 } else { -9 };
+        if month <= 2 {
+            year += 1;
+        }
+        Self {
+            year: year as i32,
+            month: month as u32,
+            day: day as u32,
+        }
+    }
+
+    fn into_parts(self) -> (i32, u32, u32) {
+        (self.year, self.month, self.day)
+    }
 }
 
 impl StoredRecord {
