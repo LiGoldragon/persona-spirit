@@ -1,0 +1,49 @@
+;; Internal channel schema — the SUPERVISOR actor (language 3 / 3).
+
+{}
+
+[] [] []
+
+{
+  SupervisorAction (
+    (StartEngine StartEngineRequest)
+    (DrainEngine DrainEngineRequest)
+    (QueryEngineStatus QueryEngineStatusRequest)
+  )
+
+  SupervisorResponse (
+    (EngineStarted)
+    (EngineDrained)
+    (EngineStatusReturned)
+  )
+
+  StartEngineRequest [Generation]
+  DrainEngineRequest [Generation]
+  QueryEngineStatusRequest [Generation]
+
+  EngineStarted [Generation]
+  EngineDrained [Generation]
+  EngineStatusReturned [EngineStatus]
+  EngineStatus [u8 u64]
+
+  Generation [u64]
+}
+
+[
+  (EffectTable [
+    (StartEngine StartEngineEffect)
+    (DrainEngine DrainEngineEffect)
+    (QueryEngineStatus EngineStatusEffect)
+  ])
+  (FanOutTargets [
+    (StartEngineEffect [
+      (Reply EngineStarted)
+    ])
+    (DrainEngineEffect [
+      (Reply EngineDrained)
+    ])
+    (EngineStatusEffect [
+      (Reply EngineStatusReturned)
+    ])
+  ])
+]

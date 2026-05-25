@@ -1,3 +1,26 @@
+[workspace]
+members = [".", "schema-poc"]
+resolver = "2"
+
+# POC overrides (psyche 2026-05-26 + intent records 709, 710): point
+# schema, signal-frame, signal-persona-spirit, and
+# owner-signal-persona-spirit at the local POC worktrees. The extended
+# universal-Unknown carrier check + dual schema/legacy emission on the
+# wire crates need to reach the schema-poc subcrate without publish
+# cycles. Production stack (this crate) keeps upstream pins;
+# schema-poc consumes the patches through the workspace.
+[patch."https://github.com/LiGoldragon/schema.git"]
+schema = { path = "/home/li/wt/github.com/LiGoldragon/schema/designer-schema-poc-from-v0.3-main-2026-05-26" }
+
+[patch."https://github.com/LiGoldragon/signal-frame.git"]
+signal-frame = { path = "/home/li/wt/github.com/LiGoldragon/signal-frame/designer-schema-poc-106-2026-05-26" }
+
+[patch."https://github.com/LiGoldragon/signal-persona-spirit.git"]
+signal-persona-spirit = { path = "/home/li/wt/github.com/LiGoldragon/signal-persona-spirit/designer-schema-poc-from-v0.3-main-2026-05-26" }
+
+[patch."https://github.com/LiGoldragon/owner-signal-persona-spirit.git"]
+owner-signal-persona-spirit = { path = "/home/li/wt/github.com/LiGoldragon/owner-signal-persona-spirit/designer-schema-poc-from-v0.3-main-2026-05-26" }
+
 [package]
 name         = "persona-spirit"
 version      = "0.3.0"

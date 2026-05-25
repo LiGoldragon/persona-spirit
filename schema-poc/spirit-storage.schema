@@ -1,0 +1,74 @@
+;; Storage sema schema — the STORAGE SEMA LANGUAGE (language 2 of 3
+;; per psyche 2026-05-26 + intent records 709, 710).
+;;
+;; What this schema declares:
+;;
+;; - The redb table descriptors (logical name → table-layout type)
+;;   via the StorageDescriptor feature.
+;; - The Entry shape at rest (StoredRecord wraps the wire Entry with
+;;   a daemon-stamped Date + Time, mirroring v0.3's RecordProvenance
+;;   provenance pattern but at the storage side).
+;; - The version marker shape (three u32s — semver major/minor/patch).
+;; - The upgrade log entry shape.
+;;
+;; This schema is the SEMA side of the rkyv-one-byte-layout discipline
+;; (record 695): the same bytes that travel the wire as a signal sit
+;; at rest in redb as a sema row. Authored from the NEXT viewpoint
+;; (per /341 P9 vocabulary discipline).
+
+{}
+
+[] [] []
+
+{
+  ;; The version marker — three u32s for semver major.minor.patch.
+  ;; Read on database open; the migration runner branches on it.
+  VersionMarker [u32 u32 u32]
+
+  ;; The stamped Entry shape at rest. Mirrors the wire Entry
+  ;; (signal-persona-spirit/spirit.schema) but stores the daemon-
+  ;; stamped Date + Time provenance so observers can return either
+  ;; DescriptionOnly or WithProvenance.
+  StoredRecord [Identifier StampedEntry]
+  StampedEntry [Entry Date Time]
+  Entry [Topics Kind Description Certainty]
+
+  ;; The atomic monotonic identifier mint state (one row).
+  IdentifierMint [u64]
+
+  ;; Upgrade-log entry shape (one row per database-open).
+  UpgradeLogEntry [VersionMarker VersionMarker UpgradeOutcome Date Time]
+  UpgradeOutcome (MigratedSuccessfully NoMigrationNeeded MigrationFailed RolledBack)
+
+  ;; Table-layout types — each is a [key value] pair the
+  ;; StorageDescriptor names.
+  RecordsTable [Identifier StoredRecord]
+  IdentifierMintTable [MintKey IdentifierMint]
+  VersionMarkerTable [MarkerKey VersionMarker]
+  UpgradeLogTable [Identifier UpgradeLogEntry]
+
+  Identifier [u64]
+  MintKey [u8]
+  MarkerKey [u8]
+
+  ;; Imported leaf types (in a fuller build these come from
+  ;; signal-persona-spirit/spirit.schema). For POC self-containment
+  ;; the storage schema redeclares them here — the rkyv encoding
+  ;; matches because the shapes match.
+  Topic [String]
+  Topics [(Vec Topic)]
+  Description [String]
+  Date [u16 u8 u8]
+  Time [u8 u8 u8]
+  Kind (Decision Principle Correction Clarification Constraint)
+  Certainty (Minimum VeryLow Low Medium High VeryHigh Maximum)
+}
+
+[
+  (StorageDescriptor [
+    (Records RecordsTable)
+    (IdentifierMint IdentifierMintTable)
+    (VersionMarker VersionMarkerTable)
+    (UpgradeLog UpgradeLogTable)
+  ])
+]

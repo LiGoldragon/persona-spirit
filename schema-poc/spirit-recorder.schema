@@ -1,0 +1,68 @@
+;; Internal channel schema — the RECORDER actor (one of the INTERNAL
+;; CHANNEL LANGUAGES, language 3 of 3 per psyche 2026-05-26 + intent
+;; records 709, 710).
+;;
+;; The recorder owns one operation in the v0.3 wire surface — `Record`
+;; — and maps it to two internal effects:
+;;
+;;   1. Persist the StoredRecord into the redb RecordsTable.
+;;   2. Mint a fresh RecordIdentifier from the IdentifierMint.
+;;   3. Reply with `RecordAccepted(identifier)`.
+;;
+;; The schema declares ACTION + RESPONSE enums plus EffectTable +
+;; FanOutTargets. The composer injects `Unknown(String)` into the
+;; RESPONSE enum (the actor's safety floor).
+
+{}
+
+[] [] []
+
+{
+  ;; Action enum — payload-carrying variants use `(Variant Payload)`.
+  RecorderAction (
+    (RecordEntry RecordEntryRequest)
+    (QueryRecorderStatus QueryRecorderStatusRequest)
+  )
+
+  ;; Response enum — payload-carrying variants use `(Variant)` when the
+  ;; payload type shares the variant name, else `(Variant Payload)`.
+  ;; The composer injects `Unknown(String)` automatically.
+  RecorderResponse (
+    (RecordAccepted)
+    (RecorderStatusReturned)
+  )
+
+  ;; Action payload records.
+  RecordEntryRequest [Entry]
+  QueryRecorderStatusRequest [Identifier]
+
+  ;; Response payload records.
+  RecordAccepted [Identifier]
+  RecorderStatusReturned [RecorderStatus]
+  RecorderStatus [u64 u64]
+
+  ;; Leaf types (mirrored from wire).
+  Identifier [u64]
+  Entry [Topics Kind Description Certainty]
+  Topic [String]
+  Topics [(Vec Topic)]
+  Description [String]
+  Kind (Decision Principle Correction Clarification Constraint)
+  Certainty (Minimum VeryLow Low Medium High VeryHigh Maximum)
+}
+
+[
+  (EffectTable [
+    (RecordEntry RecordWriteEffect)
+    (QueryRecorderStatus RecorderStatusEffect)
+  ])
+  (FanOutTargets [
+    (RecordWriteEffect [
+      (Store SpiritStorage InsertStampedEntry)
+      (Reply RecordAccepted)
+    ])
+    (RecorderStatusEffect [
+      (Reply RecorderStatusReturned)
+    ])
+  ])
+]

@@ -1,0 +1,46 @@
+;; Internal channel schema — the UPGRADE LOG actor (language 3 / 3).
+;; Tracks per-migration boundary outcomes.
+
+{}
+
+[] [] []
+
+{
+  UpgradeLogAction (
+    (AppendUpgradeEntry AppendUpgradeEntryRequest)
+    (QueryUpgradeLog QueryUpgradeLogRequest)
+  )
+
+  UpgradeLogResponse (
+    (UpgradeEntryAppended)
+    (UpgradeLogReturned)
+  )
+
+  AppendUpgradeEntryRequest [VersionMarker VersionMarker UpgradeOutcome]
+  QueryUpgradeLogRequest [u8]
+
+  UpgradeEntryAppended [Identifier]
+  UpgradeLogReturned [(Vec UpgradeLogEntry)]
+
+  UpgradeLogEntry [VersionMarker VersionMarker UpgradeOutcome Date Time]
+  UpgradeOutcome (MigratedSuccessfully NoMigrationNeeded MigrationFailed RolledBack)
+  VersionMarker [u32 u32 u32]
+  Date [u16 u8 u8]
+  Time [u8 u8 u8]
+  Identifier [u64]
+}
+
+[
+  (EffectTable [
+    (AppendUpgradeEntry AppendEffect)
+    (QueryUpgradeLog QueryEffect)
+  ])
+  (FanOutTargets [
+    (AppendEffect [
+      (Reply UpgradeEntryAppended)
+    ])
+    (QueryEffect [
+      (Reply UpgradeLogReturned)
+    ])
+  ])
+]

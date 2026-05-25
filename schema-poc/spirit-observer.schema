@@ -1,0 +1,67 @@
+;; Internal channel schema — the OBSERVER actor (language 3 / 3).
+;;
+;; The observer serves three v0.3 wire operations:
+;;
+;;   - `Observe Topics`              → ObserveTopics → TopicsObserved
+;;   - `Observe (Records ...)`       → ObserveRecords → RecordsObserved
+;;                                    or RecordProvenancesObserved
+
+{}
+
+[] [] []
+
+{
+  ObserverAction (
+    (ObserveTopics ObserveTopicsRequest)
+    (ObserveRecordsDescriptionOnly ObserveRecordsRequest)
+    (ObserveRecordsWithProvenance ObserveRecordsRequest)
+  )
+
+  ObserverResponse (
+    (TopicsObserved)
+    (RecordsObserved)
+    (RecordProvenancesObserved)
+  )
+
+  ;; Action payload records.
+  ObserveTopicsRequest [u8]
+  ObserveRecordsRequest [(Option Topic) (Option Kind)]
+
+  ;; Response payload records.
+  TopicsObserved [(Vec TopicCount)]
+  RecordsObserved [(Vec RecordDescription)]
+  RecordProvenancesObserved [(Vec RecordProvenance)]
+
+  TopicCount [Topic u64]
+  RecordDescription [Identifier Topics Kind Description Certainty]
+  RecordProvenance [RecordDescription Date Time]
+
+  ;; Leaf types.
+  Identifier [u64]
+  Topic [String]
+  Topics [(Vec Topic)]
+  Description [String]
+  Date [u16 u8 u8]
+  Time [u8 u8 u8]
+  Kind (Decision Principle Correction Clarification Constraint)
+  Certainty (Minimum VeryLow Low Medium High VeryHigh Maximum)
+}
+
+[
+  (EffectTable [
+    (ObserveTopics TopicsScanEffect)
+    (ObserveRecordsDescriptionOnly RecordsScanEffect)
+    (ObserveRecordsWithProvenance RecordsProvenanceScanEffect)
+  ])
+  (FanOutTargets [
+    (TopicsScanEffect [
+      (Reply TopicsObserved)
+    ])
+    (RecordsScanEffect [
+      (Reply RecordsObserved)
+    ])
+    (RecordsProvenanceScanEffect [
+      (Reply RecordProvenancesObserved)
+    ])
+  ])
+]

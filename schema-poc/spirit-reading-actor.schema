@@ -1,0 +1,42 @@
+;; Internal channel schema — the READING ACTOR (response dispatcher,
+;; language 3 / 3). Per /346 §5 the reading actor is itself an actor
+;; with its own schema. Its FanOutTargets ALWAYS include
+;; `(Tap LogSinkSet WriteEntry)` — the auto-tap is declaratively
+;; encoded.
+
+{}
+
+[] [] []
+
+{
+  ReadingActorAction (
+    (DispatchRecorderResponse DispatchEnvelope)
+    (DispatchObserverResponse DispatchEnvelope)
+  )
+
+  ReadingActorResponse (
+    (ResponseDispatched)
+    (DispatchFailed)
+  )
+
+  DispatchEnvelope [Identifier Identifier]
+
+  ResponseDispatched [Identifier]
+  DispatchFailed [Identifier Reason]
+  Reason [String]
+
+  Identifier [u64]
+}
+
+[
+  (EffectTable [
+    (DispatchRecorderResponse DispatchEffect)
+    (DispatchObserverResponse DispatchEffect)
+  ])
+  (FanOutTargets [
+    (DispatchEffect [
+      (Tap LogSinkSet WriteEntry)
+      (Reply ResponseDispatched)
+    ])
+  ])
+]
