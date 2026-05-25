@@ -1,0 +1,101 @@
+;; spirit-recorder.schema --- internal channel for the SpiritRecorder
+;; actor.
+;;
+;; Per /346 §1, every major internal actor gets its own schema declaring
+;; ACTION + RESPONSE enums. The universal `Unknown` RESPONSE variant is
+;; injected by the schema engine's `UniversalUnknownMacro` (per /346 §9
+;; --- not yet emitted; see BLOCKED note in src/schema_driven/recorder.rs).
+;;
+;; The recorder takes wire-derived intent (Record, Watch, Observe, ...)
+;; and produces RESPONSE variants the reading actor
+;; (src/schema_driven/reading_actor.rs) routes onto wire replies,
+;; subscriber notifications, and the logging tap. The effect-table
+;; feature wires action variants to storage-side effects per /345 §8
+;; (effect-table lives in the ACTOR's schema, not the wire schema).
+
+;; imports --- the recorder traffics in wire types and storage types
+{
+  Wire (Import signal-persona-spirit/spirit.schema [
+    Entry
+    RecordObservation
+    RecordSubscription
+    RecordSubscriptionToken
+    RecordDescription
+    RecordAccepted
+    RecordsObserved
+    SubscriptionOpened
+    SubscriptionRetracted
+  ])
+  Storage (Import spirit-storage [StampedEntry StoredRecord])
+}
+
+;; no wire headers --- internal channel
+[] [] []
+
+;; namespace --- ACTION + RESPONSE + the supporting types
+{
+  ;; ACTION enum --- closed set of things this actor can do when called.
+  ;; Each variant names a payload declared below.
+  RecorderAction (
+    RecordEntry
+    ObserveRecorder
+    SnapshotRecords
+    OpenRecordSubscription
+    CloseRecordSubscription
+    QueryStatus
+  )
+
+  ;; RESPONSE enum --- closed set of things the actor says back. The
+  ;; `Unknown` variant is injected by UniversalUnknownMacro (/346 §9)
+  ;; and carries an error string; do NOT author it here.
+  RecorderResponse (
+    RecordAccepted
+    RecordsObserved
+    RecordSnapshotReturned
+    SubscriptionOpened
+    SubscriptionRetracted
+    StatusReturned
+  )
+
+  ;; Action payloads
+  RecordEntry [Entry]
+  ObserveRecorder [RecordObservation]
+  SnapshotRecords [RecordSubscription]
+  OpenRecordSubscription [RecordSubscription]
+  CloseRecordSubscription [RecordSubscriptionToken]
+  QueryStatus []
+
+  ;; Response payloads (Reply* are reused from wire; new ones for
+  ;; recorder-private outcomes)
+  RecordSnapshotReturned [(Vec RecordDescription)]
+  StatusReturned [RecorderStatus]
+
+  ;; Recorder-private state shapes
+  RecorderStatus [u64 u64 RecordHealthLevel]
+  RecordHealthLevel (Nominal Degraded Recovering)
+}
+
+;; features --- the effect-table maps actions to fan-out outputs per
+;; /345 §8 + /346 §10 worked example.
+[
+  (EffectTable [
+    (RecordEntry RecordWriteEffect)
+    (OpenRecordSubscription SubscriptionOpenEffect)
+    (CloseRecordSubscription SubscriptionCloseEffect)
+  ])
+
+  (FanOutTargets [
+    (RecordWriteEffect [
+      (Store SpiritStorage InsertStampedEntry)
+      (Notify ObserverSet PublishRecordCaptured)
+      (Reply RecordAccepted)
+    ])
+    (SubscriptionOpenEffect [
+      (Snapshot SpiritStorage SnapshotRecords)
+      (Reply SubscriptionOpened)
+    ])
+    (SubscriptionCloseEffect [
+      (Reply SubscriptionRetracted)
+    ])
+  ])
+]

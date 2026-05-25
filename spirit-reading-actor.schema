@@ -1,0 +1,76 @@
+;; spirit-reading-actor.schema --- internal channel for the response
+;; dispatcher actor (the "reading actor" from /346 §5).
+;;
+;; Per /346 §5 the reading actor is itself an actor --- it has its own
+;; schema declaring its own ACTION + RESPONSE set. It owns the logging
+;; tap (auto-capturing every response). It is NOT a hard-coded primitive;
+;; it's the same channel-contract pattern applied to the dispatch role.
+;;
+;; The reading actor sits on the response stream out of every other
+;; actor and dispatches outbound to (a) wire reply, (b) subscribers,
+;; (c) the logging tap.
+
+;; imports
+{
+  Recorder (Import spirit-recorder [RecorderResponse])
+  Observer (Import spirit-observer [ObserverResponse])
+  Supervisor (Import spirit-supervisor [SupervisorResponse])
+}
+
+;; no wire headers --- internal channel
+[] [] []
+
+;; namespace
+{
+  ReadingActorAction (
+    DispatchRecorderResponse
+    DispatchObserverResponse
+    DispatchSupervisorResponse
+    AttachLogSink
+    DetachLogSink
+  )
+
+  ReadingActorResponse (
+    ResponseDispatched
+    LogSinkAttached
+    LogSinkDetached
+  )
+
+  ;; Action payloads
+  DispatchRecorderResponse [DispatchEnvelope RecorderResponse]
+  DispatchObserverResponse [DispatchEnvelope ObserverResponse]
+  DispatchSupervisorResponse [DispatchEnvelope SupervisorResponse]
+  AttachLogSink [LogSinkIdentifier LogLevel]
+  DetachLogSink [LogSinkIdentifier]
+
+  ;; Response payloads
+  ResponseDispatched [DispatchOutcome]
+
+  ;; Reading-actor-private state
+  DispatchEnvelope [CorrelationToken DispatchDestination]
+  CorrelationToken [u64]
+  DispatchDestination (WireReply Subscriber Tap LogOnly)
+  DispatchOutcome (Delivered LogOnly DroppedAtFilter)
+  LogSinkIdentifier [u32]
+  LogLevel (Trace Debug Info Warn Error)
+  LogSinkAttached [LogSinkIdentifier]
+  LogSinkDetached [LogSinkIdentifier]
+}
+
+;; features --- the reading actor's effect-table is simple: every
+;; response gets logged AND routed to its declared destination.
+[
+  (EffectTable [
+    (DispatchRecorderResponse DispatchEffect)
+    (DispatchObserverResponse DispatchEffect)
+    (DispatchSupervisorResponse DispatchEffect)
+  ])
+
+  (FanOutTargets [
+    (DispatchEffect [
+      (Forward DestinationActor Deliver)
+      (Tap LogSinkSet WriteEntry)
+      (Reply ResponseDispatched)
+    ])
+  ])
+]

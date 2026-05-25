@@ -1,0 +1,101 @@
+;; spirit-supervisor.schema --- internal channel for the SpiritSupervisor
+;; actor (top-of-process lifecycle authority).
+;;
+;; The supervisor owns engine startup/drain, the bootstrap-policy
+;; reload, and the version-handover ceremony. Per /345 §3 it's an
+;; internal channel; the actions it accepts are owner-channel-derived
+;; (Start / Drain / Reload / Register / Retire) but the supervisor's
+;; own vocabulary is private to the process.
+;;
+;; The supervisor is also the mediator for the cross-actor coordination
+;; required at engine drain --- it asks the recorder to flush, asks the
+;; observer to retract subscriptions, and asks the storage actor to
+;; close cleanly.
+
+;; imports
+{
+  Owner (Import owner-signal-persona-spirit/owner-spirit.schema [
+    BootstrapPolicy
+    Registration
+    Retirement
+  ])
+}
+
+;; no wire headers --- internal channel
+[] [] []
+
+;; namespace
+{
+  SupervisorAction (
+    StartEngine
+    DrainEngine
+    ReloadBootstrapPolicy
+    RegisterOwner
+    RetireOwner
+    QueryEngineStatus
+  )
+
+  SupervisorResponse (
+    EngineStarted
+    EngineDrained
+    BootstrapPolicyReloaded
+    OwnerRegistered
+    OwnerRetired
+    EngineStatusReturned
+  )
+
+  ;; Action payloads
+  StartEngine [StartReason]
+  DrainEngine [DrainReason]
+  ReloadBootstrapPolicy [BootstrapPolicy]
+  RegisterOwner [Registration]
+  RetireOwner [Retirement]
+  QueryEngineStatus []
+
+  ;; Response payloads
+  EngineStarted [EngineState]
+  EngineDrained [EngineState]
+  BootstrapPolicyReloaded [PolicySnapshot]
+  OwnerRegistered [OwnerHandle]
+  OwnerRetired [OwnerHandle]
+  EngineStatusReturned [EngineState]
+
+  ;; Supervisor-private state shapes
+  StartReason (FreshStart Resume HandoverFromPrevious)
+  DrainReason (ShuttingDown HandoverToNext PolicyChange)
+  EngineLifecycleState (Starting Running Draining Drained Halted)
+  EngineState [EngineLifecycleState u64]
+  PolicySnapshot [String]
+  OwnerHandle [u64]
+}
+
+;; features --- supervisor actions cascade into recorder/observer/storage
+;; drain orchestration. The fan-out targets reference actors in the
+;; recorder/observer/storage internal-channel schemas.
+[
+  (EffectTable [
+    (StartEngine EngineStartEffect)
+    (DrainEngine EngineDrainEffect)
+    (ReloadBootstrapPolicy PolicyReloadEffect)
+  ])
+
+  (FanOutTargets [
+    (EngineStartEffect [
+      (Open SpiritStorage Open)
+      (Open ObserverSet Open)
+      (Open RecorderActor Open)
+      (Reply EngineStarted)
+    ])
+    (EngineDrainEffect [
+      (Drain RecorderActor Drain)
+      (Drain ObserverSet Drain)
+      (Drain SpiritStorage Drain)
+      (Reply EngineDrained)
+    ])
+    (PolicyReloadEffect [
+      (Apply ObserverSet ApplyPolicy)
+      (Apply RecorderActor ApplyPolicy)
+      (Reply BootstrapPolicyReloaded)
+    ])
+  ])
+]

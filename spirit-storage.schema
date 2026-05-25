@@ -1,0 +1,56 @@
+;; spirit-storage.schema --- storage contract for the persona-spirit daemon.
+;;
+;; The storage contract is its own channel per /345 §3 (external storage
+;; category): the redb tables outlive the process so the schema describes
+;; an EXTERNAL surface, but lives in the daemon crate because the daemon
+;; owns the database (/345 §4).
+;;
+;; The shape mirrors the redb tables defined in src/store.rs at MAIN
+;; (StoredRecord, StampedEntry). Authored from the NEXT perspective per
+;; record 672: we are writing what the new daemon will produce; MAIN is
+;; the comparison point loaded by the upgrade machinery.
+
+;; imports
+{
+  Wire (Import signal-persona-spirit/spirit.schema [Entry RecordIdentifier Date Time])
+  Magnitude (ImportAll signal-sema/magnitude.schema)
+}
+
+;; ordinary header --- storage has no wire channel of its own
+[]
+
+;; owner header --- ditto
+[]
+
+;; sema header --- ditto
+[]
+
+;; namespace --- table layouts + stored record shapes
+{
+  ;; Table identities. Each Table name names a redb table; the body
+  ;; declares the value type stored under each key.
+  RecordsTable [RecordIdentifier StoredRecord]
+  RecordIdentifierMintTable [MintKey RecordIdentifierMint]
+
+  ;; Storage-side projections of the wire types. StampedEntry stitches
+  ;; the wire Entry to wall-clock provenance the daemon stamps on accept.
+  StampedEntry [Entry Date Time]
+  StoredRecord [RecordIdentifier StampedEntry]
+
+  ;; Mint singleton --- the next record identifier to hand out.
+  MintKey []
+  RecordIdentifierMint [u64]
+
+  ;; Version marker stored alongside the database per /346 §4 step 4.
+  VersionMarker [u32 u32 u32]
+}
+
+;; features --- storage descriptor names the table layouts; the upgrade
+;; feature carries the version marker the daemon's auto-migration reads
+;; on load per /346 §4 step 6.
+[
+  (StorageDescriptor [
+    (Records RecordsTable)
+    (RecordIdentifierMint RecordIdentifierMintTable)
+  ])
+]

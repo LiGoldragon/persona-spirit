@@ -1,0 +1,51 @@
+;; spirit-upgrade-log.schema --- storage contract for the upgrade
+;; ceremony log.
+;;
+;; Per /346 §4 the upgrade machinery needs to record each MAIN -> NEXT
+;; transition: which version-marker was on disk, which migration ran,
+;; outcome. This sits in a SEPARATE storage table from the records
+;; table so a rollback or post-mortem can read the log without
+;; entangling it with the per-statement record stream.
+;;
+;; This is its own .schema (not part of spirit-storage.schema) because
+;; per /345 §2 each contract is its own channel; the upgrade log's
+;; lifetime and authority are distinct from the records table's, even
+;; though both live in the same redb file.
+
+;; imports
+{
+  Storage (Import spirit-storage [VersionMarker])
+}
+
+;; no wire headers --- storage contract
+[] [] []
+
+;; namespace
+{
+  UpgradeLogTable [u64 UpgradeLogEntry]
+
+  UpgradeLogEntry [
+    VersionMarker
+    VersionMarker
+    UpgradeOutcome
+    UpgradeTimestamp
+    UpgradeDuration
+  ]
+
+  UpgradeOutcome (
+    MigratedSuccessfully
+    NoMigrationNeeded
+    MigrationFailed
+    RolledBack
+  )
+
+  UpgradeTimestamp [u64]
+  UpgradeDuration [u64]
+}
+
+;; features
+[
+  (StorageDescriptor [
+    (UpgradeLog UpgradeLogTable)
+  ])
+]

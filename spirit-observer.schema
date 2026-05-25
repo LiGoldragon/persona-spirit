@@ -1,0 +1,79 @@
+;; spirit-observer.schema --- internal channel for the SpiritObserver
+;; actor (the observer fan-out hub).
+;;
+;; The observer is the actor that holds the observer subscription table
+;; and republishes captured events to subscribers (the Observable
+;; feature on the wire schema). Per /345 §3 it's an internal channel:
+;; lives in the daemon's process memory; its action vocabulary doesn't
+;; cross the wire.
+;;
+;; The wire-facing Tap/Untap operations translate INTO this actor's
+;; ACTION variants; the actor responds with subscription tokens; when
+;; records are captured upstream, the observer dispatches notifications
+;; to all matching subscribers.
+
+;; imports
+{
+  Wire (Import signal-persona-spirit/spirit.schema [
+    ObserverFilter
+    ObserverSubscriptionToken
+    ObserverSubscriptionOpened
+    RecordDescription
+  ])
+}
+
+;; no wire headers --- internal channel
+[] [] []
+
+;; namespace
+{
+  ObserverAction (
+    OpenObserverSubscription
+    CloseObserverSubscription
+    PublishRecordCaptured
+    QueryStatus
+  )
+
+  ObserverResponse (
+    ObserverSubscriptionOpened
+    ObserverSubscriptionRetracted
+    NotificationDispatched
+    StatusReturned
+  )
+
+  ;; Action payloads
+  OpenObserverSubscription [ObserverFilter]
+  CloseObserverSubscription [ObserverSubscriptionToken]
+  PublishRecordCaptured [RecordDescription]
+  QueryStatus []
+
+  ;; Response payloads
+  ObserverSubscriptionRetracted [ObserverSubscriptionToken]
+  NotificationDispatched [u32]
+  StatusReturned [ObserverStatus]
+
+  ObserverStatus [u32 u64]
+}
+
+;; features --- the observer's fan-out: PublishRecordCaptured fans into
+;; all matching subscribers (handled at runtime; the EffectTable below
+;; lists the direct outputs the observer can return).
+[
+  (EffectTable [
+    (OpenObserverSubscription ObserverOpenEffect)
+    (CloseObserverSubscription ObserverCloseEffect)
+    (PublishRecordCaptured ObserverPublishEffect)
+  ])
+
+  (FanOutTargets [
+    (ObserverOpenEffect [
+      (Reply ObserverSubscriptionOpened)
+    ])
+    (ObserverCloseEffect [
+      (Reply ObserverSubscriptionRetracted)
+    ])
+    (ObserverPublishEffect [
+      (FanOutSubscribers ObserverSubscriberSet Dispatch)
+    ])
+  ])
+]

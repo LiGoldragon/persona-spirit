@@ -2,6 +2,7 @@ pub mod actors;
 pub mod daemon;
 pub mod error;
 pub mod observation;
+pub mod schema_driven;
 pub mod store;
 
 pub use actors::policy::BootstrapPolicySource;
