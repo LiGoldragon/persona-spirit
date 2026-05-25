@@ -123,6 +123,162 @@ you need clarifications on some things."* For `persona-spirit`,
 that means the raw storage/query path must already run through a
 named Kameo actor tree with constraint tests that prove the path.
 
+## Every actor has a schema
+
+Every actor in `persona-spirit` carries its own `.schema` file
+declaring two enums plus a universal variant: ACTION (the closed
+set of things the actor can do when called) and RESPONSE (the
+closed set of things the actor can say back). The schema engine
+injects a universal `Unknown(String)` variant into every RESPONSE
+enum automatically — the actor's **safety floor**. No matter what
+arrives, the actor has a structurally-valid response.
+
+This is a channel-contract per the workspace's
+schemas-warrant-per-channel discipline. The recorder, observer,
+supervisor, reading-actor, storage table set, and upgrade log each
+get their own `.schema` file in the daemon crate. Storage and
+internal channels live in `persona-spirit`; wire channels live in
+`signal-persona-spirit` and `owner-signal-persona-spirit` as
+before. *"When the psyche describes a major part of the system,
+that description IS a warrant to create a schema for that part."*
+Per record 668.
+
+## Structure is schema; logic is Rust
+
+Hand-written Rust is ONLY the engine logic — the decision-making
+bodies inside actor methods. Everything STRUCTURAL emits from the
+schema: NOTA-encoded form, rkyv binary form, Rust data type
+definitions, field accessors, codec impls, dispatch traits. The
+engine code consumes schema-emitted types and writes only logic. It
+does not reinvent data structures.
+
+Concretely: each actor's `handle(action: ActorAction) ->
+ActorResponse` method is a closed `match` block. The action enum is
+closed, so Rust enforces exhaustiveness at compile time. The body is
+logic; the structure is the schema. There is no `Unknown` arm on the
+action side; the universal Unknown lives on the response side as the
+fallback any method body can return when the input is structurally
+valid but unhandleable.
+
+## One rkyv byte layout; two homes
+
+The rkyv binary encoding lives in a single byte layout that survives
+BOTH the database (sema body at rest in redb) and the wire (signal
+movement between clients over sockets). Same bytes, two homes. NOTA
+is the text-readable projection emitted at CLI read time or for
+human inspection. This closes the schema-signal-sema trio at the
+byte-encoding layer: **schema** specifies, **signal** moves, **sema**
+holds. Per record 695.
+
+## Database upgrades are auto-migration on load
+
+Schema changes between versions follow the next/main/previous
+vocabulary: NEXT is the in-progress authoring; MAIN is the
+published baseline; PREVIOUS or LAST is the prior iteration. The
+DB-side upgrade flow:
+
+1. Author edits an actor or storage schema while writing NEXT; MAIN
+   stays at the published baseline.
+2. A schema-diff machine identifies what types are added, dropped,
+   renamed, structurally changed.
+3. The developer writes hand-written Rust bridge code per
+   version-boundary — the `From`-impl per type that moved, in a
+   `mod previous` / `mod next` pair (renamed from the older `mod
+   historical` / `mod current_shape` per record 672).
+4. A version-marker stored alongside the database tells the daemon
+   which schema the persisted data was written under
+   (`VersionMarker [u32 u32 u32]`).
+5. The new daemon is recompiled with PREVIOUS available locally so
+   the bridge can read both shapes.
+6. Daemon startup reads the on-disk version marker; if previous, the
+   migration method runs once, transforms data, updates the marker,
+   persists, logs the outcome to an append-only upgrade log. When
+   `main == next` at the same revision, the bridge body is elided
+   per the empty-diff discipline.
+
+The first implementation (per the `designer-schema-full-stack-
+spirit-2026-05-25` branch) lives in
+`src/schema_driven/storage.rs::SpiritStorageHandle::open` — a
+three-branch match on the on-disk marker (None / Some(NEXT) /
+Some(previous)). The upgrade log is in-memory pending cross-crate
+schema-import resolution; the shapes match `spirit-upgrade-log.
+schema`. Per record 696.
+
+## Reading-actor + auto-tap
+
+The daemon's response dispatch is itself an actor — the **reading
+actor** — with its own schema. Its action vocabulary is
+dispatch-by-response-type. Its fan-out targets always include a
+`(Tap LogSinkSet WriteEntry)` row; the auto-tap to a logging
+facility is **declared by the schema**, not enforced by runtime
+convention. Every response is captured; nothing is invisible. Per
+record 696 §5.
+
+## Deployment — next, main, previous side-by-side
+
+Spirit deploys **side-by-side** rather than as a destructive
+replace. The user profile installs a versioned wrapper per tagged
+release (`spirit-vX.Y.Z`), a `spirit-next` slot for the in-flight
+authoring branch, and the unsuffixed `spirit` symlink points at the
+current production target. Each versioned daemon has its own
+segregated state directory under
+`~/.local/state/persona-spirit/<version>/`, its own sockets, and
+its own redb database — versioned daemons never share files.
+
+This is the workspace's next/main/previous vocabulary applied at
+the deployment layer: *what is being authored IS next*; *the
+current published baseline IS main*; *previous is the prior release
+retained for handover*. Cutover from one production version to the
+next is an alias change, not a destructive replace — the older
+daemon stays installed and reachable through its tag-suffixed
+wrapper so handovers can be tested and reverted. The v0.2.0
+deployment validated the pattern empirically: production stayed on
+v0.1.0 while v0.2.0 ran in parallel for explicit testing through
+`spirit-v0.2.0`. *"Migrate live Spirit to v0.2 now"* (psyche
+2026-05-25) is the cutover trigger; the side-by-side substrate is
+what makes that cutover safe.
+
+## v0.2.0 wire discipline — description-only, terse, daemon-stamped
+
+The v0.2.0 record shape carries one agent-clarified `Description`,
+a `Kind`, a `Magnitude`, and a daemon-stamped timestamp. *"Spirit
+next entries carry one clarified description and no verbatim
+field."* The verbatim/context payloads from earlier shapes are
+gone; the agent's job is to **clarify the psyche's wording into the
+description** before recording. The forcing function is intent
+density: *intent capture should become denser and less verbose;
+durable records preserve clarified intent without large verbatim
+blocks that bloat output and become lossy to work with.*
+
+Three related v0.2.0 disciplines:
+
+- **Daemon-stamped timestamps.** *"Spirit timestamp is
+  daemon-stamped."* Clients do not supply capture time; the daemon
+  is the single authority for when a record was accepted.
+- **Terse acknowledgements.** *"Spirit record acknowledgements stay
+  terse."* The wire reply to a `Record` is `(RecordAccepted N)` —
+  no echo of the submitted content; the acknowledgement is
+  token-cheap.
+- **User-creatable single-string topics.** *"Spirit topics are
+  user-creatable single strings."* Any new topic word a `Record`
+  uses is registered at the wire layer; no pre-declared enum.
+  (Multi-topic-per-record is a proposed future extension, not the
+  current shape.)
+
+## Daemon configuration — 9-field positional argument
+
+The daemon binary takes one NOTA argument: a positional 9-field
+record naming three Unix sockets (ordinary, owner, upgrade), one
+redb database path, one magnitude limit, and four `None`-slot
+extension points reserved for future configuration fields. The
+CriomOS-home module is what authors this tuple per release; the
+daemon's `ExecStart` line is the canonical witness. Future
+configuration fields land by filling one of the `None` slots in the
+contract crate, not by adding a flag. When the schema-driven
+substrate matures, the configuration record will be schema-emitted
+rather than hand-authored — but the contract shape (one positional
+record argument) is stable.
+
 ## See also
 
 - `ARCHITECTURE.md` — structural shape, state taxonomy, spawn
@@ -137,5 +293,5 @@ named Kameo actor tree with constraint tests that prove the path.
 - Primary workspace: `INTENT.md` §"Persona is LLM-mediated
   end-to-end" + §"Persona components ship in raw form first" —
   workspace-wide persona principles.
-- Primary workspace: `reports/designer/232-persona-spirit-new-component.md`
-  — full design.
+- Primary workspace: `skills/spirit-cli.md` — deployed CLI
+  invocation discipline and the wire-shape verification recipe.

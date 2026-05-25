@@ -178,6 +178,178 @@ encodes the selected daemon reply back to NOTA. If the selected socket is not
 configured, the CLI fails instead of opening a store or running the actor tree
 in-process.
 
+## Schema-driven actor architecture (next-substrate)
+
+Alongside the existing Kameo actor tree above, the
+`designer-schema-full-stack-spirit-2026-05-25` branch lands a
+parallel schema-driven actor substrate. Operational deployment runs
+the existing topology; the schema-driven substrate is the
+next-architecture target that operator integration migrates to
+incrementally.
+
+### Four-component layout
+
+```text
+schema  ─ NOTA parsers + Feature model + finalize_universal_unknowns hook
+   │
+   ├─ Feature::EffectTable, Feature::FanOutTargets, Feature::StorageDescriptor
+   ├─ multi_pass recognizers (shape + streaming)
+   └─ UniversalUnknownMacro post-pass injection
+
+signal-frame/schema-rust  ─ RustComposer
+   │
+   ├─ authored_effect_items()       (AuthoredEffect + dispatcher)
+   ├─ storage_descriptor_items()    (StorageDescriptor + TABLES)
+   └─ record_field_tokens_disambiguated()
+
+persona-spirit  ─ daemon
+   │
+   ├─ spirit-storage.schema          (redb tables + VersionMarker)
+   ├─ spirit-recorder.schema         (ACTION + RESPONSE + EffectTable)
+   ├─ spirit-observer.schema         (subscription fan-out)
+   ├─ spirit-supervisor.schema       (cross-actor coordinator)
+   ├─ spirit-reading-actor.schema    (response dispatcher + auto-tap)
+   ├─ spirit-upgrade-log.schema      (append-only migration log)
+   │
+   └─ src/schema_driven/             hand-written engine code
+        storage.rs, recorder.rs, observer.rs,
+        supervisor.rs, reading_actor.rs
+
+signal-persona-spirit  ─ wire crate
+   │
+   ├─ signal_channel!([schema])  ─ legacy wire types at crate root
+   └─ emit_schema!()             ─ schema-driven wire types at ::spirit::*
+```
+
+The two emissions in `signal-persona-spirit` coexist; downstream
+consumers reach for either path without a forced cutover. The
+designer-recommended migration path is incremental qualification —
+flip downstream consumers from `signal_persona_spirit::Operation`
+to `signal_persona_spirit::spirit::Operation` one at a time, then
+remove the legacy invocation when all consumers have flipped.
+
+### Actor-engine pattern
+
+Every actor in the schema-driven substrate follows the same pattern.
+Its `.schema` file declares two enums plus a universal variant:
+
+```nota
+;; spirit-recorder.schema (excerpt)
+{
+  RecorderAction (RecordEntry ObserveRecorder SnapshotRecords ...)
+  RecorderResponse (RecordAccepted RecordsObserved ...)   ;; Unknown injected
+
+  RecordEntry [Entry]
+  ;; ...
+}
+
+[
+  (EffectTable [ (RecordEntry RecordWriteEffect) ... ])
+  (FanOutTargets [
+    (RecordWriteEffect [
+      (Store SpiritStorage InsertStampedEntry)
+      (Notify ObserverSet PublishRecordCaptured)
+      (Reply RecordAccepted)
+    ])
+  ])
+]
+```
+
+The schema-emitted Rust gives the engine its ACTION + RESPONSE
+enums (with `Unknown(String)` injected on RESPONSE), the payload
+struct types, and the codec impls. The hand-written engine
+implements the contact-point match block:
+
+```rust
+pub fn handle(&self, action: RecorderAction) -> RecorderResponse {
+    match action {
+        RecorderAction::RecordEntry(entry) => self.record_entry(entry),
+        RecorderAction::ObserveRecorder(filter) => self.observe(filter),
+        // ... exhaustive
+    }
+}
+```
+
+Exhaustiveness is compile-checked. The body is logic; the structure
+is the schema. The universal Unknown is the safety floor — any
+method body can return `RecorderResponse::Unknown(error_string)`
+rather than panicking; the variant is structurally valid by
+construction.
+
+### Runtime topology
+
+The schema-driven substrate's runtime is mailbox-shaped:
+
+```mermaid
+flowchart TB
+    incoming["Incoming Action"]
+    actor["actor.handle(action)<br/>(closed match)"]
+    response["Response"]
+    reading_actor["ReadingActor::dispatch<br/>(schema-declared auto-tap)"]
+    wire_out["Wire reply"]
+    subs["Subscribers"]
+    log["Logging tap"]
+
+    incoming --> actor
+    actor --> response
+    response --> reading_actor
+    reading_actor --> wire_out
+    reading_actor --> subs
+    reading_actor --> log
+```
+
+The reading actor is itself an actor with its own schema; its
+fan-out targets always include `(Tap LogSinkSet WriteEntry)` so
+every response automatically lands in the log stream.
+
+### Auto-migration runner
+
+`SpiritStorageHandle::open(path)` reads the on-disk
+`VersionMarker [u32 u32 u32]` (or absence thereof) and runs a
+three-branch migration match:
+
+| Branch | Behaviour | Log outcome |
+|---|---|---|
+| `None` (fresh DB) | Write NEXT marker | `NoMigrationNeeded` |
+| `Some(NEXT)` (already up to date) | No-op | `NoMigrationNeeded` |
+| `Some(previous)` (older marker) | Run `run_migration` bridge; write NEXT on success | `MigratedSuccessfully` or `MigrationFailed` |
+
+`run_migration` is a hand-written bridge per version-boundary. When
+the AssembledSchema diff between MAIN and NEXT is empty (no row
+shape changes), the bridge body is elided per the empty-diff
+discipline.
+
+### Empirical witnesses
+
+All six /346 constraints hold against named tests in the
+schema-driven module:
+
+- C1 — every RESPONSE enum receives `Unknown` (schema-side + runtime
+  proofs).
+- C2 — migration idempotent under repeated reopen.
+- C3 — one rkyv byte layout, two homes (sema + signal).
+- C4 — authored effect-table dispatcher is closed (`_ => None`
+  wildcard).
+- C5 — `finalize_universal_unknowns` is idempotent across paths +
+  call counts.
+- C6 — NEXT version-marker discipline end-to-end.
+
+Test counts: 22 schema_driven unit tests in `persona-spirit` (17 +
+5 constraint proofs); 10 effect-side feature tests + 7 constraint
+proofs in the schema crate; 3 new composer emission tests in
+schema-rust.
+
+### Cross-crate import resolution — the one deferred piece
+
+The persona-spirit schemas import from sibling crates
+(`signal-persona-spirit/spirit.schema`, `spirit-storage`, etc.).
+The current `LoadedSchema::read_path` resolver can't follow these
+imports without an adjacent worktree layout. The workaround in
+`src/schema_driven/` is hand-written Rust types matching what
+`emit_schema!` will emit once the resolver lands. The actor
+engines, the migration runner, the universal-Unknown floor — all
+work today against the hand-written types.
+
 ## Constraints
 
 | Constraint | Witness |
