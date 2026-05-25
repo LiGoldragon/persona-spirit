@@ -61,6 +61,9 @@ pub enum Error {
     #[error("persona-spirit store error: {reason}")]
     SpiritStore { reason: String },
 
+    #[error("persona-spirit migration error: {reason}")]
+    Migration { reason: String },
+
     #[error("persona-spirit actor runtime error: {reason}")]
     ActorRuntime { reason: String },
 }
@@ -107,6 +110,12 @@ impl Error {
     pub fn spirit_store(error: sema_engine::Error) -> Self {
         Self::SpiritStore {
             reason: error.to_string(),
+        }
+    }
+
+    pub fn migration(reason: impl Into<String>) -> Self {
+        Self::Migration {
+            reason: reason.into(),
         }
     }
 
@@ -191,6 +200,7 @@ impl BatchErrorClassification for Error {
             | Self::InvalidSpiritReply { .. }
             | Self::InvalidDaemonConfiguration { .. }
             | Self::RequestRejected { .. }
+            | Self::Migration { .. }
             | Self::RuntimeNotImplemented { .. }
             | Self::SignalFrame { .. }
             | Self::FrameTooLarge { .. }

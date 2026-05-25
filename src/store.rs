@@ -92,6 +92,24 @@ impl SpiritStore {
         Ok(RecordAccepted::new(stored.identifier))
     }
 
+    pub(crate) fn import_migrated_record(
+        &self,
+        identifier: RecordIdentifier,
+        entry: StampedEntry,
+    ) -> Result<()> {
+        self.engine
+            .assert(Assertion::new(
+                self.records,
+                StoredRecord::new(identifier, entry),
+            ))
+            .map_err(Error::spirit_store)?;
+        Ok(())
+    }
+
+    pub fn is_empty(&self) -> Result<bool> {
+        Ok(self.all_records()?.is_empty())
+    }
+
     pub fn observe_records(&self, observation: RecordObservation) -> Result<WorkingReply> {
         let records = self.records_for_query(&observation.query)?;
         match observation.query.mode {

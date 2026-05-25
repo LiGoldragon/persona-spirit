@@ -1,6 +1,7 @@
 pub mod actors;
 pub mod daemon;
 pub mod error;
+pub mod migration;
 pub mod observation;
 pub mod store;
 
@@ -16,6 +17,7 @@ pub use daemon::{
     SocketMode, SocketPath, StorePath,
 };
 pub use error::{Error, Result};
+pub use migration::{MigrationCompleted, MigrationConfiguration, MigrationOutcome};
 pub use observation::{Command, Effect};
 pub use signal_frame::SingleArgument;
 pub use store::{SpiritStore, StoreLocation};

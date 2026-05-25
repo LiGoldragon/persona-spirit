@@ -51,6 +51,10 @@
           mkdir -p "$out/bin"
           ln -s "${fullPackage}/bin/persona-spirit-daemon" "$out/bin/persona-spirit-daemon"
         '';
+        migrationPackage = pkgs.runCommand "spirit-migrate-0-1-to-0-2" { } ''
+          mkdir -p "$out/bin"
+          ln -s "${fullPackage}/bin/spirit-migrate-0-1-to-0-2" "$out/bin/spirit-migrate-0-1-to-0-2"
+        '';
         splitPackageWitness = pkgs.runCommand "test-split-packages" { } ''
           test -x "${spiritPackage}/bin/spirit"
           test ! -e "${spiritPackage}/bin/persona-spirit-daemon"
@@ -60,6 +64,9 @@
           test -x "${daemonPackage}/bin/persona-spirit-daemon"
           test ! -e "${daemonPackage}/bin/spirit"
           test ! -e "${daemonPackage}/bin/spirit-next"
+          test -x "${migrationPackage}/bin/spirit-migrate-0-1-to-0-2"
+          test ! -e "${migrationPackage}/bin/spirit"
+          test ! -e "${migrationPackage}/bin/persona-spirit-daemon"
           touch "$out"
         '';
       in
@@ -69,6 +76,7 @@
           spirit = spiritPackage;
           spirit-next = spiritNextPackage;
           persona-spirit-daemon = daemonPackage;
+          spirit-migrate-0-1-to-0-2 = migrationPackage;
           full = fullPackage;
         };
         apps = {
@@ -83,6 +91,10 @@
           persona-spirit-daemon = flake-utils.lib.mkApp {
             drv = daemonPackage;
             name = "persona-spirit-daemon";
+          };
+          spirit-migrate-0-1-to-0-2 = flake-utils.lib.mkApp {
+            drv = migrationPackage;
+            name = "spirit-migrate-0-1-to-0-2";
           };
         };
         checks = {
@@ -99,6 +111,10 @@
           test-daemon = craneLib.cargoTest (commonArguments // {
             inherit cargoArtifacts;
             cargoTestExtraArgs = "--test daemon";
+          });
+          test-migration = craneLib.cargoTest (commonArguments // {
+            inherit cargoArtifacts;
+            cargoTestExtraArgs = "--test migration";
           });
           test-engine-management-socket = craneLib.cargoTest (commonArguments // {
             inherit cargoArtifacts;

@@ -24,6 +24,10 @@ path = "src/bin/spirit-next.rs"
 name = "persona-spirit-daemon"
 path = "src/bin/persona-spirit-daemon.rs"
 
+[[bin]]
+name = "spirit-migrate-0-1-to-0-2"
+path = "src/bin/spirit-migrate-0-1-to-0-2.rs"
+
 [dependencies]
 kameo                       = { git = "https://github.com/LiGoldragon/kameo", branch = "persona-lifecycle-terminal-outcome", default-features = false, features = ["macros", "tracing"] }
 nota-codec                  = { git = "https://github.com/LiGoldragon/nota-codec.git", branch = "main" }
