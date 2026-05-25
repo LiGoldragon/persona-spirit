@@ -9,8 +9,9 @@ use sema_engine::{
 };
 use signal_persona_spirit::{
     Date, Entry, Kind, ObservationMode, RecordAccepted, RecordDescription, RecordIdentifier,
-    RecordObservation, RecordProvenance, RecordProvenancesObserved, RecordQuery, RecordsObserved,
-    Reply as WorkingReply, Time, Topic, TopicCount, Topics, TopicsObserved,
+    RecordIdentifierQuery, RecordObservation, RecordProvenance, RecordProvenancesObserved,
+    RecordQuery, RecordsObserved, Reply as WorkingReply, Time, Topic, TopicCount, Topics,
+    TopicsObserved,
 };
 use signal_version_handover::{HandoverMarker, MarkerRequest};
 use version_projection::{ComponentName, ContractVersion, Projected};
@@ -114,18 +115,31 @@ impl SpiritStore {
 
     pub fn observe_records(&self, observation: RecordObservation) -> Result<WorkingReply> {
         let records = self.records_for_query(&observation.query)?;
-        match observation.query.mode {
-            ObservationMode::DescriptionOnly => {
-                Ok(WorkingReply::RecordsObserved(RecordsObserved {
-                    records: records.iter().map(StoredRecord::description).collect(),
-                }))
-            }
-            ObservationMode::WithProvenance => Ok(WorkingReply::RecordProvenancesObserved(
-                RecordProvenancesObserved {
-                    records: records.into_iter().map(StoredRecord::provenance).collect(),
-                },
-            )),
-        }
+        Ok(RecordReply::new(records, observation.query.mode).into_working_reply())
+    }
+
+    pub fn observe_record_identifiers(&self, query: RecordIdentifierQuery) -> Result<WorkingReply> {
+        let records = self.records_for_identifier_query(query)?;
+        Ok(RecordReply::new(records, query.mode).into_working_reply())
+    }
+
+    fn records_for_identifier_query(
+        &self,
+        query: RecordIdentifierQuery,
+    ) -> Result<Vec<StoredRecord>> {
+        Ok(self
+            .all_records()?
+            .into_iter()
+            .filter(|record| query.contains(record.identifier))
+            .collect())
+    }
+
+    fn records_for_query(&self, query: &RecordQuery) -> Result<Vec<StoredRecord>> {
+        Ok(self
+            .all_records()?
+            .into_iter()
+            .filter(|record| RecordFilter::new(query).matches(record))
+            .collect())
     }
 
     pub fn observe_topics(&self) -> Result<WorkingReply> {
@@ -180,14 +194,6 @@ impl SpiritStore {
             .map(|record| record.identifier.value()))
     }
 
-    fn records_for_query(&self, query: &RecordQuery) -> Result<Vec<StoredRecord>> {
-        Ok(self
-            .all_records()?
-            .into_iter()
-            .filter(|record| RecordFilter::new(query).matches(record))
-            .collect())
-    }
-
     fn all_records(&self) -> Result<Vec<StoredRecord>> {
         let mut records = self
             .engine
@@ -230,6 +236,31 @@ impl SpiritStore {
             }
         }
         Ok(())
+    }
+}
+
+struct RecordReply {
+    records: Vec<StoredRecord>,
+    mode: ObservationMode,
+}
+
+impl RecordReply {
+    fn new(records: Vec<StoredRecord>, mode: ObservationMode) -> Self {
+        Self { records, mode }
+    }
+
+    fn into_working_reply(self) -> WorkingReply {
+        let Self { records, mode } = self;
+        match mode {
+            ObservationMode::DescriptionOnly => WorkingReply::RecordsObserved(RecordsObserved {
+                records: records.iter().map(StoredRecord::description).collect(),
+            }),
+            ObservationMode::WithProvenance => {
+                WorkingReply::RecordProvenancesObserved(RecordProvenancesObserved {
+                    records: records.into_iter().map(StoredRecord::provenance).collect(),
+                })
+            }
+        }
     }
 }
 

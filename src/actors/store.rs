@@ -1,7 +1,8 @@
 use kameo::actor::{Actor, ActorRef};
 use kameo::message::{Context, Message};
 use signal_persona_spirit::{
-    RecordDescription, RecordObservation, RecordSubscription, Reply as WorkingReply,
+    RecordDescription, RecordIdentifierQuery, RecordObservation, RecordSubscription,
+    Reply as WorkingReply,
 };
 use signal_version_handover::{HandoverMarker, MarkerRequest};
 
@@ -29,6 +30,11 @@ pub struct CaptureEntry {
 
 pub struct ObserveRecords {
     pub observation: RecordObservation,
+    pub trace: ActorTrace,
+}
+
+pub struct ObserveRecordIdentifiers {
+    pub query: RecordIdentifierQuery,
     pub trace: ActorTrace,
 }
 
@@ -83,6 +89,19 @@ impl RecordStore {
         trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReceived);
         trace.record(TraceNode::SEMA_READER, TraceAction::MessageReceived);
         let reply = self.store.observe_records(observation)?;
+        trace.record(TraceNode::SEMA_READER, TraceAction::RecordsRead);
+        trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReplied);
+        Ok(PipelineReply::new(reply, trace))
+    }
+
+    fn observe_record_identifiers(
+        &self,
+        query: RecordIdentifierQuery,
+        mut trace: ActorTrace,
+    ) -> Result<PipelineReply> {
+        trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReceived);
+        trace.record(TraceNode::SEMA_READER, TraceAction::MessageReceived);
+        let reply = self.store.observe_record_identifiers(query)?;
         trace.record(TraceNode::SEMA_READER, TraceAction::RecordsRead);
         trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReplied);
         Ok(PipelineReply::new(reply, trace))
@@ -158,6 +177,18 @@ impl Message<ObserveRecords> for RecordStore {
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.observe_records(message.observation, message.trace)
+    }
+}
+
+impl Message<ObserveRecordIdentifiers> for RecordStore {
+    type Reply = Result<PipelineReply>;
+
+    async fn handle(
+        &mut self,
+        message: ObserveRecordIdentifiers,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.observe_record_identifiers(message.query, message.trace)
     }
 }
 

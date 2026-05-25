@@ -381,6 +381,7 @@ work today against the hand-written types.
 | Repeated similar entries remain distinct records. | `persona_spirit_client_repeated_entries_remain_distinct_records` stores two matching descriptions. |
 | Record observations use the read plane and not the write plane. | `persona_spirit_record_observation_uses_read_plane_without_write_plane` checks `SemaReader` without `SemaWriter`. |
 | Record observations filter by topic membership and kind inside the daemon store read path. | `persona_spirit_client_filters_record_observation_by_topic`, `persona_spirit_client_filters_record_observation_by_topic_membership`, `persona_spirit_client_filters_record_observation_by_kind`, and `persona_spirit_client_filters_record_observation_by_topic_and_kind` store multiple records and expect only matching descriptions. |
+| Record observations can select exact identifiers and inclusive identifier ranges. | `persona_spirit_client_observes_records_by_exact_identifier` and `persona_spirit_client_observes_records_by_identifier_range` use `Observation::RecordIdentifiers`. |
 | Topic catalog observations list each topic with a membership count without reading every entry's provenance. | `persona_spirit_client_lists_topics_with_entry_counts`, `persona_spirit_client_counts_topic_memberships`, `persona_spirit_topic_catalog_observation_uses_read_plane_without_write_plane`, and `persona_spirit_daemon_serves_topic_catalog_through_signal_frames` store multiple topics and expect deterministic counts through the daemon read plane. |
 | Psyche-state observations use a working-state plane, not record storage. | `persona_spirit_state_observation_uses_state_plane` checks `StatePlane` without `RecordStore`. |
 | Pending-question observations use the working-state plane. | `persona_spirit_question_observation_uses_state_plane` and `persona_spirit_client_observes_empty_pending_questions` check the empty raw state. |
@@ -483,6 +484,7 @@ Implemented now:
 - sema-engine backed `Record` operation;
 - `Observe(Records(...))` description and provenance queries, filterable by topic
   membership and kind;
+- `Observe(RecordIdentifiers(...))` exact-identifier and inclusive-range queries;
 - `Observe(Topics)` topic catalog queries with per-topic membership counts;
 - `Observe(State(...))` with default absent psyche state;
 - `Observe(Questions(...))` with an empty pending-question set;

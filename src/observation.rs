@@ -6,11 +6,11 @@
 
 use signal_persona_spirit::{
     Observation, ObserverFilter, ObserverSubscriptionOpened, ObserverSubscriptionToken,
-    Operation as WorkingOperation, QuestionsObserved, RecordAccepted, RecordObservation,
-    RecordProvenancesObserved, RecordQuery, RecordSubscription, RecordSubscriptionToken,
-    RecordsObserved, Reply as WorkingReply, RequestUnimplemented, StateObserved,
-    StateSubscriptionToken, Statement, Subscription, SubscriptionOpened, SubscriptionRetracted,
-    SubscriptionToken, TopicsObserved,
+    Operation as WorkingOperation, QuestionsObserved, RecordAccepted, RecordIdentifierQuery,
+    RecordObservation, RecordProvenancesObserved, RecordQuery, RecordSubscription,
+    RecordSubscriptionToken, RecordsObserved, Reply as WorkingReply, RequestUnimplemented,
+    StateObserved, StateSubscriptionToken, Statement, Subscription, SubscriptionOpened,
+    SubscriptionRetracted, SubscriptionToken, TopicsObserved,
 };
 use signal_sema::{SemaObservation, SemaOperation, SemaOutcome, ToSemaOperation, ToSemaOutcome};
 
@@ -19,6 +19,7 @@ pub enum Command {
     ClassifyStatement(Statement),
     AssertEntry(signal_persona_spirit::Entry),
     ReadRecords(RecordObservation),
+    ReadRecordIdentifiers(RecordIdentifierQuery),
     ReadTopics,
     ReadState,
     ReadQuestions,
@@ -51,6 +52,9 @@ impl Command {
             WorkingOperation::Record(entry) => Some(Self::AssertEntry(entry)),
             WorkingOperation::Observe(Observation::Records(query)) => {
                 Some(Self::ReadRecords(RecordObservation { query }))
+            }
+            WorkingOperation::Observe(Observation::RecordIdentifiers(query)) => {
+                Some(Self::ReadRecordIdentifiers(query))
             }
             WorkingOperation::Observe(Observation::Topics) => Some(Self::ReadTopics),
             WorkingOperation::Observe(Observation::State) => Some(Self::ReadState),
@@ -119,9 +123,11 @@ impl ToSemaOperation for Command {
     fn to_sema_operation(&self) -> SemaOperation {
         match self {
             Self::ClassifyStatement(_) | Self::AssertEntry(_) => SemaOperation::Assert,
-            Self::ReadRecords(_) | Self::ReadTopics | Self::ReadState | Self::ReadQuestions => {
-                SemaOperation::Match
-            }
+            Self::ReadRecords(_)
+            | Self::ReadRecordIdentifiers(_)
+            | Self::ReadTopics
+            | Self::ReadState
+            | Self::ReadQuestions => SemaOperation::Match,
             Self::OpenStateSubscription
             | Self::OpenRecordSubscription(_)
             | Self::OpenObserverSubscription(_) => SemaOperation::Subscribe,

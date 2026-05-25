@@ -4,7 +4,8 @@ use persona_spirit::{Command, Effect, SpiritActorRuntime, StoreLocation};
 use signal_frame::SubscriptionTokenInner;
 use signal_persona_spirit::{
     Description, Entry, Kind, Observation, ObservationMode, ObserverFilter,
-    ObserverSubscriptionToken, Operation as WorkingOperation, RecordQuery, Reply as WorkingReply,
+    ObserverSubscriptionToken, Operation as WorkingOperation, RecordIdentifier,
+    RecordIdentifierQuery, RecordIdentifierSelection, RecordQuery, Reply as WorkingReply,
     StateSubscriptionToken, Statement, StatementText, Subscription, SubscriptionToken, Topic,
     Topics,
 };
@@ -122,6 +123,34 @@ async fn spirit_record_query_projects_to_matched_observation() {
         .submit_request(request.clone())
         .await
         .expect("records observed");
+    assert_runtime_projection_trace(runtime_reply.trace());
+    let reply = runtime_reply.into_reply();
+
+    assert_eq!(
+        observation_for(request, reply),
+        SemaObservation::new(SemaOperation::Match, SemaOutcome::Matched)
+    );
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn spirit_record_identifier_query_projects_to_matched_observation() {
+    let fixture = RuntimeFixture::new("record-identifier-query");
+    let runtime = fixture.runtime().await;
+    runtime
+        .submit_request(WorkingOperation::Record(entry("matched projection")))
+        .await
+        .expect("record accepted");
+    let request =
+        WorkingOperation::Observe(Observation::RecordIdentifiers(RecordIdentifierQuery::new(
+            RecordIdentifierSelection::Exact(RecordIdentifier::new(1)),
+            ObservationMode::DescriptionOnly,
+        )));
+    let runtime_reply = runtime
+        .submit_request(request.clone())
+        .await
+        .expect("record identifier observed");
     assert_runtime_projection_trace(runtime_reply.trace());
     let reply = runtime_reply.into_reply();
 

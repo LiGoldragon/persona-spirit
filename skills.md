@@ -91,6 +91,8 @@ Contract records stay in `signal-persona-spirit` and
 - `RecordObservation` queries return descriptions by default and provenance only
   when the caller asks for it. They filter by optional topic membership and
   optional kind inside the daemon's read path.
+- `Observation::RecordIdentifiers` queries return descriptions or provenance
+  for an exact `RecordIdentifier` or inclusive `RecordIdentifierRange`.
 - Valid but unimplemented requests use `ReplyShaper` and do not touch
   `RecordStore`.
 - Valid but unimplemented CLI requests emit a typed NOTA

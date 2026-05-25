@@ -292,6 +292,49 @@ fn persona_spirit_client_persists_entries_for_later_description_observation() {
 }
 
 #[test]
+fn persona_spirit_client_observes_records_by_exact_identifier() {
+    let fixture = StoreFixture::new("record-identifier-exact");
+    fixture
+        .reply_text("(Record ([workspace] Decision [first description] Maximum))")
+        .expect("first entry persisted");
+    fixture
+        .reply_text("(Record ([workspace] Correction [second description] Medium))")
+        .expect("second entry persisted");
+
+    let reply = fixture
+        .reply_text("(Observe (RecordIdentifiers ((Exact 2) DescriptionOnly)))")
+        .expect("record identifier observed");
+
+    assert_eq!(
+        reply,
+        "(RecordsObserved ([(2 [workspace] Correction [second description] Medium)]))"
+    );
+}
+
+#[test]
+fn persona_spirit_client_observes_records_by_identifier_range() {
+    let fixture = StoreFixture::new("record-identifier-range");
+    fixture
+        .reply_text("(Record ([workspace] Decision [first description] Maximum))")
+        .expect("first entry persisted");
+    fixture
+        .reply_text("(Record ([workspace] Correction [second description] Medium))")
+        .expect("second entry persisted");
+    fixture
+        .reply_text("(Record ([workspace] Constraint [third description] High))")
+        .expect("third entry persisted");
+
+    let reply = fixture
+        .reply_text("(Observe (RecordIdentifiers ((Range (2 3)) DescriptionOnly)))")
+        .expect("record identifier range observed");
+
+    assert_eq!(
+        reply,
+        "(RecordsObserved ([(2 [workspace] Correction [second description] Medium) (3 [workspace] Constraint [third description] High)]))"
+    );
+}
+
+#[test]
 fn persona_spirit_client_observes_default_psyche_state() {
     let fixture = StoreFixture::new("state-observation");
     let reply = fixture

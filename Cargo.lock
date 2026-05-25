@@ -1078,7 +1078,7 @@ dependencies = [
 [[package]]
 name = "signal-persona-spirit"
 version = "0.3.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#026d38fb8be4b24f903bbb0eb82551787dea5042"
+source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#13a37f1365bd45105081d9bfd0dde9831a5323ae"
 dependencies = [
  "nota-box",
  "nota-codec",
