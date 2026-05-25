@@ -5,12 +5,12 @@
 //! receives only payloadless classification labels.
 
 use signal_persona_spirit::{
-    Observation, ObserverFilter, ObserverSubscriptionOpened, ObserverSubscriptionToken,
-    Operation as WorkingOperation, QuestionsObserved, RecordAccepted, RecordObservation,
-    RecordProvenancesObserved, RecordQuery, RecordSubscription, RecordSubscriptionToken,
-    RecordsObserved, Reply as WorkingReply, RequestUnimplemented, StateObserved,
-    StateSubscriptionToken, Statement, Subscription, SubscriptionOpened, SubscriptionRetracted,
-    SubscriptionToken, TopicsObserved,
+    Observation, ObservationMode, ObserverFilter, ObserverSubscriptionOpened,
+    ObserverSubscriptionToken, Operation as WorkingOperation, QuestionsObserved, RecordAccepted,
+    RecordObservation, RecordProvenancesObserved, RecordQuery, RecordSubscription,
+    RecordSubscriptionToken, RecordsObserved, Reply as WorkingReply, RequestUnimplemented,
+    StateObserved, StateSubscriptionToken, Statement, Subscription, SubscriptionOpened,
+    SubscriptionRetracted, SubscriptionToken, TopicsObserved,
 };
 use signal_sema::{SemaObservation, SemaOperation, SemaOutcome, ToSemaOperation, ToSemaOutcome};
 
@@ -69,6 +69,30 @@ impl Command {
             WorkingOperation::Untap(token) => Some(Self::CloseObserverSubscription(token)),
         }
     }
+
+    pub fn schema_action(&self) -> &'static str {
+        match self {
+            Self::ClassifyStatement(_) => "ClassifyStatement",
+            Self::AssertEntry(_) => "AssertEntry",
+            Self::ReadRecords(observation) => match observation.query.mode {
+                ObservationMode::DescriptionOnly => "ReadRecordDescriptions",
+                ObservationMode::WithProvenance => "ReadRecordProvenances",
+            },
+            Self::ReadTopics => "ReadTopics",
+            Self::ReadState => "ReadState",
+            Self::ReadQuestions => "ReadQuestions",
+            Self::OpenStateSubscription => "OpenStateSubscription",
+            Self::OpenRecordSubscription(_) => "OpenRecordSubscription",
+            Self::CloseStateSubscription(_) => "CloseStateSubscription",
+            Self::CloseRecordSubscription(_) => "CloseRecordSubscription",
+            Self::OpenObserverSubscription(_) => "OpenObserverSubscription",
+            Self::CloseObserverSubscription(_) => "CloseObserverSubscription",
+        }
+    }
+
+    pub fn schema_declared_effect(&self) -> Option<&'static str> {
+        crate::spirit_runtime::AuthoredEffectTable::effect_for_action(self.schema_action())
+    }
 }
 
 impl Effect {
@@ -112,6 +136,25 @@ impl Effect {
             }
             Self::RequestUnimplemented(payload) => WorkingReply::RequestUnimplemented(payload),
         }
+    }
+
+    pub fn schema_effect(&self) -> &'static str {
+        match self {
+            Self::RecordAccepted(_) => "RecordAccepted",
+            Self::StateObserved(_) => "StateObserved",
+            Self::RecordsObserved(_) => "RecordsObserved",
+            Self::RecordProvenancesObserved(_) => "RecordProvenancesObserved",
+            Self::TopicsObserved(_) => "TopicsObserved",
+            Self::QuestionsObserved(_) => "QuestionsObserved",
+            Self::SubscriptionOpened(_) => "SubscriptionOpened",
+            Self::SubscriptionRetracted(_) => "SubscriptionRetracted",
+            Self::ObserverSubscriptionOpened(_) => "ObserverSubscriptionOpened",
+            Self::RequestUnimplemented(_) => "RequestUnimplemented",
+        }
+    }
+
+    pub fn schema_declared_fan_out(&self) -> Option<crate::spirit_runtime::AuthoredFanOut> {
+        crate::spirit_runtime::AuthoredEffectTable::fan_out_for_effect(self.schema_effect())
     }
 }
 

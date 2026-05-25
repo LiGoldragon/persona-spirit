@@ -5,6 +5,10 @@ pub mod migration;
 pub mod observation;
 pub mod store;
 
+pub const SPIRIT_RUNTIME_SCHEMA_TEXT: &str = include_str!("../schema/spirit-runtime.schema");
+
+signal_frame::emit_schema!("schema/spirit-runtime.schema");
+
 pub use actors::policy::BootstrapPolicySource;
 pub use actors::root::{
     RootFrameReply, RootOperationReply, RootOwnerReply, RootTextReply, RootUpgradeReply,

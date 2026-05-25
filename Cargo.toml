@@ -35,16 +35,16 @@ path = "src/bin/spirit-migrate-0-2-to-next.rs"
 [dependencies]
 kameo                       = { git = "https://github.com/LiGoldragon/kameo", branch = "persona-lifecycle-terminal-outcome", default-features = false, features = ["macros", "tracing"] }
 nota-codec                  = { git = "https://github.com/LiGoldragon/nota-codec.git", branch = "main" }
-owner-signal-persona-spirit = { git = "https://github.com/LiGoldragon/owner-signal-persona-spirit.git", branch = "main" }
+owner-signal-persona-spirit = { git = "https://github.com/LiGoldragon/owner-signal-persona-spirit.git", branch = "operator-full-schema-spirit-2026-05-26" }
 rkyv                        = { version = "0.8", default-features = false, features = ["std", "bytecheck", "little_endian", "pointer_width_32", "unaligned"] }
 sema                        = { git = "https://github.com/LiGoldragon/sema.git" }
 sema-engine                 = { git = "https://github.com/LiGoldragon/sema-engine.git", branch = "main" }
-signal-frame                     = { git = "https://github.com/LiGoldragon/signal-frame.git", branch = "main" }
-signal-executor                  = { git = "https://github.com/LiGoldragon/signal-executor.git", branch = "main" }
-signal-engine-management         = { git = "https://github.com/LiGoldragon/signal-engine-management.git", branch = "main" }
-signal-persona-spirit            = { git = "https://github.com/LiGoldragon/signal-persona-spirit.git", branch = "main" }
-signal-sema                      = { git = "https://github.com/LiGoldragon/signal-sema.git", branch = "main" }
-signal-version-handover          = { git = "https://github.com/LiGoldragon/signal-version-handover.git", branch = "main" }
+signal-frame                     = { git = "https://github.com/LiGoldragon/signal-frame.git", branch = "operator-full-schema-spirit-2026-05-26" }
+signal-executor                  = { git = "https://github.com/LiGoldragon/signal-executor.git", branch = "operator-full-schema-spirit-2026-05-26" }
+signal-engine-management         = { git = "https://github.com/LiGoldragon/signal-engine-management.git", branch = "operator-full-schema-spirit-2026-05-26" }
+signal-persona-spirit            = { git = "https://github.com/LiGoldragon/signal-persona-spirit.git", branch = "operator-full-schema-spirit-2026-05-26" }
+signal-sema                      = { git = "https://github.com/LiGoldragon/signal-sema.git", branch = "operator-full-schema-spirit-2026-05-26" }
+signal-version-handover          = { git = "https://github.com/LiGoldragon/signal-version-handover.git", branch = "operator-full-schema-spirit-2026-05-26" }
 thiserror                        = "2"
 tokio                            = { version = "1", default-features = false, features = ["macros", "rt-multi-thread"] }
 unix-ancillary                   = "0.2"

@@ -547,11 +547,11 @@ dependencies = [
 [[package]]
 name = "owner-signal-persona-spirit"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/owner-signal-persona-spirit.git?branch=main#cf932a619e1f6f3afc80cb62b6c0da6460e1c1f0"
+source = "git+https://github.com/LiGoldragon/owner-signal-persona-spirit.git?branch=operator-full-schema-spirit-2026-05-26#446da4f3ee1640fecdcd174c9d939002405a342d"
 dependencies = [
  "nota-codec",
  "rkyv",
- "signal-frame",
+ "signal-frame 0.1.0 (git+https://github.com/LiGoldragon/signal-frame.git?branch=operator-full-schema-spirit-2026-05-26)",
  "thiserror",
 ]
 
@@ -562,7 +562,7 @@ source = "git+https://github.com/LiGoldragon/owner-signal-version-handover.git?b
 dependencies = [
  "nota-codec",
  "rkyv",
- "signal-frame",
+ "signal-frame 0.1.0 (git+https://github.com/LiGoldragon/signal-frame.git?branch=main)",
  "signal-sema 0.1.0 (git+https://github.com/LiGoldragon/signal-sema.git?branch=main)",
  "thiserror",
  "version-projection",
@@ -593,7 +593,7 @@ dependencies = [
  "rkyv",
  "sema",
  "signal-core",
- "signal-frame",
+ "signal-frame 0.1.0 (git+https://github.com/LiGoldragon/signal-frame.git?branch=main)",
  "signal-persona",
  "signal-persona-harness",
  "signal-persona-introspect",
@@ -603,7 +603,7 @@ dependencies = [
  "signal-persona-router",
  "signal-persona-system",
  "signal-persona-terminal",
- "signal-version-handover",
+ "signal-version-handover 0.1.0 (git+https://github.com/LiGoldragon/signal-version-handover.git?branch=main)",
  "strum",
  "thiserror",
  "tokio",
@@ -626,11 +626,11 @@ dependencies = [
  "sema-engine",
  "signal-engine-management",
  "signal-executor",
- "signal-frame",
+ "signal-frame 0.1.0 (git+https://github.com/LiGoldragon/signal-frame.git?branch=operator-full-schema-spirit-2026-05-26)",
  "signal-persona-origin 0.1.0 (git+https://github.com/LiGoldragon/signal-persona-origin.git)",
  "signal-persona-spirit",
- "signal-sema 0.1.0 (git+https://github.com/LiGoldragon/signal-sema.git?branch=main)",
- "signal-version-handover",
+ "signal-sema 0.1.0 (git+https://github.com/LiGoldragon/signal-sema.git?branch=operator-full-schema-spirit-2026-05-26)",
+ "signal-version-handover 0.1.0 (git+https://github.com/LiGoldragon/signal-version-handover.git?branch=operator-full-schema-spirit-2026-05-26)",
  "thiserror",
  "tokio",
  "unix-ancillary",
@@ -791,13 +791,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "schema"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/schema.git?branch=operator-full-schema-spirit-2026-05-26#a35b3e1e0a30d27bb19f4d88c03b1d0e73dd3b82"
+dependencies = [
+ "nota-codec",
+]
+
+[[package]]
 name = "schema-rust"
 version = "0.1.0"
 source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#d61ebf25997c47c997c0dce1d576f870e3e8383c"
 dependencies = [
  "proc-macro2",
  "quote",
- "schema",
+ "schema 0.1.0 (git+https://github.com/LiGoldragon/schema.git?branch=main)",
+]
+
+[[package]]
+name = "schema-rust"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=operator-full-schema-spirit-2026-05-26#4d3264ff8ca4fb619a84155a7eb1bf39d2d3b3ef"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "schema 0.1.0 (git+https://github.com/LiGoldragon/schema.git?branch=operator-full-schema-spirit-2026-05-26)",
 ]
 
 [[package]]
@@ -906,22 +924,22 @@ dependencies = [
 [[package]]
 name = "signal-engine-management"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-engine-management.git?branch=main#14d2436e8c29bc000f8b505df0611ae9538d7309"
+source = "git+https://github.com/LiGoldragon/signal-engine-management.git?branch=operator-full-schema-spirit-2026-05-26#193dd7a577fca93cc52ce90ebe54e46382afa617"
 dependencies = [
  "nota-codec",
  "rkyv",
- "signal-frame",
+ "signal-frame 0.1.0 (git+https://github.com/LiGoldragon/signal-frame.git?branch=operator-full-schema-spirit-2026-05-26)",
  "signal-persona-origin 0.1.0 (git+https://github.com/LiGoldragon/signal-persona-origin.git?branch=main)",
 ]
 
 [[package]]
 name = "signal-executor"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-executor.git?branch=main#7b0ca56a7b0ce5d7c5c53fe36a2acc5d9df090e2"
+source = "git+https://github.com/LiGoldragon/signal-executor.git?branch=operator-full-schema-spirit-2026-05-26#2ed1ad6358a3598ab75a195a28373e2dc0e3d8fa"
 dependencies = [
  "rkyv",
- "signal-frame",
- "signal-sema 0.1.0 (git+https://github.com/LiGoldragon/signal-sema.git?branch=main)",
+ "signal-frame 0.1.0 (git+https://github.com/LiGoldragon/signal-frame.git?branch=operator-full-schema-spirit-2026-05-26)",
+ "signal-sema 0.1.0 (git+https://github.com/LiGoldragon/signal-sema.git?branch=operator-full-schema-spirit-2026-05-26)",
  "thiserror",
 ]
 
@@ -933,7 +951,19 @@ dependencies = [
  "nota-codec",
  "paste",
  "rkyv",
- "signal-frame-macros",
+ "signal-frame-macros 0.1.0 (git+https://github.com/LiGoldragon/signal-frame.git?branch=main)",
+ "thiserror",
+]
+
+[[package]]
+name = "signal-frame"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=operator-full-schema-spirit-2026-05-26#4d3264ff8ca4fb619a84155a7eb1bf39d2d3b3ef"
+dependencies = [
+ "nota-codec",
+ "paste",
+ "rkyv",
+ "signal-frame-macros 0.1.0 (git+https://github.com/LiGoldragon/signal-frame.git?branch=operator-full-schema-spirit-2026-05-26)",
  "thiserror",
 ]
 
@@ -945,8 +975,21 @@ dependencies = [
  "nota-codec",
  "proc-macro2",
  "quote",
- "schema",
- "schema-rust",
+ "schema 0.1.0 (git+https://github.com/LiGoldragon/schema.git?branch=main)",
+ "schema-rust 0.1.0 (git+https://github.com/LiGoldragon/signal-frame.git?branch=main)",
+ "syn",
+]
+
+[[package]]
+name = "signal-frame-macros"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=operator-full-schema-spirit-2026-05-26#4d3264ff8ca4fb619a84155a7eb1bf39d2d3b3ef"
+dependencies = [
+ "nota-codec",
+ "proc-macro2",
+ "quote",
+ "schema 0.1.0 (git+https://github.com/LiGoldragon/schema.git?branch=operator-full-schema-spirit-2026-05-26)",
+ "schema-rust 0.1.0 (git+https://github.com/LiGoldragon/signal-frame.git?branch=operator-full-schema-spirit-2026-05-26)",
  "syn",
 ]
 
@@ -967,7 +1010,7 @@ source = "git+https://github.com/LiGoldragon/signal-persona.git#eaaf681a84fa57b7
 dependencies = [
  "nota-codec",
  "rkyv",
- "signal-frame",
+ "signal-frame 0.1.0 (git+https://github.com/LiGoldragon/signal-frame.git?branch=main)",
  "signal-persona-origin 0.1.0 (git+https://github.com/LiGoldragon/signal-persona-origin.git)",
  "signal-sema 0.1.0 (git+https://github.com/LiGoldragon/signal-sema.git?branch=main)",
 ]
@@ -1078,13 +1121,13 @@ dependencies = [
 [[package]]
 name = "signal-persona-spirit"
 version = "0.3.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#026d38fb8be4b24f903bbb0eb82551787dea5042"
+source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=operator-full-schema-spirit-2026-05-26#2da9dfd142a7567afaa15f281838f1a1def0b2b7"
 dependencies = [
  "nota-box",
  "nota-codec",
  "rkyv",
- "signal-frame",
- "signal-sema 0.1.0 (git+https://github.com/LiGoldragon/signal-sema.git?branch=main)",
+ "signal-frame 0.1.0 (git+https://github.com/LiGoldragon/signal-frame.git?branch=operator-full-schema-spirit-2026-05-26)",
+ "signal-sema 0.1.0 (git+https://github.com/LiGoldragon/signal-sema.git?branch=operator-full-schema-spirit-2026-05-26)",
  "thiserror",
  "version-projection",
 ]
@@ -1124,7 +1167,18 @@ source = "git+https://github.com/LiGoldragon/signal-sema.git?branch=main#bf7cb59
 dependencies = [
  "nota-codec",
  "rkyv",
- "signal-frame",
+ "signal-frame 0.1.0 (git+https://github.com/LiGoldragon/signal-frame.git?branch=main)",
+ "thiserror",
+]
+
+[[package]]
+name = "signal-sema"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/signal-sema.git?branch=operator-full-schema-spirit-2026-05-26#a17476f03fc0615805dddc6738dea1c3c4df140e"
+dependencies = [
+ "nota-codec",
+ "rkyv",
+ "signal-frame 0.1.0 (git+https://github.com/LiGoldragon/signal-frame.git?branch=operator-full-schema-spirit-2026-05-26)",
  "thiserror",
 ]
 
@@ -1145,7 +1199,19 @@ source = "git+https://github.com/LiGoldragon/signal-version-handover.git?branch=
 dependencies = [
  "nota-codec",
  "rkyv",
- "signal-frame",
+ "signal-frame 0.1.0 (git+https://github.com/LiGoldragon/signal-frame.git?branch=main)",
+ "thiserror",
+ "version-projection",
+]
+
+[[package]]
+name = "signal-version-handover"
+version = "0.1.0"
+source = "git+https://github.com/LiGoldragon/signal-version-handover.git?branch=operator-full-schema-spirit-2026-05-26#08d2cb643e0693a1fb576355e1a330d0db1b46f8"
+dependencies = [
+ "nota-codec",
+ "rkyv",
+ "signal-frame 0.1.0 (git+https://github.com/LiGoldragon/signal-frame.git?branch=operator-full-schema-spirit-2026-05-26)",
  "thiserror",
  "version-projection",
 ]

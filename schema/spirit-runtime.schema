@@ -1,0 +1,113 @@
+{}
+
+[]
+
+[]
+
+[
+  (Project (ClassifyStatement AssertEntry ReadRecordDescriptions ReadRecordProvenances ReadTopics ReadState ReadQuestions OpenStateSubscription OpenRecordSubscription CloseStateSubscription CloseRecordSubscription OpenObserverSubscription CloseObserverSubscription))
+  (Emit (RecordAccepted StateObserved RecordsObserved RecordProvenancesObserved TopicsObserved QuestionsObserved SubscriptionOpened SubscriptionRetracted ObserverSubscriptionOpened RequestUnimplemented))
+  (Respond (RecordAccepted StateObserved RecordsObserved RecordProvenancesObserved TopicsObserved QuestionsObserved SubscriptionOpened SubscriptionRetracted ObserverSubscriptionOpened RequestUnimplemented))
+]
+
+{
+  Project ((ClassifyStatement Statement) (AssertEntry Entry) (ReadRecordDescriptions RecordObservation) (ReadRecordProvenances RecordObservation) ReadTopics ReadState ReadQuestions OpenStateSubscription (OpenRecordSubscription RecordSubscription) (CloseStateSubscription StateSubscriptionToken) (CloseRecordSubscription RecordSubscriptionToken) (OpenObserverSubscription ObserverFilter) (CloseObserverSubscription ObserverSubscriptionToken))
+  Emit ((RecordAccepted) (StateObserved) (RecordsObserved) (RecordProvenancesObserved) (TopicsObserved) (QuestionsObserved) (SubscriptionOpened) (SubscriptionRetracted) (ObserverSubscriptionOpened) (RequestUnimplemented))
+  Respond ((RecordAccepted) (StateObserved) (RecordsObserved) (RecordProvenancesObserved) (TopicsObserved) (QuestionsObserved) (SubscriptionOpened) (SubscriptionRetracted) (ObserverSubscriptionOpened) (RequestUnimplemented))
+
+  Kind (Decision Principle Correction Clarification Constraint)
+  Magnitude (Minimum VeryLow Low Medium High VeryHigh Maximum)
+  Certainty Magnitude
+  ObservationMode (DescriptionOnly WithProvenance)
+  Presence (Active Absent)
+  UnimplementedReason (NotBuiltYet IntegrationNotLanded)
+  ObserverFilter (All)
+
+  Topic [String]
+  Topics [(Vec Topic)]
+  Description [String]
+  StatementText [String]
+  FocusArea [String]
+  QuestionIdentifier [String]
+  QuestionText [String]
+  RecordIdentifier [u64]
+  StateSubscriptionToken [u64]
+  RecordSubscriptionToken [u64]
+  ObserverSubscriptionToken [u64]
+
+  Entry [Topics Kind Description Certainty]
+  Statement [StatementText]
+  RecordQuery [(Option Topic) (Option Kind) ObservationMode]
+  RecordObservation [RecordQuery]
+  RecordSubscription [(Option Topic) ObservationMode]
+  RecordDescription [RecordIdentifier Topics Kind Description Certainty]
+  RecordProvenance [RecordDescription Date Time]
+  TopicCount [Topic u64]
+  PresenceView [Presence FocusArea]
+  QuestionSummary [QuestionIdentifier QuestionText]
+  SubscriptionSnapshot ((State PresenceView) (Records (Vec RecordDescription)))
+  SubscriptionToken ((State StateSubscriptionToken) (Records RecordSubscriptionToken))
+
+  RecordAccepted [RecordIdentifier]
+  StateObserved [PresenceView]
+  RecordsObserved [(Vec RecordDescription)]
+  RecordProvenancesObserved [(Vec RecordProvenance)]
+  TopicsObserved [(Vec TopicCount)]
+  QuestionsObserved [(Vec QuestionSummary)]
+  SubscriptionOpened [SubscriptionToken SubscriptionSnapshot]
+  SubscriptionRetracted [SubscriptionToken]
+  ObserverSubscriptionOpened [ObserverSubscriptionToken]
+  RequestUnimplemented [UnimplementedReason]
+
+  Date [u16 u8 u8]
+  Time [u8 u8 u8]
+  RecordsTable [RecordIdentifier StampedEntry]
+  StampedEntry [Entry Date Time]
+}
+
+[
+  (Reply
+    RecordAccepted
+    StateObserved
+    RecordsObserved
+    RecordProvenancesObserved
+    TopicsObserved
+    QuestionsObserved
+    SubscriptionOpened
+    SubscriptionRetracted
+    ObserverSubscriptionOpened
+    RequestUnimplemented)
+
+  (EffectTable [
+    (ClassifyStatement RecordAccepted)
+    (AssertEntry RecordAccepted)
+    (ReadRecordDescriptions RecordsObserved)
+    (ReadRecordProvenances RecordProvenancesObserved)
+    (ReadTopics TopicsObserved)
+    (ReadState StateObserved)
+    (ReadQuestions QuestionsObserved)
+    (OpenStateSubscription SubscriptionOpened)
+    (OpenRecordSubscription SubscriptionOpened)
+    (CloseStateSubscription SubscriptionRetracted)
+    (CloseRecordSubscription SubscriptionRetracted)
+    (OpenObserverSubscription RequestUnimplemented)
+    (CloseObserverSubscription RequestUnimplemented)
+  ])
+
+  (FanOutTargets [
+    (RecordAccepted [(Store RecordStore CaptureEntry) (Reply RecordAccepted)])
+    (RecordsObserved [(Store RecordStore ObserveRecords) (Reply RecordsObserved)])
+    (RecordProvenancesObserved [(Store RecordStore ObserveRecordProvenances) (Reply RecordProvenancesObserved)])
+    (TopicsObserved [(Store RecordStore ObserveTopics) (Reply TopicsObserved)])
+    (StateObserved [(State StatePlane ObserveState) (Reply StateObserved)])
+    (QuestionsObserved [(State StatePlane ObserveQuestions) (Reply QuestionsObserved)])
+    (SubscriptionOpened [(Subscription SubscriptionPlane OpenSubscription) (Reply SubscriptionOpened)])
+    (SubscriptionRetracted [(Subscription SubscriptionPlane RetractSubscription) (Reply SubscriptionRetracted)])
+    (ObserverSubscriptionOpened [(Reply ObserverSubscriptionOpened)])
+    (RequestUnimplemented [(Reply RequestUnimplemented)])
+  ])
+
+  (StorageDescriptor [
+    (Records RecordsTable)
+  ])
+]

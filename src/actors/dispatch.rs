@@ -511,6 +511,11 @@ impl ObserverChannel<WorkingOperation, CommandEffect<Command, Effect>> for Spiri
     }
 
     fn publish_effect_emitted(&self, effect: &CommandEffect<Command, Effect>) {
+        debug_assert_eq!(
+            effect.command().schema_declared_effect(),
+            Some(effect.effect().schema_effect())
+        );
+        debug_assert!(effect.effect().schema_declared_fan_out().is_some());
         let _event = EffectEmitted {
             observation: effect.sema_observation(),
         };

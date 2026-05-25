@@ -25,8 +25,19 @@
         craneLib = (crane.mkLib pkgs).overrideToolchain toolchain;
         bootstrapPolicyFilter = path: _type:
           builtins.baseNameOf path == "bootstrap-policy.nota";
+        schemaFilter = path: _type:
+          pkgs.lib.hasSuffix ".schema" path;
+        generatedBuildFilter = path: _type:
+          let
+            pathString = builtins.toString path;
+          in
+          !(pkgs.lib.hasInfix "/target/" pathString)
+          && !(pkgs.lib.hasInfix "/.jj/" pathString);
         sourceFilter = path: type:
-          (craneLib.filterCargoSources path type) || (bootstrapPolicyFilter path type);
+          generatedBuildFilter path type
+          && ((craneLib.filterCargoSources path type)
+            || (bootstrapPolicyFilter path type)
+            || (schemaFilter path type));
         src = pkgs.lib.cleanSourceWith {
           src = ./.;
           filter = sourceFilter;
