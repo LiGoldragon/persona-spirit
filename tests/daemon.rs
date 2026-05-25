@@ -1,4 +1,5 @@
 use std::fs;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::io::{Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::process::Command;
@@ -28,9 +29,9 @@ use signal_frame::{
     RequestPayload, RetryClassification, SessionEpoch, SubReply,
 };
 use signal_persona_spirit::{
-    Context, Date, Entry, Frame, FrameBody, Kind, Observation, ObservationMode,
-    Operation as WorkingOperation, Quote, RecordQuery, Reply as WorkingReply, Statement,
-    StatementText, Summary, Time, Topic,
+    Date, Description, Entry, Frame, FrameBody, Kind, Observation, ObservationMode,
+    Operation as WorkingOperation, RecordQuery, Reply as WorkingReply, Statement, StatementText,
+    Time, Topic,
 };
 use signal_sema::Magnitude;
 use signal_version_handover::{
@@ -56,22 +57,21 @@ impl DaemonFixture {
             .duration_since(UNIX_EPOCH)
             .expect("system clock after epoch")
             .as_nanos();
+        let mut hasher = DefaultHasher::new();
+        test_name.hash(&mut hasher);
+        let stem = format!("ps-{:x}-{nanos:x}", hasher.finish());
         let mut socket = std::env::temp_dir();
-        socket.push(format!("persona-spirit-{test_name}-{nanos}-ordinary.sock"));
+        socket.push(format!("{stem}-ordinary.sock"));
         let mut owner_socket = std::env::temp_dir();
-        owner_socket.push(format!("persona-spirit-{test_name}-{nanos}-owner.sock"));
+        owner_socket.push(format!("{stem}-owner.sock"));
         let mut upgrade_socket = std::env::temp_dir();
-        upgrade_socket.push(format!("persona-spirit-{test_name}-{nanos}-upgrade.sock"));
+        upgrade_socket.push(format!("{stem}-upgrade.sock"));
         let mut engine_management_socket = std::env::temp_dir();
-        engine_management_socket.push(format!(
-            "persona-spirit-{test_name}-{nanos}-engine-management.sock"
-        ));
+        engine_management_socket.push(format!("{stem}-engine.sock"));
         let mut handoff_control_socket = std::env::temp_dir();
-        handoff_control_socket.push(format!(
-            "persona-spirit-{test_name}-{nanos}-handoff-control.sock"
-        ));
+        handoff_control_socket.push(format!("{stem}-handoff.sock"));
         let mut store = std::env::temp_dir();
-        store.push(format!("persona-spirit-{test_name}-{nanos}.redb"));
+        store.push(format!("{stem}.redb"));
         Self {
             ordinary_socket: SocketPath::new(socket.to_string_lossy().into_owned()),
             owner_socket: SocketPath::new(owner_socket.to_string_lossy().into_owned()),
@@ -121,19 +121,21 @@ impl DaemonFixture {
     }
 }
 
-fn entry(summary: &str) -> Entry {
+fn entry(description: &str) -> Entry {
     Entry {
         topic: Topic::new("workspace"),
         kind: Kind::Decision,
-        summary: Summary::new(summary),
-        context: Context::new("daemon context"),
+        description: Description::new(description),
         certainty: Magnitude::Maximum,
-        quote: Quote::new("daemon quote"),
     }
 }
 
-fn mirrored_stamped_entry_payload(summary: &str) -> Vec<u8> {
-    let entry = StampedEntry::new(entry(summary), Date::new(2026, 5, 22), Time::new(20, 52, 0));
+fn mirrored_stamped_entry_payload(description: &str) -> Vec<u8> {
+    let entry = StampedEntry::new(
+        entry(description),
+        Date::new(2026, 5, 22),
+        Time::new(20, 52, 0),
+    );
     rkyv::to_bytes::<rkyv::rancor::Error>(&entry)
         .expect("stamped entry encodes")
         .as_ref()
@@ -144,7 +146,7 @@ fn observe_all() -> WorkingOperation {
     WorkingOperation::Observe(Observation::Records(RecordQuery {
         topic: None,
         kind: None,
-        mode: ObservationMode::SummaryOnly,
+        mode: ObservationMode::DescriptionOnly,
     }))
 }
 
@@ -366,11 +368,11 @@ fn persona_spirit_daemon_serves_signal_frames_through_actor_root() {
     assert_eq!(
         observed,
         WorkingReply::RecordsObserved(signal_persona_spirit::RecordsObserved {
-            records: vec![signal_persona_spirit::RecordSummary {
+            records: vec![signal_persona_spirit::RecordDescription {
                 identifier: signal_persona_spirit::RecordIdentifier::new(1),
                 topic: Topic::new("workspace"),
                 kind: Kind::Decision,
-                summary: Summary::new("daemon accepted"),
+                description: Description::new("daemon accepted"),
                 certainty: Magnitude::Maximum,
             }],
         })
@@ -572,11 +574,11 @@ fn persona_spirit_daemon_classifies_state_frames_through_actor_root() {
     assert_eq!(
         observed,
         WorkingReply::RecordsObserved(signal_persona_spirit::RecordsObserved {
-            records: vec![signal_persona_spirit::RecordSummary {
+            records: vec![signal_persona_spirit::RecordDescription {
                 identifier: signal_persona_spirit::RecordIdentifier::new(1),
                 topic: Topic::new("unclassified"),
                 kind: Kind::Clarification,
-                summary: Summary::new("daemon raw intent"),
+                description: Description::new("daemon raw intent"),
                 certainty: Magnitude::Minimum,
             }],
         })
@@ -604,10 +606,8 @@ fn persona_spirit_daemon_serves_topic_catalog_through_signal_frames() {
         .submit(WorkingOperation::Record(Entry {
             topic: Topic::new("naming"),
             kind: Kind::Correction,
-            summary: Summary::new("naming entry"),
-            context: Context::new("daemon context"),
+            description: Description::new("naming entry"),
             certainty: Magnitude::Maximum,
-            quote: Quote::new("daemon quote"),
         }))
         .expect("second entry accepted through signal frame");
     client
@@ -1555,8 +1555,7 @@ fn persona_spirit_client_can_send_nota_request_to_running_daemon() {
     let handle = thread::spawn(move || daemon.serve_count(1));
     let argument = SingleArgument::from_arguments([
         "spirit".to_string(),
-        "(Record (workspace Decision [client socket] [daemon context] Maximum [daemon quote]))"
-            .to_string(),
+        "(Record (workspace Decision [client socket] Maximum))".to_string(),
     ])
     .expect("single request argument");
 
@@ -1587,7 +1586,7 @@ fn spirit_binary_can_send_request_file_to_running_daemon() {
     request_path.push(format!("persona-spirit-cli-request-{nanos}.nota"));
     fs::write(
         &request_path,
-        "(Record (workspace Decision [binary file] [daemon context] Maximum [daemon quote]))",
+        "(Record (workspace Decision [binary file] Maximum))",
     )
     .expect("request file written");
 

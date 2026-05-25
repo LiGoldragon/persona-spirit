@@ -1,55 +1,53 @@
 {}
 
 [
-  (State [Statement])
-  (Record [Entry])
-  (Observe [Observation])
-  (Watch [Subscription])
-  (Unwatch [SubscriptionToken])
+  (State (Statement))
+  (Record (Entry))
+  (Observe (Observation))
+  (Watch (Subscription))
+  (Unwatch (SubscriptionToken))
 ]
 
 [
-  (Start [Start])
-  (Drain [Drain])
-  (Reload [BootstrapPolicy])
-  (Register [Registration])
-  (Retire [Retirement])
+  (Start (Start))
+  (Drain (Drain))
+  (Reload (BootstrapPolicy))
+  (Register (Registration))
+  (Retire (Retirement))
 ]
 
 []
 
 {
-  State [(Statement Statement)]
-  Record [(Entry Entry)]
-  Observe [(Observation Observation)]
-  Watch [(Subscription Subscription)]
-  Unwatch [(SubscriptionToken SubscriptionToken)]
-  Start [(Start Start)]
-  Drain [(Drain Drain)]
-  Reload [(BootstrapPolicy BootstrapPolicy)]
-  Register [(Registration Registration)]
-  Retire [(Retirement Retirement)]
-  Kind [Decision Principle Correction Clarification Constraint]
-  Magnitude [Minimum VeryLow Low Medium High VeryHigh Maximum]
-  ObservationMode [SummaryOnly WithProvenance]
-  Topic (String)
-  Summary (String)
-  Context (String)
-  Quote (String)
-  StatementText (String)
-  Entry (Topic Kind Summary Context Magnitude Quote)
-  Statement (StatementText)
-  Observation ((Option Topic) (Option Kind) ObservationMode)
-  Subscription ((Option Topic) ObservationMode)
-  SubscriptionToken (u64)
-  BootstrapPolicy (Text)
-  Registration (Text)
-  Retirement (Text)
-  Text (String)
-  Identifier (u64)
-  Name (String)
-  Path (String)
-  Status [Concept Active Retired]
+  State ((Statement Statement))
+  Record ((Entry Entry))
+  Observe ((Observation Observation))
+  Watch ((Subscription Subscription))
+  Unwatch ((SubscriptionToken SubscriptionToken))
+  Start ((Start Start))
+  Drain ((Drain Drain))
+  Reload ((BootstrapPolicy BootstrapPolicy))
+  Register ((Registration Registration))
+  Retire ((Retirement Retirement))
+  Kind (Decision Principle Correction Clarification Constraint)
+  Magnitude (Minimum VeryLow Low Medium High VeryHigh Maximum)
+  ObservationMode (DescriptionOnly WithProvenance)
+  Topic [String]
+  Description [String]
+  StatementText [String]
+  Entry [Topic Kind Description Magnitude]
+  Statement [StatementText]
+  Observation [(Option Topic) (Option Kind) ObservationMode]
+  Subscription [(Option Topic) ObservationMode]
+  SubscriptionToken [u64]
+  BootstrapPolicy [Text]
+  Registration [Text]
+  Retirement [Text]
+  Text [String]
+  Identifier [u64]
+  Name [String]
+  Path [String]
+  Status (Concept Active Retired)
 }
 
 [

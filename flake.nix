@@ -43,6 +43,10 @@
           mkdir -p "$out/bin"
           ln -s "${fullPackage}/bin/spirit" "$out/bin/spirit"
         '';
+        spiritNextPackage = pkgs.runCommand "spirit-next" { } ''
+          mkdir -p "$out/bin"
+          ln -s "${fullPackage}/bin/spirit-next" "$out/bin/spirit-next"
+        '';
         daemonPackage = pkgs.runCommand "persona-spirit-daemon" { } ''
           mkdir -p "$out/bin"
           ln -s "${fullPackage}/bin/persona-spirit-daemon" "$out/bin/persona-spirit-daemon"
@@ -50,8 +54,12 @@
         splitPackageWitness = pkgs.runCommand "test-split-packages" { } ''
           test -x "${spiritPackage}/bin/spirit"
           test ! -e "${spiritPackage}/bin/persona-spirit-daemon"
+          test -x "${spiritNextPackage}/bin/spirit-next"
+          test ! -e "${spiritNextPackage}/bin/persona-spirit-daemon"
+          test ! -e "${spiritNextPackage}/bin/spirit"
           test -x "${daemonPackage}/bin/persona-spirit-daemon"
           test ! -e "${daemonPackage}/bin/spirit"
+          test ! -e "${daemonPackage}/bin/spirit-next"
           touch "$out"
         '';
       in
@@ -59,6 +67,7 @@
         packages = {
           default = spiritPackage;
           spirit = spiritPackage;
+          spirit-next = spiritNextPackage;
           persona-spirit-daemon = daemonPackage;
           full = fullPackage;
         };
@@ -66,6 +75,10 @@
           spirit = flake-utils.lib.mkApp {
             drv = spiritPackage;
             name = "spirit";
+          };
+          spirit-next = flake-utils.lib.mkApp {
+            drv = spiritNextPackage;
+            name = "spirit-next";
           };
           persona-spirit-daemon = flake-utils.lib.mkApp {
             drv = daemonPackage;

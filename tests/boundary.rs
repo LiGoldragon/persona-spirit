@@ -180,9 +180,8 @@ fn persona_spirit_generated_dispatch_routes_working_and_owner_heads() {
 
 #[test]
 fn persona_spirit_request_head_uses_generated_dispatch_before_full_decode() {
-    let working =
-        RequestHead::from_text("(Record (workspace Decision [summary] [context] Maximum [quote]))")
-            .expect("working head reads");
+    let working = RequestHead::from_text("(Record (workspace Decision [description] Maximum))")
+        .expect("working head reads");
     let owner = RequestHead::from_text("(Register (operator))").expect("owner head reads");
 
     assert_eq!(
@@ -206,7 +205,7 @@ fn persona_spirit_client_accepts_request_file_path_argument() {
     request_path.push(format!("persona-spirit-request-{nanos}.nota"));
     fs::write(
         &request_path,
-        "(Record (workspace Decision [file request] [path context] Maximum [path quote]))",
+        "(Record (workspace Decision [file request] Maximum))",
     )
     .expect("request file written");
 
@@ -231,7 +230,7 @@ fn persona_spirit_client_classifies_statement_as_provisional_record() {
 fn persona_spirit_client_asserts_entry_and_mints_record_identifier() {
     let fixture = StoreFixture::new("assert-entry");
     let reply = fixture
-        .reply_text("(Record (workspace Decision [summary only] [current implementation context] Maximum [first statement]))")
+        .reply_text("(Record (workspace Decision [description only] Maximum))")
         .expect("entry persisted");
 
     assert_eq!(reply, "(RecordAccepted 1)");
@@ -241,23 +240,23 @@ fn persona_spirit_client_asserts_entry_and_mints_record_identifier() {
 fn persona_spirit_client_accepts_high_magnitude_and_observes_it_back() {
     let fixture = StoreFixture::new("high-magnitude");
     fixture
-        .reply_text("(Record (workspace Decision [high summary] [high context] High [high quote]))")
+        .reply_text("(Record (workspace Decision [high description] High))")
         .expect("high-magnitude entry persisted");
 
     let reply = fixture
-        .reply_text("(Observe (Records (None None SummaryOnly)))")
+        .reply_text("(Observe (Records (None None DescriptionOnly)))")
         .expect("records observed");
 
     assert_eq!(
         reply,
-        "(RecordsObserved ([(1 workspace Decision [high summary] High)]))"
+        "(RecordsObserved ([(1 workspace Decision [high description] High)]))"
     );
 }
 
 #[test]
 fn persona_spirit_client_rejects_opaque_integer_timestamp_shape() {
     RequestText::<signal_persona_spirit::Operation>::new(
-        "(Record (workspace Decision [summary only] [current implementation context] Maximum 1779000000 [first statement]))",
+        "(Record (workspace Decision [description only] Maximum 1779000000))",
     )
     .decode_request()
     .expect_err("old opaque timestamp shape must not decode");
@@ -266,29 +265,29 @@ fn persona_spirit_client_rejects_opaque_integer_timestamp_shape() {
 #[test]
 fn persona_spirit_client_rejects_parenthesized_date_time_shape() {
     RequestText::<signal_persona_spirit::Operation>::new(
-        "(Record (workspace Decision [summary only] [current implementation context] Maximum (2026 5 20) (14 30 0) [first statement]))",
+        "(Record (workspace Decision [description only] Maximum (2026 5 20) (14 30 0)))",
     )
     .decode_request()
     .expect_err("parenthesized date/time shape must not decode");
 }
 
 #[test]
-fn persona_spirit_client_persists_entries_for_later_summary_observation() {
-    let fixture = StoreFixture::new("summary-observation");
+fn persona_spirit_client_persists_entries_for_later_description_observation() {
+    let fixture = StoreFixture::new("description-observation");
     fixture
-        .reply_text("(Record (workspace Decision [first summary] [current implementation context] Maximum [first statement]))")
+        .reply_text("(Record (workspace Decision [first description] Maximum))")
         .expect("first entry persisted");
     fixture
-        .reply_text("(Record (workspace Correction [second summary] [current implementation context] Medium [second statement]))")
+        .reply_text("(Record (workspace Correction [second description] Medium))")
         .expect("second entry persisted");
 
     let reply = fixture
-        .reply_text("(Observe (Records (None None SummaryOnly)))")
+        .reply_text("(Observe (Records (None None DescriptionOnly)))")
         .expect("records observed");
 
     assert_eq!(
         reply,
-        "(RecordsObserved ([(1 workspace Decision [first summary] Maximum) (2 workspace Correction [second summary] Medium)]))"
+        "(RecordsObserved ([(1 workspace Decision [first description] Maximum) (2 workspace Correction [second description] Medium)]))"
     );
 }
 
@@ -330,14 +329,14 @@ fn persona_spirit_client_opens_and_retracts_state_subscription() {
 }
 
 #[test]
-fn persona_spirit_client_opens_record_subscription_with_summary_snapshot() {
+fn persona_spirit_client_opens_record_subscription_with_description_snapshot() {
     let fixture = StoreFixture::new("record-subscription");
     fixture
-        .reply_text("(Record (workspace Decision [subscription summary] [workspace context] Maximum [workspace quote]))")
+        .reply_text("(Record (workspace Decision [subscription description] Maximum))")
         .expect("entry persisted");
 
     let opened = fixture
-        .reply_text("(Watch (Records (None SummaryOnly)))")
+        .reply_text("(Watch (Records (None DescriptionOnly)))")
         .expect("record subscription opened");
     let retracted = fixture
         .reply_text("(Unwatch (Records (1)))")
@@ -345,7 +344,7 @@ fn persona_spirit_client_opens_record_subscription_with_summary_snapshot() {
 
     assert_eq!(
         opened,
-        "(SubscriptionOpened ((Records (1)) (Records [(1 workspace Decision [subscription summary] Maximum)])))"
+        "(SubscriptionOpened ((Records (1)) (Records [(1 workspace Decision [subscription description] Maximum)])))"
     );
     assert_eq!(retracted, "(SubscriptionRetracted ((Records (1))))");
 }
@@ -354,21 +353,19 @@ fn persona_spirit_client_opens_record_subscription_with_summary_snapshot() {
 fn persona_spirit_client_filters_record_observation_by_topic() {
     let fixture = StoreFixture::new("topic-filter");
     fixture
-        .reply_text("(Record (workspace Decision [workspace summary] [workspace context] Maximum [workspace quote]))")
+        .reply_text("(Record (workspace Decision [workspace description] Maximum))")
         .expect("workspace entry persisted");
     fixture
-        .reply_text(
-            "(Record (naming Correction [naming summary] [naming context] Maximum [naming quote]))",
-        )
+        .reply_text("(Record (naming Correction [naming description] Maximum))")
         .expect("naming entry persisted");
 
     let reply = fixture
-        .reply_text("(Observe (Records ((Some naming) None SummaryOnly)))")
+        .reply_text("(Observe (Records ((Some naming) None DescriptionOnly)))")
         .expect("records observed");
 
     assert_eq!(
         reply,
-        "(RecordsObserved ([(2 naming Correction [naming summary] Maximum)]))"
+        "(RecordsObserved ([(2 naming Correction [naming description] Maximum)]))"
     );
 }
 
@@ -376,14 +373,14 @@ fn persona_spirit_client_filters_record_observation_by_topic() {
 fn persona_spirit_client_filters_record_observation_by_kind() {
     let fixture = StoreFixture::new("kind-filter");
     fixture
-        .reply_text("(Record (workspace Principle [workspace principle] [workspace context] Maximum [workspace quote]))")
+        .reply_text("(Record (workspace Principle [workspace principle] Maximum))")
         .expect("principle entry persisted");
     fixture
-        .reply_text("(Record (naming Correction [naming correction] [naming context] Maximum [naming quote]))")
+        .reply_text("(Record (naming Correction [naming correction] Maximum))")
         .expect("correction entry persisted");
 
     let reply = fixture
-        .reply_text("(Observe (Records (None (Some Principle) SummaryOnly)))")
+        .reply_text("(Observe (Records (None (Some Principle) DescriptionOnly)))")
         .expect("records observed");
 
     assert_eq!(
@@ -396,17 +393,17 @@ fn persona_spirit_client_filters_record_observation_by_kind() {
 fn persona_spirit_client_filters_record_observation_by_topic_and_kind() {
     let fixture = StoreFixture::new("topic-kind-filter");
     fixture
-        .reply_text("(Record (spirit Principle [spirit principle] [spirit context] Maximum [spirit quote]))")
+        .reply_text("(Record (spirit Principle [spirit principle] Maximum))")
         .expect("spirit principle persisted");
     fixture
-        .reply_text("(Record (spirit Correction [spirit correction] [spirit context] Maximum [spirit quote]))")
+        .reply_text("(Record (spirit Correction [spirit correction] Maximum))")
         .expect("spirit correction persisted");
     fixture
-        .reply_text("(Record (naming Principle [naming principle] [naming context] Maximum [naming quote]))")
+        .reply_text("(Record (naming Principle [naming principle] Maximum))")
         .expect("naming principle persisted");
 
     let reply = fixture
-        .reply_text("(Observe (Records ((Some spirit) (Some Principle) SummaryOnly)))")
+        .reply_text("(Observe (Records ((Some spirit) (Some Principle) DescriptionOnly)))")
         .expect("records observed");
 
     assert_eq!(
@@ -419,17 +416,13 @@ fn persona_spirit_client_filters_record_observation_by_topic_and_kind() {
 fn persona_spirit_client_lists_topics_with_entry_counts() {
     let fixture = StoreFixture::new("topic-counts");
     fixture
-        .reply_text(
-            "(Record (spirit Principle [first spirit] [spirit context] Maximum [spirit quote]))",
-        )
+        .reply_text("(Record (spirit Principle [first spirit] Maximum))")
         .expect("first spirit entry persisted");
     fixture
-        .reply_text("(Record (naming Correction [naming correction] [naming context] Maximum [naming quote]))")
+        .reply_text("(Record (naming Correction [naming correction] Maximum))")
         .expect("naming entry persisted");
     fixture
-        .reply_text(
-            "(Record (spirit Constraint [second spirit] [spirit context] Maximum [second quote]))",
-        )
+        .reply_text("(Record (spirit Constraint [second spirit] Maximum))")
         .expect("second spirit entry persisted");
 
     let reply = fixture
@@ -443,7 +436,7 @@ fn persona_spirit_client_lists_topics_with_entry_counts() {
 fn persona_spirit_client_returns_provenance_only_when_requested() {
     let fixture = StoreFixture::new("provenance");
     fixture
-        .reply_text("(Record (workspace Decision [summary only] [current implementation context] Maximum [first statement]))")
+        .reply_text("(Record (workspace Decision [description only] Maximum))")
         .expect("entry persisted");
 
     let reply = fixture
@@ -451,23 +444,23 @@ fn persona_spirit_client_returns_provenance_only_when_requested() {
         .expect("provenance observed");
 
     assert!(reply.starts_with(
-        "(RecordProvenancesObserved ([((1 workspace Decision [summary only] Maximum) [current implementation context] "
+        "(RecordProvenancesObserved ([((1 workspace Decision [description only] Maximum) "
     ));
-    assert!(reply.ends_with(" [first statement])]))"));
+    assert!(reply.ends_with(")]))"));
 }
 
 #[test]
 fn persona_spirit_client_repeated_entries_remain_distinct_records() {
     let fixture = StoreFixture::new("repetition");
     fixture
-        .reply_text("(Record (naming Correction [drop ancestor prefixes] [first context] Maximum [first wording]))")
+        .reply_text("(Record (naming Correction [drop ancestor prefixes] Maximum))")
         .expect("first entry persisted");
     fixture
-        .reply_text("(Record (naming Correction [drop ancestor prefixes] [second context] Maximum [second wording]))")
+        .reply_text("(Record (naming Correction [drop ancestor prefixes] Maximum))")
         .expect("second entry persisted");
 
     let reply = fixture
-        .reply_text("(Observe (Records ((Some naming) None SummaryOnly)))")
+        .reply_text("(Observe (Records ((Some naming) None DescriptionOnly)))")
         .expect("records observed");
 
     assert_eq!(

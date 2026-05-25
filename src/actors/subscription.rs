@@ -3,16 +3,16 @@ use std::collections::BTreeMap;
 use kameo::actor::{Actor, ActorRef};
 use kameo::message::{Context, Message};
 use signal_persona_spirit::{
-    RecordSubscription, RecordSubscriptionToken, RecordSummary, Reply as WorkingReply, State,
-    StateSubscriptionToken, SubscriptionOpened, SubscriptionRetracted, SubscriptionSnapshot,
-    SubscriptionToken,
+    PresenceView, RecordDescription, RecordSubscription, RecordSubscriptionToken,
+    Reply as WorkingReply, StateSubscriptionToken, SubscriptionOpened, SubscriptionRetracted,
+    SubscriptionSnapshot, SubscriptionToken,
 };
 
 use super::pipeline::PipelineReply;
 use super::trace::{ActorTrace, TraceAction, TraceNode};
 
 pub struct SubscriptionPlane {
-    state: BTreeMap<u64, State>,
+    state: BTreeMap<u64, PresenceView>,
     records: BTreeMap<u64, RecordSubscription>,
     identifiers: SubscriptionIdentifiers,
 }
@@ -29,13 +29,13 @@ pub struct Arguments {
 }
 
 pub struct OpenStateSubscription {
-    pub snapshot: State,
+    pub snapshot: PresenceView,
     pub trace: ActorTrace,
 }
 
 pub struct OpenRecordSubscription {
     pub subscription: RecordSubscription,
-    pub snapshot: Vec<RecordSummary>,
+    pub snapshot: Vec<RecordDescription>,
     pub trace: ActorTrace,
 }
 
@@ -67,7 +67,7 @@ impl SubscriptionPlane {
         }
     }
 
-    fn open_state(&mut self, snapshot: State, mut trace: ActorTrace) -> PipelineReply {
+    fn open_state(&mut self, snapshot: PresenceView, mut trace: ActorTrace) -> PipelineReply {
         trace.record(TraceNode::SUBSCRIPTION_PLANE, TraceAction::MessageReceived);
         let token = StateSubscriptionToken {
             identifier: self.identifiers.next_state,
@@ -91,7 +91,7 @@ impl SubscriptionPlane {
     fn open_records(
         &mut self,
         subscription: RecordSubscription,
-        snapshot: Vec<RecordSummary>,
+        snapshot: Vec<RecordDescription>,
         mut trace: ActorTrace,
     ) -> PipelineReply {
         trace.record(TraceNode::SUBSCRIPTION_PLANE, TraceAction::MessageReceived);

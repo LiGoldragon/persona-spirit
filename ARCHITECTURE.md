@@ -200,22 +200,22 @@ in-process.
 | Kameo is the only actor runtime dependency. | `persona_spirit_uses_kameo_as_only_actor_runtime` scans the manifest. |
 | Actor types are data-bearing, not public zero-sized actor nouns. | `persona_spirit_actor_types_are_data_bearing` checks each named actor has a struct body. |
 | Raw `State` statements route through a classifier actor before storage. | `persona_spirit_state_statement_uses_classifier_before_store` checks `DispatchPhase` → `ClassifierPlane` → `RecordStore` → `SemaWriter`. |
-| The provisional classifier preserves the raw quote and marks uncertainty. | `persona_spirit_client_classifies_statement_as_provisional_record` checks `Clarification` / `Minimum` output. |
+| The provisional classifier turns raw `State` text into one clarified description and marks uncertainty. | `persona_spirit_client_classifies_statement_as_provisional_record` checks `Clarification` / `Minimum` output. |
 | `Record` operations traverse root, ingress, decoder, dispatch, daemon clock, store, sema writer, and reply encoder. | `persona_spirit_entry_assertion_runs_through_actor_planes` checks `ActorTrace` ordering. |
 | `Record` operations persist a top-level record. | `persona_spirit_client_asserts_entry_and_mints_record_identifier` checks `RecordAccepted`. |
-| Submitted `Entry` records carry no client-provided capture time. | `persona_spirit_client_asserts_entry_and_mints_record_identifier` submits topic, kind, summary, context, certainty, and quote only; `persona_spirit_client_rejects_opaque_integer_timestamp_shape` and `persona_spirit_client_rejects_parenthesized_date_time_shape` reject old timestamp-bearing shapes. |
+| Submitted `Entry` records carry no client-provided capture time and no verbatim payload. | `persona_spirit_client_asserts_entry_and_mints_record_identifier` submits only topic, kind, description, and certainty; `persona_spirit_client_rejects_opaque_integer_timestamp_shape` and `persona_spirit_client_rejects_parenthesized_date_time_shape` reject old timestamp-bearing shapes. |
 | The daemon stamps capture time before storage. | `persona_spirit_ordinary_request_path_uses_signal_executor_and_sema_observer` checks `ClockPlane` and `EntryStamped`; provenance replies include daemon-produced `Date` and `Time`. |
 | Spirit mints `RecordIdentifier`; agents never submit it. | `persona_spirit_client_asserts_entry_and_mints_record_identifier` sends no identifier and receives one. |
-| Repeated similar entries remain distinct records. | `persona_spirit_client_repeated_entries_remain_distinct_records` stores two matching summaries. |
+| Repeated similar entries remain distinct records. | `persona_spirit_client_repeated_entries_remain_distinct_records` stores two matching descriptions. |
 | Record observations use the read plane and not the write plane. | `persona_spirit_record_observation_uses_read_plane_without_write_plane` checks `SemaReader` without `SemaWriter`. |
-| Record observations filter by topic and kind inside the daemon store read path. | `persona_spirit_client_filters_record_observation_by_topic`, `persona_spirit_client_filters_record_observation_by_kind`, and `persona_spirit_client_filters_record_observation_by_topic_and_kind` store multiple records and expect only matching summaries. |
+| Record observations filter by topic and kind inside the daemon store read path. | `persona_spirit_client_filters_record_observation_by_topic`, `persona_spirit_client_filters_record_observation_by_kind`, and `persona_spirit_client_filters_record_observation_by_topic_and_kind` store multiple records and expect only matching descriptions. |
 | Topic catalog observations list each topic with an entry count without reading every entry's provenance. | `persona_spirit_client_lists_topics_with_entry_counts`, `persona_spirit_topic_catalog_observation_uses_read_plane_without_write_plane`, and `persona_spirit_daemon_serves_topic_catalog_through_signal_frames` store multiple topics and expect deterministic counts through the daemon read plane. |
 | Psyche-state observations use a working-state plane, not record storage. | `persona_spirit_state_observation_uses_state_plane` checks `StatePlane` without `RecordStore`. |
 | Pending-question observations use the working-state plane. | `persona_spirit_question_observation_uses_state_plane` and `persona_spirit_client_observes_empty_pending_questions` check the empty raw state. |
 | State subscriptions snapshot current psyche state through the state plane before opening a stream. | `persona_spirit_state_subscription_uses_subscription_plane_after_state_snapshot` checks `StatePlane` before `SubscriptionPlane`. |
-| Record subscriptions snapshot record summaries through the read plane before opening a stream. | `persona_spirit_record_subscription_uses_read_plane_then_subscription_plane` checks `SemaReader` before `SubscriptionPlane`. |
+| Record subscriptions snapshot record descriptions through the read plane before opening a stream. | `persona_spirit_record_subscription_uses_read_plane_then_subscription_plane` checks `SemaReader` before `SubscriptionPlane`. |
 | Subscription retractions use the subscription plane and return typed retraction acknowledgements. | `persona_spirit_subscription_retractions_use_subscription_plane` checks `SubscriptionRetracted` with state and record token variants. |
-| Summary queries do not include provenance. | `persona_spirit_client_persists_entries_for_later_summary_observation` checks `RecordsObserved`. |
+| Description queries do not include provenance. | `persona_spirit_client_persists_entries_for_later_description_observation` checks `RecordsObserved`. |
 | Provenance appears only when requested. | `persona_spirit_client_returns_provenance_only_when_requested` checks `RecordProvenancesObserved`. |
 | Valid unimplemented requests do not touch the store. | `persona_spirit_unimplemented_observer_request_uses_reply_shaper_not_store` checks `ReplyShaper` and absence of `RecordStore`, `SemaWriter`, and `SemaReader`. |
 | Invalid NOTA keeps a typed decode error through the actor path. | `persona_spirit_invalid_text_keeps_typed_decode_error` checks `Error::InvalidSpiritRequest`. |
@@ -293,8 +293,8 @@ Implemented now:
 - CLI daemon-client mode that requires the selected working or owner socket,
   injects advisory `Caller` context, and performs only NOTA request decoding,
   signal-frame submission, and NOTA reply encoding;
-- provisional classifier for `State` statements that preserves the raw quote as
-  a minimum-certainty `Clarification` record under topic `unclassified`;
+- provisional classifier for `State` statements that stores the text as one
+  minimum-certainty clarified description under topic `unclassified`;
 - `persona-spirit-daemon` typed configuration and ordinary/owner Unix socket
   binding;
 - private upgrade Unix socket binding for `signal-version-handover`;
@@ -309,7 +309,7 @@ Implemented now:
   writer/reader, signal-executor, signal-sema observer, working state, reply
   shaping, and reply encoding;
 - sema-engine backed `Record` operation;
-- `Observe(Records(...))` summary and provenance queries, filterable by topic
+- `Observe(Records(...))` description and provenance queries, filterable by topic
   and kind;
 - `Observe(Topics)` topic catalog queries with per-topic entry counts;
 - `Observe(State(...))` with default absent psyche state;

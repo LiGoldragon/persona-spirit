@@ -1,7 +1,7 @@
 use kameo::actor::{Actor, ActorRef};
 use kameo::error::Infallible;
 use kameo::message::{Context as ActorContext, Message};
-use signal_persona_spirit::{Context, Entry, Kind, Quote, Statement, Summary, Topic};
+use signal_persona_spirit::{Description, Entry, Kind, Statement, Topic};
 use signal_sema::Magnitude;
 
 use super::trace::{ActorTrace, TraceAction, TraceNode};
@@ -26,7 +26,6 @@ pub struct ClassificationPolicy {
     fallback_topic: Topic,
     fallback_kind: Kind,
     fallback_certainty: Magnitude,
-    fallback_context: Context,
 }
 
 pub struct ClassifyStatement {
@@ -40,9 +39,6 @@ impl Default for ClassificationPolicy {
             fallback_topic: Topic::new("unclassified"),
             fallback_kind: Kind::Clarification,
             fallback_certainty: Magnitude::Minimum,
-            fallback_context: Context::new(
-                "captured from State operation by provisional classifier",
-            ),
         }
     }
 }
@@ -58,10 +54,8 @@ impl ClassifierPlane {
         let entry = Entry {
             topic: self.policy.fallback_topic.clone(),
             kind: self.policy.fallback_kind,
-            summary: Summary::new(text.clone()),
-            context: self.policy.fallback_context.clone(),
+            description: Description::new(text.clone()),
             certainty: self.policy.fallback_certainty,
-            quote: Quote::new(text),
         };
         trace.record(
             TraceNode::CLASSIFIER_PLANE,

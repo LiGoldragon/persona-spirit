@@ -1,7 +1,8 @@
 use kameo::actor::{Actor, ActorRef};
 use kameo::message::{Context, Message};
 use signal_persona_spirit::{
-    Presence, QuestionSummary, QuestionsObserved, Reply as WorkingReply, State, StateObserved,
+    Presence, PresenceView, QuestionSummary, QuestionsObserved, Reply as WorkingReply,
+    StateObserved,
 };
 
 use super::pipeline::PipelineReply;
@@ -13,7 +14,7 @@ pub struct StatePlane {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkingState {
-    state: State,
+    state: PresenceView,
     questions: Vec<QuestionSummary>,
 }
 
@@ -36,14 +37,14 @@ pub struct ReadStateSnapshot {
 
 #[derive(Debug, Clone, PartialEq, Eq, kameo::Reply)]
 pub struct StateSnapshot {
-    pub state: State,
+    pub state: PresenceView,
     pub trace: ActorTrace,
 }
 
 impl Default for WorkingState {
     fn default() -> Self {
         Self {
-            state: State {
+            state: PresenceView {
                 presence: Presence::Absent,
                 focus: None,
             },

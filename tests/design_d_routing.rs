@@ -39,21 +39,14 @@ struct RouteFixture {
 
 impl RouteFixture {
     fn new(name: &str) -> Self {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system clock after epoch")
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!(
-            "persona-spirit-design-d-{name}-{}-{nanos}",
-            std::process::id()
-        ));
+        let root = short_root(name);
         std::fs::create_dir_all(&root).expect("route fixture root created");
         Self {
-            public_socket: root.join("persona").join("spirit.sock"),
-            control_socket: root.join("persona").join("control").join("spirit.sock"),
-            ordinary_socket: socket_path(&root, "daemon-private-spirit.sock"),
-            owner_socket: socket_path(&root, "daemon-private-spirit-owner.sock"),
-            upgrade_socket: socket_path(&root, "daemon-private-spirit-upgrade.sock"),
+            public_socket: root.join("p.sock"),
+            control_socket: root.join("c.sock"),
+            ordinary_socket: socket_path(&root, "o.sock"),
+            owner_socket: socket_path(&root, "w.sock"),
+            upgrade_socket: socket_path(&root, "u.sock"),
             store: StorePath::new(
                 root.join("persona-spirit.redb")
                     .to_string_lossy()
@@ -90,6 +83,14 @@ impl Drop for RouteFixture {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.root);
     }
+}
+
+fn short_root(name: &str) -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock after epoch")
+        .as_nanos();
+    std::env::temp_dir().join(format!("psd-{name}-{}-{nanos:x}", std::process::id()))
 }
 
 fn socket_path(root: &Path, file_name: &str) -> SocketPath {
@@ -172,7 +173,7 @@ fn observe_records() -> SpiritOperation {
     SpiritOperation::Observe(Observation::Records(RecordQuery {
         topic: None,
         kind: None,
-        mode: signal_persona_spirit::ObservationMode::SummaryOnly,
+        mode: signal_persona_spirit::ObservationMode::DescriptionOnly,
     }))
 }
 
@@ -207,7 +208,7 @@ fn initial_force_flip() -> ForceFlip {
     }
 }
 
-fn assert_records_reply(reply: Reply<SpiritReply>, expected_summary: &str) {
+fn assert_records_reply(reply: Reply<SpiritReply>, expected_description: &str) {
     let Reply::Accepted { per_operation, .. } = reply else {
         panic!("expected accepted reply, got {reply:?}");
     };
@@ -218,7 +219,10 @@ fn assert_records_reply(reply: Reply<SpiritReply>, expected_summary: &str) {
         panic!("expected RecordsObserved reply, got {operation:?}");
     };
     assert_eq!(records.records.len(), 1);
-    assert_eq!(records.records[0].summary.as_str(), expected_summary);
+    assert_eq!(
+        records.records[0].description.as_str(),
+        expected_description
+    );
 }
 
 #[test]
@@ -249,7 +253,7 @@ fn persona_spirit_cli_reaches_daemon_through_persona_handoff_router() {
 
     let record_output = spawn_spirit(
         fixture.public_socket.clone(),
-        "(Record (workspace Decision [design d route] [through Persona public socket] Maximum [persona hands off descriptor]))",
+        "(Record (workspace Decision [design d route] Maximum))",
     );
     runtime
         .block_on(router.handoff_one(&version))
@@ -261,7 +265,7 @@ fn persona_spirit_cli_reaches_daemon_through_persona_handoff_router() {
 
     let observe_output = spawn_spirit(
         fixture.public_socket.clone(),
-        "(Observe (Records (None None SummaryOnly)))",
+        "(Observe (Records (None None DescriptionOnly)))",
     );
     runtime
         .block_on(router.handoff_one(&version))
@@ -284,17 +288,10 @@ fn persona_spirit_cli_reaches_daemon_through_persona_handoff_router() {
 
 #[test]
 fn persona_handoff_router_routes_new_connections_after_selector_flip_and_old_connections_drain() {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system clock after epoch")
-        .as_nanos();
-    let root = std::env::temp_dir().join(format!(
-        "persona-spirit-design-d-selector-flip-{}-{nanos}",
-        std::process::id()
-    ));
+    let root = short_root("flip");
     std::fs::create_dir_all(&root).expect("selector flip root created");
-    let public_socket = root.join("persona").join("spirit.sock");
-    let control_socket = root.join("persona").join("control").join("spirit.sock");
+    let public_socket = root.join("p.sock");
+    let control_socket = root.join("c.sock");
     let current = SpiritInstance::new(&root, "current");
     let next = SpiritInstance::new(&root, "next");
 
@@ -304,7 +301,7 @@ fn persona_handoff_router_routes_new_connections_after_selector_flip_and_old_con
     let seed_thread = thread::spawn(move || seed_daemon.serve_count(1));
     let seed_output = spawn_spirit(
         current.ordinary_socket.as_path().to_path_buf(),
-        "(Record (workspace Decision [selector seed] [seeded before selector flip] Maximum [seed through current private socket]))",
+        "(Record (workspace Decision [selector seed] Maximum))",
     );
     assert_spirit_output(
         seed_output.join().expect("seed client exits"),
@@ -385,7 +382,7 @@ fn persona_handoff_router_routes_new_connections_after_selector_flip_and_old_con
 
     let steady_output = spawn_spirit(
         public_socket.clone(),
-        "(Observe (Records (None None SummaryOnly)))",
+        "(Observe (Records (None None DescriptionOnly)))",
     );
     runtime
         .block_on(router.handoff_one_from_manager_store(&active_version_reader))
@@ -428,7 +425,7 @@ fn persona_handoff_router_routes_new_connections_after_selector_flip_and_old_con
 
     let new_output = spawn_spirit(
         public_socket.clone(),
-        "(Observe (Records (None None SummaryOnly)))",
+        "(Observe (Records (None None DescriptionOnly)))",
     );
     runtime
         .block_on(router.handoff_one_from_manager_store(&active_version_reader))

@@ -3,10 +3,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use persona_spirit::{Command, Effect, SpiritActorRuntime, StoreLocation};
 use signal_frame::SubscriptionTokenInner;
 use signal_persona_spirit::{
-    Context, Entry, Kind, Observation, ObservationMode, ObserverFilter, ObserverSubscriptionToken,
-    Operation as WorkingOperation, Quote, RecordQuery, Reply as WorkingReply,
-    StateSubscriptionToken, Statement, StatementText, Subscription, SubscriptionToken, Summary,
-    Topic,
+    Description, Entry, Kind, Observation, ObservationMode, ObserverFilter,
+    ObserverSubscriptionToken, Operation as WorkingOperation, RecordQuery, Reply as WorkingReply,
+    StateSubscriptionToken, Statement, StatementText, Subscription, SubscriptionToken, Topic,
 };
 use signal_sema::{Magnitude, SemaObservation, SemaOperation, SemaOutcome};
 
@@ -37,14 +36,12 @@ impl RuntimeFixture {
     }
 }
 
-fn entry(summary: &str) -> Entry {
+fn entry(description: &str) -> Entry {
     Entry {
         topic: Topic::new("workspace"),
         kind: Kind::Decision,
-        summary: Summary::new(summary),
-        context: Context::new("projection context"),
+        description: Description::new(description),
         certainty: Magnitude::Maximum,
-        quote: Quote::new("projection quote"),
     }
 }
 
@@ -118,7 +115,7 @@ async fn spirit_record_query_projects_to_matched_observation() {
     let request = WorkingOperation::Observe(Observation::Records(RecordQuery {
         topic: None,
         kind: None,
-        mode: ObservationMode::SummaryOnly,
+        mode: ObservationMode::DescriptionOnly,
     }));
     let runtime_reply = runtime
         .submit_request(request.clone())

@@ -8,8 +8,8 @@ use sema_engine::{
     TableReference,
 };
 use signal_persona_spirit::{
-    Date, Entry, Kind, ObservationMode, Quote, RecordAccepted, RecordIdentifier, RecordObservation,
-    RecordProvenance, RecordProvenancesObserved, RecordQuery, RecordSummary, RecordsObserved,
+    Date, Entry, Kind, ObservationMode, RecordAccepted, RecordDescription, RecordIdentifier,
+    RecordObservation, RecordProvenance, RecordProvenancesObserved, RecordQuery, RecordsObserved,
     Reply as WorkingReply, Time, Topic, TopicCount, TopicsObserved,
 };
 use signal_version_handover::{HandoverMarker, MarkerRequest};
@@ -17,9 +17,9 @@ use version_projection::{ComponentName, ContractVersion, Projected};
 
 use crate::{Result, error::Error};
 
-const SPIRIT_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
+const SPIRIT_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(2);
 const SPIRIT_CONTRACT_VERSION: ContractVersion = ContractVersion::new([
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0,
 ]);
 const RECORDS: TableName = TableName::new("records");
 const DEFAULT_STORE_PATH: &str = "/tmp/persona-spirit.redb";
@@ -95,9 +95,11 @@ impl SpiritStore {
     pub fn observe_records(&self, observation: RecordObservation) -> Result<WorkingReply> {
         let records = self.records_for_query(&observation.query)?;
         match observation.query.mode {
-            ObservationMode::SummaryOnly => Ok(WorkingReply::RecordsObserved(RecordsObserved {
-                records: records.iter().map(StoredRecord::summary).collect(),
-            })),
+            ObservationMode::DescriptionOnly => {
+                Ok(WorkingReply::RecordsObserved(RecordsObserved {
+                    records: records.iter().map(StoredRecord::description).collect(),
+                }))
+            }
             ObservationMode::WithProvenance => Ok(WorkingReply::RecordProvenancesObserved(
                 RecordProvenancesObserved {
                     records: records.into_iter().map(StoredRecord::provenance).collect(),
@@ -112,16 +114,16 @@ impl SpiritStore {
         }))
     }
 
-    pub fn summaries_for_topic(&self, topic: Option<&Topic>) -> Result<Vec<RecordSummary>> {
+    pub fn descriptions_for_topic(&self, topic: Option<&Topic>) -> Result<Vec<RecordDescription>> {
         let query = RecordQuery {
             topic: topic.cloned(),
             kind: None,
-            mode: ObservationMode::SummaryOnly,
+            mode: ObservationMode::DescriptionOnly,
         };
         Ok(self
             .records_for_query(&query)?
             .iter()
-            .map(StoredRecord::summary)
+            .map(StoredRecord::description)
             .collect())
     }
 
@@ -278,23 +280,21 @@ impl StoredRecord {
         Self { identifier, entry }
     }
 
-    fn summary(&self) -> RecordSummary {
-        RecordSummary {
+    fn description(&self) -> RecordDescription {
+        RecordDescription {
             identifier: self.identifier,
             topic: self.entry.entry.topic.clone(),
             kind: self.entry.entry.kind,
-            summary: self.entry.entry.summary.clone(),
+            description: self.entry.entry.description.clone(),
             certainty: self.entry.entry.certainty,
         }
     }
 
     fn provenance(self) -> RecordProvenance {
         RecordProvenance {
-            summary: self.summary(),
-            context: self.entry.entry.context,
+            description: self.description(),
             date: self.entry.date,
             time: self.entry.time,
-            quote: self.entry.entry.quote,
         }
     }
 }
@@ -327,10 +327,6 @@ impl<'query> RecordFilter<'query> {
 impl StampedEntry {
     pub fn new(entry: Entry, date: Date, time: Time) -> Self {
         Self { entry, date, time }
-    }
-
-    pub fn quote(&self) -> &Quote {
-        &self.entry.quote
     }
 }
 
@@ -366,7 +362,7 @@ impl RecordIdentifierMint {
 
 #[cfg(test)]
 mod tests {
-    use signal_persona_spirit::{Context, Kind, Summary};
+    use signal_persona_spirit::{Description, Kind};
     use signal_sema::Magnitude;
 
     use super::*;
@@ -376,10 +372,8 @@ mod tests {
         let entry = Entry {
             topic: Topic::new("workspace"),
             kind: Kind::Decision,
-            summary: Summary::new("composition"),
-            context: Context::new("context"),
+            description: Description::new("composition"),
             certainty: Magnitude::Maximum,
-            quote: Quote::new("quote"),
         };
         let date = Date::new(2026, 5, 21);
         let time = Time::new(10, 45, 0);

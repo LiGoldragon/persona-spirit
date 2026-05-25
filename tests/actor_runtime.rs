@@ -55,9 +55,7 @@ async fn persona_spirit_entry_assertion_runs_through_actor_planes() {
     let runtime = fixture.runtime().await;
 
     let reply = runtime
-        .submit_text(
-            "(Record (workspace Decision [actor path] [actor context] Maximum [actor quote]))",
-        )
+        .submit_text("(Record (workspace Decision [actor path] Maximum))")
         .await
         .expect("entry accepted");
 
@@ -93,10 +91,8 @@ async fn persona_spirit_ordinary_request_path_uses_signal_executor_and_sema_obse
         .submit_request(WorkingOperation::Record(signal_persona_spirit::Entry {
             topic: signal_persona_spirit::Topic::new("workspace"),
             kind: signal_persona_spirit::Kind::Decision,
-            summary: signal_persona_spirit::Summary::new("executor path"),
-            context: signal_persona_spirit::Context::new("actor context"),
+            description: signal_persona_spirit::Description::new("executor path"),
             certainty: signal_sema::Magnitude::Maximum,
-            quote: signal_persona_spirit::Quote::new("actor quote"),
         }))
         .await
         .expect("entry accepted");
@@ -136,10 +132,8 @@ async fn persona_spirit_frame_request_observes_non_init_caller() {
     let request = Request::from_payload(WorkingOperation::Record(signal_persona_spirit::Entry {
         topic: signal_persona_spirit::Topic::new("workspace"),
         kind: signal_persona_spirit::Kind::Decision,
-        summary: signal_persona_spirit::Summary::new("caller witness"),
-        context: signal_persona_spirit::Context::new("actor context"),
+        description: signal_persona_spirit::Description::new("caller witness"),
         certainty: signal_sema::Magnitude::Maximum,
-        quote: signal_persona_spirit::Quote::new("actor quote"),
     }))
     .with_caller(Some(Caller::new(ProcessIdentifier::new(42), None, None)));
 
@@ -163,17 +157,17 @@ async fn persona_spirit_record_observation_uses_read_plane_without_write_plane()
     let runtime = fixture.runtime().await;
 
     runtime
-        .submit_text("(Record (workspace Decision summary context Maximum quote))")
+        .submit_text("(Record (workspace Decision description Maximum))")
         .await
         .expect("entry accepted");
     let reply = runtime
-        .submit_text("(Observe (Records (None None SummaryOnly)))")
+        .submit_text("(Observe (Records (None None DescriptionOnly)))")
         .await
         .expect("records observed");
 
     assert_eq!(
         reply.text(),
-        "(RecordsObserved ([(1 workspace Decision summary Maximum)]))"
+        "(RecordsObserved ([(1 workspace Decision description Maximum)]))"
     );
     assert!(
         reply
@@ -191,15 +185,15 @@ async fn persona_spirit_topic_catalog_observation_uses_read_plane_without_write_
     let runtime = fixture.runtime().await;
 
     runtime
-        .submit_text("(Record (spirit Principle \"topic one\" \"context\" Maximum \"quote\"))")
+        .submit_text("(Record (spirit Principle [topic one] Maximum))")
         .await
         .expect("first entry accepted");
     runtime
-        .submit_text("(Record (naming Correction \"topic two\" \"context\" Maximum \"quote\"))")
+        .submit_text("(Record (naming Correction [topic two] Maximum))")
         .await
         .expect("second entry accepted");
     runtime
-        .submit_text("(Record (spirit Constraint \"topic three\" \"context\" Maximum \"quote\"))")
+        .submit_text("(Record (spirit Constraint [topic three] Maximum))")
         .await
         .expect("third entry accepted");
 
@@ -316,11 +310,11 @@ async fn persona_spirit_record_subscription_uses_read_plane_then_subscription_pl
     let runtime = fixture.runtime().await;
 
     runtime
-        .submit_text("(Record (workspace Decision [subscription path] context Maximum quote))")
+        .submit_text("(Record (workspace Decision [subscription path] Maximum))")
         .await
         .expect("entry accepted");
     let reply = runtime
-        .submit_text("(Watch (Records (None SummaryOnly)))")
+        .submit_text("(Watch (Records (None DescriptionOnly)))")
         .await
         .expect("record subscription opened");
 
@@ -352,7 +346,7 @@ async fn persona_spirit_subscription_retractions_use_subscription_plane() {
         .await
         .expect("state subscription opened");
     runtime
-        .submit_text("(Watch (Records (None SummaryOnly)))")
+        .submit_text("(Watch (Records (None DescriptionOnly)))")
         .await
         .expect("record subscription opened");
     let state_reply = runtime
@@ -510,7 +504,7 @@ async fn persona_spirit_state_statement_uses_classifier_before_store() {
     let runtime = fixture.runtime().await;
 
     let reply = runtime
-        .submit_text("(State (\"capture this intent\"))")
+        .submit_text("(State ([capture this intent]))")
         .await
         .expect("statement classified");
 
@@ -537,14 +531,14 @@ async fn persona_spirit_shutdown_releases_store_for_restart() {
     let first_runtime = fixture.runtime().await;
 
     first_runtime
-        .submit_text("(Record (workspace Decision [restart survives] context Maximum quote))")
+        .submit_text("(Record (workspace Decision [restart survives] Maximum))")
         .await
         .expect("entry accepted");
     first_runtime.stop().await.expect("first runtime stops");
 
     let second_runtime = fixture.runtime().await;
     let reply = second_runtime
-        .submit_text("(Observe (Records (None None SummaryOnly)))")
+        .submit_text("(Observe (Records (None None DescriptionOnly)))")
         .await
         .expect("records observed after restart");
 
