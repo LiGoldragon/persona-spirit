@@ -144,6 +144,20 @@ applies the first mirrored write payload shape:
 cross-version projection remains the next step before a zero-downtime cutover
 can replace the temporary sema-upgrade runner.
 
+**Cross-version wire-compat blocker (P0).** The deployed v0.1.0.1 retrofit
+(persona-spirit commit `e7a1b184`, tagged v0.1.0.1) was built against
+signal-frame `653773b7` (PRE the ShortHeader commit). Current main (v0.1.1)
+uses signal-frame `1493c59f` which includes the 8-byte ShortHeader prefix
+prepended to every wire frame. The two daemons bind their three sockets but
+their frames are mutually unparseable: v0.1.0.1 emits frames without the
+ShortHeader; v0.1.1's parser decodes the body bytes as the ShortHeader and
+fails to decode the rest as `HandshakeRequest`. This blocks the LIVE
+two-daemon handover ceremony until v0.1.0.1 is rebuilt against current
+signal-frame (open bead `primary-602y`). The brief-outage cutover
+(`primary-0jjz`) still works because it's sequential — stop v0.1.0 fully,
+migrate, start v0.1.1 — there's no cross-version socket exchange. Full
+finding in `primary/reports/designer/333-v2-upgrade-mechanism-corrections-from-real-world-test.md` §2.
+
 The daemon advances through three handover states:
 
 ```mermaid
@@ -166,6 +180,26 @@ stateDiagram-v2
   only the upgrade socket remains bound; the daemon receives mirrored
   `StampedEntry` writes from next if old-compat reads still consume the
   previous shape, then retires.
+
+**Mirror phase ordering — open psyche question.** The current daemon
+gates Mirror acceptance on `PrivateUpgradeOnly` state (post-completion).
+The /333 design narrative places Mirror BEFORE completion (during
+HandoverMode), reasoning that orchestrate needs pre-cutover Mirror to
+transfer in-flight lane claims. Two ways to reconcile: (a) update the
+design narrative to match the code (Mirror is post-completion ongoing
+replication during drain window), or (b) update the code to accept
+Mirror in `HandoverMode` before completion. Lean: (b) — design intent.
+Full finding in `primary/reports/designer/333-v2` §4.1. Awaiting psyche
+direction.
+
+**Divergence and Recovery — wire-only-without-semantics.** Both
+operations round-trip cleanly through the wire (ACKs returned) but the
+daemon takes no action: no state transition on Divergence, no abort
+logic, no supervisor notification; v0.1.0.1's `RecoverFromFailure`
+always returns `recovered=false`. The "abort path" the design narrative
+names doesn't exist beyond the ACK. Filed as follow-on operator
+candidates pending psyche direction. Full finding in
+`primary/reports/designer/333-v2` §4.2-4.3.
 
 The `spirit` CLI is not a second runtime. It resolves its single argument as
 either a raw NOTA request record (argument begins with `(`) or a path to a NOTA
@@ -352,3 +386,42 @@ CLI path.
 The next implementation step is subscription event delivery or spirit-to-mind
 owner-Mutate forwarding. Spirit-to-mind owner variants are not needed for the
 current raw CLI/storage/socket slice.
+
+## Pending schema-engine upgrade
+
+**Status:** scheduled for migration to schema-language-based contract per
+`primary/reports/designer/326-v13-spirit-complete-schema-vision.md` +
+`primary/reports/designer/324-migration-mvp-spirit-handover-re-specification.md`.
+The reader model is multi-pass NOTA-first per spirit record 549; the macro
+library lowers schemas via the macro fixed-point loop per record 569.
+
+**Target:** this component's hand-written `signal_channel!` invocation +
+Layer 2 Command/Effect + storage types convert to a single
+`spirit/spirit.schema` file. The brilliant macro library (`primary-ezqx.1`)
+reads the schema + emits all the wire types + ShortHeader projection +
+dispatcher + VersionProjection + storage descriptors.
+
+**Sequence:** Spirit is the MVP pilot landing first via `primary-ezqx.1`.
+The pilot proves the macro library shape against the existing v0.1.0 →
+v0.1.1 handover path (per `primary-x3ci`) before any other component cuts
+over. Local `signal-persona-spirit` repo still carries the old `persona-`
+prefix per the /318 pilot block; the rename lands after the schema-engine
+cutover proves it.
+
+**Variant slot policy.** Per spirit record 562 the spirit schema's enums
+place data-carrying variants in slots 0-6 and unit variants after. Adding
+a new unit variant must remain a no-op upgrade on the wire format — that
+is the load-bearing slot-assignment promise the macro must honor when it
+lowers the spirit schema's enums.
+
+**References:**
+- `primary/reports/designer/326-v13-spirit-complete-schema-vision.md` —
+  uniform header form + schema-language design
+- `primary/reports/designer/333-upgrade-mechanism-full-design-explained.md`
+  + `333-v2` — upgrade mechanism design + corrections from the end-to-end
+  nspawn test (wire-compat blocker, Mirror ordering, Divergence/Recovery
+  gaps)
+- `primary/reports/designer/334-v2-multi-pass-nota-first-schema-reader.md`
+  — multi-pass reader model (record 549)
+- `primary/reports/operator/174-schema-import-header-design-critique-2026-05-24.md`
+  — header/body/feature separation + lowering rules

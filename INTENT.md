@@ -123,6 +123,45 @@ you need clarifications on some things."* For `persona-spirit`,
 that means the raw storage/query path must already run through a
 named Kameo actor tree with constraint tests that prove the path.
 
+## Pending schema-engine upgrade
+
+**Status:** scheduled for migration to schema-language-based contract per
+`primary/reports/designer/326-v13-spirit-complete-schema-vision.md` +
+`primary/reports/designer/324-migration-mvp-spirit-handover-re-specification.md`.
+The reader model is multi-pass NOTA-first per spirit record 549; macro
+application iterates to a fixed point per record 569.
+
+**Target:** this component's hand-written `signal_channel!` invocation +
+Layer 2 Command/Effect + storage types convert to a single
+`spirit/spirit.schema` file. The brilliant macro library (`primary-ezqx.1`)
+reads the schema + emits all the wire types + ShortHeader projection +
+dispatcher + VersionProjection + storage descriptors.
+
+**Sequence:** Spirit is the MVP pilot landing first via `primary-ezqx.1`.
+Other persona-triad components follow after the pilot succeeds.
+
+**Per-component concerns:** First MVP cutover target; v0.1.0 → v0.1.1
+handover via `primary-x3ci` is the realistic test surface for the macro
+library landing. The pilot lands here because Spirit already has the
+upgrade socket plus split-package nix infrastructure needed to prove
+cross-version schema projection. The wire-compat blocker between
+v0.1.0.1 (pre-ShortHeader signal-frame) and v0.1.1 (post-ShortHeader) —
+filed as P0 bead `primary-602y` — must clear before live two-daemon
+handover is achievable. Mirror phase ordering, Divergence semantics,
+and Recovery behaviour are open psyche questions per
+`primary/reports/designer/333-v2` §4.
+
+**References:**
+- `primary/reports/designer/326-v13-spirit-complete-schema-vision.md` —
+  uniform header form + schema-language design
+- `primary/reports/designer/333-upgrade-mechanism-full-design-explained.md`
+  + `333-v2` — upgrade mechanism design + corrections from end-to-end
+  nspawn test
+- `primary/reports/designer/334-v2-multi-pass-nota-first-schema-reader.md`
+  — multi-pass reader model (record 549)
+- `primary/reports/operator/174-schema-import-header-design-critique-2026-05-24.md`
+  — header/body/feature separation + lowering rules
+
 ## See also
 
 - `ARCHITECTURE.md` — structural shape, state taxonomy, spawn
