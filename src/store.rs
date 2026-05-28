@@ -4,13 +4,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use sema::SchemaVersion;
 use sema_engine::{
-    Assertion, Engine, EngineOpen, EngineRecord, QueryPlan, RecordKey, TableDescriptor, TableName,
-    TableReference,
+    Assertion, Engine, EngineOpen, EngineRecord, QueryPlan, RecordKey, Retraction, TableDescriptor,
+    TableName, TableReference,
 };
 use signal_persona_spirit::{
     Date, Entry, Kind, ObservationMode, RecordAccepted, RecordIdentifier, RecordIdentifierQuery,
-    RecordObservation, RecordProvenance, RecordProvenancesObserved, RecordQuery, RecordSummary,
-    RecordsObserved, Reply as WorkingReply, Time, Topic, TopicCount, Topics, TopicsObserved,
+    RecordObservation, RecordProvenance, RecordProvenancesObserved, RecordQuery, RecordRemoved,
+    RecordSummary, RecordsObserved, Reply as WorkingReply, Time, Topic, TopicCount, Topics,
+    TopicsObserved,
 };
 use signal_version_handover::{HandoverMarker, MarkerRequest};
 use version_projection::{ComponentName, ContractVersion, Projected};
@@ -91,6 +92,13 @@ impl SpiritStore {
             .assert(Assertion::new(self.records, stored.clone()))
             .map_err(Error::spirit_store)?;
         Ok(RecordAccepted::new(stored.identifier))
+    }
+
+    pub fn remove_entry(&self, identifier: RecordIdentifier) -> Result<RecordRemoved> {
+        self.engine
+            .retract(Retraction::new(self.records, StoredRecord::key(identifier)))
+            .map_err(Error::spirit_store)?;
+        Ok(RecordRemoved::new(identifier))
     }
 
     pub(crate) fn import_migrated_record(
@@ -183,7 +191,16 @@ impl SpiritStore {
     }
 
     fn next_identifier(&self) -> Result<RecordIdentifier> {
-        Ok(RecordIdentifierMint::from_records(&self.all_records()?).next_identifier())
+        let records = self.all_records()?;
+        let commit_sequence = self
+            .engine
+            .current_commit_sequence()
+            .map_err(Error::spirit_store)?
+            .value();
+        Ok(
+            RecordIdentifierMint::from_records_and_commit_sequence(&records, commit_sequence)
+                .next_identifier(),
+        )
     }
 
     fn last_record_identifier(&self) -> Result<Option<u64>> {
@@ -347,6 +364,10 @@ impl StoredRecord {
         Self { identifier, entry }
     }
 
+    fn key(identifier: RecordIdentifier) -> RecordKey {
+        RecordKey::new(identifier.value().to_string())
+    }
+
     fn summary(&self) -> RecordSummary {
         RecordSummary {
             identifier: self.identifier,
@@ -407,18 +428,18 @@ impl Projected for StampedEntry {
 
 impl EngineRecord for StoredRecord {
     fn record_key(&self) -> RecordKey {
-        RecordKey::new(self.identifier.value().to_string())
+        Self::key(self.identifier)
     }
 }
 
 impl RecordIdentifierMint {
-    fn from_records(records: &[StoredRecord]) -> Self {
-        let next = records
+    fn from_records_and_commit_sequence(records: &[StoredRecord], commit_sequence: u64) -> Self {
+        let last_record_identifier = records
             .iter()
             .map(|record| record.identifier.value())
             .max()
-            .unwrap_or(0)
-            + 1;
+            .unwrap_or(0);
+        let next = last_record_identifier.max(commit_sequence) + 1;
         Self { next }
     }
 

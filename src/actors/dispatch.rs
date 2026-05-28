@@ -238,6 +238,7 @@ impl SpiritCommandExecutor {
         let reply = match command.clone() {
             Command::ClassifyStatement(statement) => self.classify_statement(statement).await?,
             Command::AssertEntry(entry) => self.capture_entry(entry).await?,
+            Command::RemoveRecord(identifier) => self.remove_entry(identifier).await?,
             Command::ReadRecords(observation) => self.observe_records(observation).await?,
             Command::ReadRecordIdentifiers(query) => self.observe_record_identifiers(query).await?,
             Command::ReadTopics => self.observe_topics().await?,
@@ -284,6 +285,21 @@ impl SpiritCommandExecutor {
         let pipeline = self
             .store
             .ask(store::CaptureEntry { entry, trace })
+            .await
+            .map_err(Self::store_send_error)?;
+        let (reply, trace) = pipeline.into_parts();
+        self.trace.replace(trace);
+        Ok(reply)
+    }
+
+    async fn remove_entry(
+        &self,
+        identifier: signal_persona_spirit::RecordIdentifier,
+    ) -> Result<WorkingReply> {
+        let trace = self.trace.snapshot();
+        let pipeline = self
+            .store
+            .ask(store::RemoveEntry { identifier, trace })
             .await
             .map_err(Self::store_send_error)?;
         let (reply, trace) = pipeline.into_parts();

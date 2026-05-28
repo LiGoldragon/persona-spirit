@@ -93,6 +93,9 @@ Contract records stay in `signal-persona-spirit` and
   optional kind inside the daemon's read path.
 - `Observation::RecordIdentifiers` queries return descriptions or provenance
   for an exact `RecordIdentifier` or inclusive `RecordIdentifierRange`.
+- `Remove(RecordIdentifier)` retracts one stored intent entry through
+  `RecordStore` and returns `RecordRemoved`; the CLI never opens the
+  database directly. Removed record identifiers are not reused.
 - Valid but unimplemented requests use `ReplyShaper` and do not touch
   `RecordStore`.
 - Valid but unimplemented CLI requests emit a typed NOTA

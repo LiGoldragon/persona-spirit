@@ -42,6 +42,7 @@ pub enum TraceAction {
     StatementClassified,
     EntryStamped,
     RecordCommitted,
+    RecordRetracted,
     RecordsRead,
     SubscriptionOpened,
     SubscriptionRetracted,

@@ -163,6 +163,30 @@ async fn spirit_record_identifier_query_projects_to_matched_observation() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn spirit_record_removal_projects_to_retracted_observation() {
+    let fixture = RuntimeFixture::new("record-removal");
+    let runtime = fixture.runtime().await;
+    runtime
+        .submit_request(WorkingOperation::Record(entry("removed projection")))
+        .await
+        .expect("record accepted");
+    let request = WorkingOperation::Remove(RecordIdentifier::new(1));
+    let runtime_reply = runtime
+        .submit_request(request.clone())
+        .await
+        .expect("record removed");
+    assert_runtime_projection_trace(runtime_reply.trace());
+    let reply = runtime_reply.into_reply();
+
+    assert_eq!(
+        observation_for(request, reply),
+        SemaObservation::new(SemaOperation::Retract, SemaOutcome::Retracted)
+    );
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn spirit_topic_catalog_query_projects_to_matched_observation() {
     let fixture = RuntimeFixture::new("topic-query");
     let runtime = fixture.runtime().await;

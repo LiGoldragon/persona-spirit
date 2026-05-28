@@ -335,6 +335,46 @@ fn persona_spirit_client_observes_records_by_identifier_range() {
 }
 
 #[test]
+fn persona_spirit_client_removes_entry_and_excludes_it_from_observation() {
+    let fixture = StoreFixture::new("remove-entry");
+    fixture
+        .reply_text("(Record ([workspace] Decision [first description] Maximum))")
+        .expect("first entry persisted");
+    fixture
+        .reply_text("(Record ([workspace] Correction [second description] Medium))")
+        .expect("second entry persisted");
+
+    let removed = fixture.reply_text("(Remove 1)").expect("entry removed");
+    let observed = fixture
+        .reply_text("(Observe (Records (None None SummaryOnly)))")
+        .expect("records observed");
+
+    assert_eq!(removed, "(RecordRemoved 1)");
+    assert_eq!(
+        observed,
+        "(RecordsObserved [(2 [workspace] Correction [second description] Medium)])"
+    );
+}
+
+#[test]
+fn persona_spirit_client_does_not_reuse_removed_record_identifier() {
+    let fixture = StoreFixture::new("remove-entry-no-reuse");
+    fixture
+        .reply_text("(Record ([workspace] Decision [first description] Maximum))")
+        .expect("first entry persisted");
+    fixture
+        .reply_text("(Record ([workspace] Correction [second description] Medium))")
+        .expect("second entry persisted");
+    fixture.reply_text("(Remove 2)").expect("entry removed");
+
+    let accepted = fixture
+        .reply_text("(Record ([workspace] Principle [third description] High))")
+        .expect("third entry persisted");
+
+    assert_eq!(accepted, "(RecordAccepted 4)");
+}
+
+#[test]
 fn persona_spirit_client_observes_default_psyche_state() {
     let fixture = StoreFixture::new("state-observation");
     let reply = fixture

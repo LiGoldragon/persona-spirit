@@ -184,6 +184,35 @@ async fn persona_spirit_record_observation_uses_read_plane_without_write_plane()
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn persona_spirit_record_removal_uses_write_plane() {
+    let fixture = SpiritRuntimeFixture::new("record-removal-write-plane");
+    let runtime = fixture.runtime().await;
+
+    runtime
+        .submit_text("(Record ([workspace] Decision description Maximum))")
+        .await
+        .expect("entry accepted");
+    let reply = runtime
+        .submit_text("(Remove 1)")
+        .await
+        .expect("entry removed");
+    let observed = runtime
+        .submit_text("(Observe (Records (None None SummaryOnly)))")
+        .await
+        .expect("records observed");
+
+    assert_eq!(reply.text(), "(RecordRemoved 1)");
+    assert!(
+        reply
+            .trace()
+            .contains_action(TraceNode::SEMA_WRITER, TraceAction::RecordRetracted)
+    );
+    assert_eq!(observed.text(), "(RecordsObserved [])");
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn persona_spirit_topic_catalog_observation_uses_read_plane_without_write_plane() {
     let fixture = SpiritRuntimeFixture::new("topic-catalog");
     let runtime = fixture.runtime().await;

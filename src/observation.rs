@@ -6,11 +6,11 @@
 
 use signal_persona_spirit::{
     Observation, ObserverFilter, ObserverSubscriptionOpened, ObserverSubscriptionToken,
-    Operation as WorkingOperation, QuestionsObserved, RecordAccepted, RecordIdentifierQuery,
-    RecordObservation, RecordProvenancesObserved, RecordQuery, RecordSubscription,
-    RecordSubscriptionToken, RecordsObserved, Reply as WorkingReply, RequestUnimplemented,
-    StateObserved, StateSubscriptionToken, Statement, Subscription, SubscriptionOpened,
-    SubscriptionRetracted, SubscriptionToken, TopicsObserved,
+    Operation as WorkingOperation, QuestionsObserved, RecordAccepted, RecordIdentifier,
+    RecordIdentifierQuery, RecordObservation, RecordProvenancesObserved, RecordQuery,
+    RecordRemoved, RecordSubscription, RecordSubscriptionToken, RecordsObserved,
+    Reply as WorkingReply, RequestUnimplemented, StateObserved, StateSubscriptionToken, Statement,
+    Subscription, SubscriptionOpened, SubscriptionRetracted, SubscriptionToken, TopicsObserved,
 };
 use signal_sema::{SemaObservation, SemaOperation, SemaOutcome, ToSemaOperation, ToSemaOutcome};
 
@@ -18,6 +18,7 @@ use signal_sema::{SemaObservation, SemaOperation, SemaOutcome, ToSemaOperation, 
 pub enum Command {
     ClassifyStatement(Statement),
     AssertEntry(signal_persona_spirit::Entry),
+    RemoveRecord(RecordIdentifier),
     ReadRecords(RecordObservation),
     ReadRecordIdentifiers(RecordIdentifierQuery),
     ReadTopics,
@@ -34,6 +35,7 @@ pub enum Command {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Effect {
     RecordAccepted(RecordAccepted),
+    RecordRemoved(RecordRemoved),
     StateObserved(StateObserved),
     RecordsObserved(RecordsObserved),
     RecordProvenancesObserved(RecordProvenancesObserved),
@@ -50,6 +52,7 @@ impl Command {
         match request {
             WorkingOperation::State(statement) => Some(Self::ClassifyStatement(statement)),
             WorkingOperation::Record(entry) => Some(Self::AssertEntry(entry)),
+            WorkingOperation::Remove(identifier) => Some(Self::RemoveRecord(identifier)),
             WorkingOperation::Observe(Observation::Records(query)) => {
                 Some(Self::ReadRecords(RecordObservation { query }))
             }
@@ -79,6 +82,7 @@ impl Effect {
     pub fn from_reply(reply: WorkingReply) -> Self {
         match reply {
             WorkingReply::RecordAccepted(payload) => Self::RecordAccepted(payload),
+            WorkingReply::RecordRemoved(payload) => Self::RecordRemoved(payload),
             WorkingReply::StateObserved(payload) => Self::StateObserved(payload),
             WorkingReply::RecordsObserved(payload) => Self::RecordsObserved(payload),
             WorkingReply::RecordProvenancesObserved(payload) => {
@@ -102,6 +106,7 @@ impl Effect {
     pub fn into_reply(self) -> WorkingReply {
         match self {
             Self::RecordAccepted(payload) => WorkingReply::RecordAccepted(payload),
+            Self::RecordRemoved(payload) => WorkingReply::RecordRemoved(payload),
             Self::StateObserved(payload) => WorkingReply::StateObserved(payload),
             Self::RecordsObserved(payload) => WorkingReply::RecordsObserved(payload),
             Self::RecordProvenancesObserved(payload) => {
@@ -123,6 +128,7 @@ impl ToSemaOperation for Command {
     fn to_sema_operation(&self) -> SemaOperation {
         match self {
             Self::ClassifyStatement(_) | Self::AssertEntry(_) => SemaOperation::Assert,
+            Self::RemoveRecord(_) => SemaOperation::Retract,
             Self::ReadRecords(_)
             | Self::ReadRecordIdentifiers(_)
             | Self::ReadTopics
@@ -142,6 +148,7 @@ impl ToSemaOutcome for Effect {
     fn to_sema_outcome(&self) -> SemaOutcome {
         match self {
             Self::RecordAccepted(_) => SemaOutcome::Asserted,
+            Self::RecordRemoved(_) => SemaOutcome::Retracted,
             Self::StateObserved(_)
             | Self::RecordsObserved(_)
             | Self::RecordProvenancesObserved(_)

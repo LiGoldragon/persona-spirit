@@ -1,7 +1,7 @@
 use kameo::actor::{Actor, ActorRef};
 use kameo::message::{Context, Message};
 use signal_persona_spirit::{
-    RecordIdentifierQuery, RecordObservation, RecordSubscription, RecordSummary,
+    RecordIdentifier, RecordIdentifierQuery, RecordObservation, RecordSubscription, RecordSummary,
     Reply as WorkingReply,
 };
 use signal_version_handover::{HandoverMarker, MarkerRequest};
@@ -25,6 +25,11 @@ pub struct Arguments {
 
 pub struct CaptureEntry {
     pub entry: StampedEntry,
+    pub trace: ActorTrace,
+}
+
+pub struct RemoveEntry {
+    pub identifier: RecordIdentifier,
     pub trace: ActorTrace,
 }
 
@@ -77,6 +82,22 @@ impl RecordStore {
         trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReplied);
         Ok(PipelineReply::new(
             WorkingReply::RecordAccepted(accepted),
+            trace,
+        ))
+    }
+
+    fn remove_entry(
+        &self,
+        identifier: RecordIdentifier,
+        mut trace: ActorTrace,
+    ) -> Result<PipelineReply> {
+        trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReceived);
+        trace.record(TraceNode::SEMA_WRITER, TraceAction::MessageReceived);
+        let removed = self.store.remove_entry(identifier)?;
+        trace.record(TraceNode::SEMA_WRITER, TraceAction::RecordRetracted);
+        trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReplied);
+        Ok(PipelineReply::new(
+            WorkingReply::RecordRemoved(removed),
             trace,
         ))
     }
@@ -165,6 +186,18 @@ impl Message<CaptureEntry> for RecordStore {
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.capture_entry(message.entry, message.trace)
+    }
+}
+
+impl Message<RemoveEntry> for RecordStore {
+    type Reply = Result<PipelineReply>;
+
+    async fn handle(
+        &mut self,
+        message: RemoveEntry,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.remove_entry(message.identifier, message.trace)
     }
 }
 
