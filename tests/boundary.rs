@@ -244,12 +244,12 @@ fn persona_spirit_client_accepts_high_magnitude_and_observes_it_back() {
         .expect("high-magnitude entry persisted");
 
     let reply = fixture
-        .reply_text("(Observe (Records (None None DescriptionOnly)))")
+        .reply_text("(Observe (Records (None None SummaryOnly)))")
         .expect("records observed");
 
     assert_eq!(
         reply,
-        "(RecordsObserved ([(1 [workspace] Decision [high description] High)]))"
+        "(RecordsObserved [(1 [workspace] Decision [high description] High)])"
     );
 }
 
@@ -272,7 +272,7 @@ fn persona_spirit_client_rejects_parenthesized_date_time_shape() {
 }
 
 #[test]
-fn persona_spirit_client_persists_entries_for_later_description_observation() {
+fn persona_spirit_client_persists_entries_for_later_summary_observation() {
     let fixture = StoreFixture::new("description-observation");
     fixture
         .reply_text("(Record ([workspace] Decision [first description] Maximum))")
@@ -282,12 +282,12 @@ fn persona_spirit_client_persists_entries_for_later_description_observation() {
         .expect("second entry persisted");
 
     let reply = fixture
-        .reply_text("(Observe (Records (None None DescriptionOnly)))")
+        .reply_text("(Observe (Records (None None SummaryOnly)))")
         .expect("records observed");
 
     assert_eq!(
         reply,
-        "(RecordsObserved ([(1 [workspace] Decision [first description] Maximum) (2 [workspace] Correction [second description] Medium)]))"
+        "(RecordsObserved [(1 [workspace] Decision [first description] Maximum) (2 [workspace] Correction [second description] Medium)])"
     );
 }
 
@@ -302,12 +302,12 @@ fn persona_spirit_client_observes_records_by_exact_identifier() {
         .expect("second entry persisted");
 
     let reply = fixture
-        .reply_text("(Observe (RecordIdentifiers ((Exact 2) DescriptionOnly)))")
+        .reply_text("(Observe (RecordIdentifiers ((Exact 2) SummaryOnly)))")
         .expect("record identifier observed");
 
     assert_eq!(
         reply,
-        "(RecordsObserved ([(2 [workspace] Correction [second description] Medium)]))"
+        "(RecordsObserved [(2 [workspace] Correction [second description] Medium)])"
     );
 }
 
@@ -325,12 +325,12 @@ fn persona_spirit_client_observes_records_by_identifier_range() {
         .expect("third entry persisted");
 
     let reply = fixture
-        .reply_text("(Observe (RecordIdentifiers ((Range (2 3)) DescriptionOnly)))")
+        .reply_text("(Observe (RecordIdentifiers ((Range (2 3)) SummaryOnly)))")
         .expect("record identifier range observed");
 
     assert_eq!(
         reply,
-        "(RecordsObserved ([(2 [workspace] Correction [second description] Medium) (3 [workspace] Constraint [third description] High)]))"
+        "(RecordsObserved [(2 [workspace] Correction [second description] Medium) (3 [workspace] Constraint [third description] High)])"
     );
 }
 
@@ -341,7 +341,7 @@ fn persona_spirit_client_observes_default_psyche_state() {
         .reply_text("(Observe State)")
         .expect("state observed");
 
-    assert_eq!(reply, "(StateObserved ((Absent None)))");
+    assert_eq!(reply, "(StateObserved (Absent None))");
 }
 
 #[test]
@@ -351,7 +351,7 @@ fn persona_spirit_client_observes_empty_pending_questions() {
         .reply_text("(Observe Questions)")
         .expect("questions observed");
 
-    assert_eq!(reply, "(QuestionsObserved ([]))");
+    assert_eq!(reply, "(QuestionsObserved [])");
 }
 
 #[test]
@@ -372,14 +372,14 @@ fn persona_spirit_client_opens_and_retracts_state_subscription() {
 }
 
 #[test]
-fn persona_spirit_client_opens_record_subscription_with_description_snapshot() {
+fn persona_spirit_client_opens_record_subscription_with_summary_snapshot() {
     let fixture = StoreFixture::new("record-subscription");
     fixture
         .reply_text("(Record ([workspace] Decision [subscription description] Maximum))")
         .expect("entry persisted");
 
     let opened = fixture
-        .reply_text("(Watch (Records (None DescriptionOnly)))")
+        .reply_text("(Watch (Records (None SummaryOnly)))")
         .expect("record subscription opened");
     let retracted = fixture
         .reply_text("(Unwatch (Records (1)))")
@@ -403,12 +403,12 @@ fn persona_spirit_client_filters_record_observation_by_topic() {
         .expect("naming entry persisted");
 
     let reply = fixture
-        .reply_text("(Observe (Records ((Some naming) None DescriptionOnly)))")
+        .reply_text("(Observe (Records ((Some naming) None SummaryOnly)))")
         .expect("records observed");
 
     assert_eq!(
         reply,
-        "(RecordsObserved ([(2 [naming] Correction [naming description] Maximum)]))"
+        "(RecordsObserved [(2 [naming] Correction [naming description] Maximum)])"
     );
 }
 
@@ -420,21 +420,21 @@ fn persona_spirit_client_filters_record_observation_by_topic_membership() {
         .expect("multi-topic entry persisted");
 
     let spirit = fixture
-        .reply_text("(Observe (Records ((Some spirit) None DescriptionOnly)))")
+        .reply_text("(Observe (Records ((Some spirit) None SummaryOnly)))")
         .expect("spirit records observed");
     let nota = fixture
-        .reply_text("(Observe (Records ((Some nota) None DescriptionOnly)))")
+        .reply_text("(Observe (Records ((Some nota) None SummaryOnly)))")
         .expect("nota records observed");
     let schema = fixture
-        .reply_text("(Observe (Records ((Some schema) None DescriptionOnly)))")
+        .reply_text("(Observe (Records ((Some schema) None SummaryOnly)))")
         .expect("schema records observed");
 
     assert_eq!(
         spirit,
-        "(RecordsObserved ([(1 [spirit nota] Correction [quote-free cli shape] Maximum)]))"
+        "(RecordsObserved [(1 [spirit nota] Correction [quote-free cli shape] Maximum)])"
     );
     assert_eq!(spirit, nota);
-    assert_eq!(schema, "(RecordsObserved ([]))");
+    assert_eq!(schema, "(RecordsObserved [])");
 }
 
 #[test]
@@ -448,12 +448,12 @@ fn persona_spirit_client_filters_record_observation_by_kind() {
         .expect("correction entry persisted");
 
     let reply = fixture
-        .reply_text("(Observe (Records (None (Some Principle) DescriptionOnly)))")
+        .reply_text("(Observe (Records (None (Some Principle) SummaryOnly)))")
         .expect("records observed");
 
     assert_eq!(
         reply,
-        "(RecordsObserved ([(1 [workspace] Principle [workspace principle] Maximum)]))"
+        "(RecordsObserved [(1 [workspace] Principle [workspace principle] Maximum)])"
     );
 }
 
@@ -471,12 +471,12 @@ fn persona_spirit_client_filters_record_observation_by_topic_and_kind() {
         .expect("naming principle persisted");
 
     let reply = fixture
-        .reply_text("(Observe (Records ((Some spirit) (Some Principle) DescriptionOnly)))")
+        .reply_text("(Observe (Records ((Some spirit) (Some Principle) SummaryOnly)))")
         .expect("records observed");
 
     assert_eq!(
         reply,
-        "(RecordsObserved ([(1 [spirit] Principle [spirit principle] Maximum)]))"
+        "(RecordsObserved [(1 [spirit] Principle [spirit principle] Maximum)])"
     );
 }
 
@@ -497,7 +497,7 @@ fn persona_spirit_client_lists_topics_with_entry_counts() {
         .reply_text("(Observe Topics)")
         .expect("topics observed");
 
-    assert_eq!(reply, "(TopicsObserved ([(naming 1) (spirit 2)]))");
+    assert_eq!(reply, "(TopicsObserved [(naming 1) (spirit 2)])");
 }
 
 #[test]
@@ -514,7 +514,7 @@ fn persona_spirit_client_counts_topic_memberships() {
         .reply_text("(Observe Topics)")
         .expect("topics observed");
 
-    assert_eq!(reply, "(TopicsObserved ([(nota 1) (spirit 2)]))");
+    assert_eq!(reply, "(TopicsObserved [(nota 1) (spirit 2)])");
 }
 
 #[test]
@@ -543,9 +543,9 @@ fn persona_spirit_client_returns_provenance_only_when_requested() {
         .expect("provenance observed");
 
     assert!(reply.starts_with(
-        "(RecordProvenancesObserved ([((1 [workspace] Decision [description only] Maximum) "
+        "(RecordProvenancesObserved [((1 [workspace] Decision [description only] Maximum) "
     ));
-    assert!(reply.ends_with(")]))"));
+    assert!(reply.ends_with(")])"));
 }
 
 #[test]
@@ -559,12 +559,12 @@ fn persona_spirit_client_repeated_entries_remain_distinct_records() {
         .expect("second entry persisted");
 
     let reply = fixture
-        .reply_text("(Observe (Records ((Some naming) None DescriptionOnly)))")
+        .reply_text("(Observe (Records ((Some naming) None SummaryOnly)))")
         .expect("records observed");
 
     assert_eq!(
         reply,
-        "(RecordsObserved ([(1 [naming] Correction [drop ancestor prefixes] Maximum) (2 [naming] Correction [drop ancestor prefixes] Maximum)]))"
+        "(RecordsObserved [(1 [naming] Correction [drop ancestor prefixes] Maximum) (2 [naming] Correction [drop ancestor prefixes] Maximum)])"
     );
 }
 

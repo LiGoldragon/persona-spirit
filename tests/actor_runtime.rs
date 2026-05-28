@@ -165,13 +165,13 @@ async fn persona_spirit_record_observation_uses_read_plane_without_write_plane()
         .await
         .expect("entry accepted");
     let reply = runtime
-        .submit_text("(Observe (Records (None None DescriptionOnly)))")
+        .submit_text("(Observe (Records (None None SummaryOnly)))")
         .await
         .expect("records observed");
 
     assert_eq!(
         reply.text(),
-        "(RecordsObserved ([(1 [workspace] Decision description Maximum)]))"
+        "(RecordsObserved [(1 [workspace] Decision description Maximum)])"
     );
     assert!(
         reply
@@ -206,7 +206,7 @@ async fn persona_spirit_topic_catalog_observation_uses_read_plane_without_write_
         .await
         .expect("topics observed");
 
-    assert_eq!(reply.text(), "(TopicsObserved ([(naming 1) (spirit 2)]))");
+    assert_eq!(reply.text(), "(TopicsObserved [(naming 1) (spirit 2)])");
     assert!(
         reply
             .trace()
@@ -227,7 +227,7 @@ async fn persona_spirit_state_observation_uses_state_plane() {
         .await
         .expect("state observed");
 
-    assert_eq!(reply.text(), "(StateObserved ((Absent None)))");
+    assert_eq!(reply.text(), "(StateObserved (Absent None))");
     assert!(reply.trace().contains(TraceNode::STATE_PLANE));
     assert!(!reply.trace().contains(TraceNode::RECORD_STORE));
     assert!(!reply.trace().contains(TraceNode::SEMA_READER));
@@ -245,7 +245,7 @@ async fn persona_spirit_question_observation_uses_state_plane() {
         .await
         .expect("questions observed");
 
-    assert_eq!(reply.text(), "(QuestionsObserved ([]))");
+    assert_eq!(reply.text(), "(QuestionsObserved [])");
     assert!(reply.trace().contains(TraceNode::STATE_PLANE));
     assert!(!reply.trace().contains(TraceNode::RECORD_STORE));
 
@@ -318,7 +318,7 @@ async fn persona_spirit_record_subscription_uses_read_plane_then_subscription_pl
         .await
         .expect("entry accepted");
     let reply = runtime
-        .submit_text("(Watch (Records (None DescriptionOnly)))")
+        .submit_text("(Watch (Records (None SummaryOnly)))")
         .await
         .expect("record subscription opened");
 
@@ -350,7 +350,7 @@ async fn persona_spirit_subscription_retractions_use_subscription_plane() {
         .await
         .expect("state subscription opened");
     runtime
-        .submit_text("(Watch (Records (None DescriptionOnly)))")
+        .submit_text("(Watch (Records (None SummaryOnly)))")
         .await
         .expect("record subscription opened");
     let state_reply = runtime
@@ -542,13 +542,13 @@ async fn persona_spirit_shutdown_releases_store_for_restart() {
 
     let second_runtime = fixture.runtime().await;
     let reply = second_runtime
-        .submit_text("(Observe (Records (None None DescriptionOnly)))")
+        .submit_text("(Observe (Records (None None SummaryOnly)))")
         .await
         .expect("records observed after restart");
 
     assert_eq!(
         reply.text(),
-        "(RecordsObserved ([(1 [workspace] Decision [restart survives] Maximum)]))"
+        "(RecordsObserved [(1 [workspace] Decision [restart survives] Maximum)])"
     );
 
     second_runtime.stop().await.expect("second runtime stops");

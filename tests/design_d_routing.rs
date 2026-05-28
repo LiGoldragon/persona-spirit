@@ -173,7 +173,7 @@ fn observe_records() -> SpiritOperation {
     SpiritOperation::Observe(Observation::Records(RecordQuery {
         topic: None,
         kind: None,
-        mode: signal_persona_spirit::ObservationMode::DescriptionOnly,
+        mode: signal_persona_spirit::ObservationMode::SummaryOnly,
     }))
 }
 
@@ -218,9 +218,9 @@ fn assert_records_reply(reply: Reply<SpiritReply>, expected_description: &str) {
     let SubReply::Ok(SpiritReply::RecordsObserved(records)) = operation else {
         panic!("expected RecordsObserved reply, got {operation:?}");
     };
-    assert_eq!(records.records.len(), 1);
+    assert_eq!(records.records().len(), 1);
     assert_eq!(
-        records.records[0].description.as_str(),
+        records.records()[0].description.as_str(),
         expected_description
     );
 }
@@ -265,14 +265,14 @@ fn persona_spirit_cli_reaches_daemon_through_persona_handoff_router() {
 
     let observe_output = spawn_spirit(
         fixture.public_socket.clone(),
-        "(Observe (Records (None None DescriptionOnly)))",
+        "(Observe (Records (None None SummaryOnly)))",
     );
     runtime
         .block_on(router.handoff_one(&version))
         .expect("Persona hands observe client descriptor to Spirit");
     assert_spirit_output(
         observe_output.join().expect("observe client exits"),
-        "(RecordsObserved ([(1 [workspace] Decision [design d route] Maximum)]))",
+        "(RecordsObserved [(1 [workspace] Decision [design d route] Maximum)])",
     );
 
     let served = daemon_thread
@@ -382,14 +382,14 @@ fn persona_handoff_router_routes_new_connections_after_selector_flip_and_old_con
 
     let steady_output = spawn_spirit(
         public_socket.clone(),
-        "(Observe (Records (None None DescriptionOnly)))",
+        "(Observe (Records (None None SummaryOnly)))",
     );
     runtime
         .block_on(router.handoff_one_from_manager_store(&active_version_reader))
         .expect("Persona routes steady-state client to current version");
     assert_spirit_output(
         steady_output.join().expect("steady-state client exits"),
-        "(RecordsObserved ([(1 [workspace] Decision [selector seed] Maximum)]))",
+        "(RecordsObserved [(1 [workspace] Decision [selector seed] Maximum)])",
     );
 
     let mut old_stream =
@@ -425,14 +425,14 @@ fn persona_handoff_router_routes_new_connections_after_selector_flip_and_old_con
 
     let new_output = spawn_spirit(
         public_socket.clone(),
-        "(Observe (Records (None None DescriptionOnly)))",
+        "(Observe (Records (None None SummaryOnly)))",
     );
     runtime
         .block_on(router.handoff_one_from_manager_store(&active_version_reader))
         .expect("Persona routes new client to next version after selector flip");
     assert_spirit_output(
         new_output.join().expect("new client exits"),
-        "(RecordsObserved ([(1 [workspace] Decision [selector seed] Maximum)]))",
+        "(RecordsObserved [(1 [workspace] Decision [selector seed] Maximum)])",
     );
 
     let (current_handoffs, current_upgrades) = current_thread

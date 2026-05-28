@@ -132,30 +132,30 @@ fn spirit_migration_preserves_timestamp_and_identifier_order() {
     assert_eq!(outcome.records(), 2);
     let records = target_provenances(&fixture.target);
     assert_eq!(records.len(), 2);
-    assert_eq!(records[0].description.identifier, RecordIdentifier::new(1));
+    assert_eq!(records[0].summary.identifier, RecordIdentifier::new(1));
     assert_eq!(
-        records[0].description.topics,
+        records[0].summary.topics,
         Topics::single(Topic::new("spirit"))
     );
-    assert_eq!(records[0].description.kind, Kind::Decision);
+    assert_eq!(records[0].summary.kind, Kind::Decision);
     assert_eq!(
-        records[0].description.description,
+        records[0].summary.description,
         Description::new("first summary")
     );
-    assert_eq!(records[0].description.certainty, Magnitude::Maximum);
+    assert_eq!(records[0].summary.certainty, Magnitude::Maximum);
     assert_eq!(records[0].date, Date::new(2026, 5, 19));
     assert_eq!(records[0].time, Time::new(10, 15, 1));
-    assert_eq!(records[1].description.identifier, RecordIdentifier::new(2));
+    assert_eq!(records[1].summary.identifier, RecordIdentifier::new(2));
     assert_eq!(
-        records[1].description.topics,
+        records[1].summary.topics,
         Topics::single(Topic::new("schema"))
     );
-    assert_eq!(records[1].description.kind, Kind::Principle);
+    assert_eq!(records[1].summary.kind, Kind::Principle);
     assert_eq!(
-        records[1].description.description,
+        records[1].summary.description,
         Description::new("second summary")
     );
-    assert_eq!(records[1].description.certainty, Magnitude::Medium);
+    assert_eq!(records[1].summary.certainty, Magnitude::Medium);
     assert_eq!(records[1].date, Date::new(2026, 5, 20));
     assert_eq!(records[1].time, Time::new(11, 30, 2));
 
@@ -260,14 +260,14 @@ fn spirit_next_migration_projects_v020_topic_to_topic_vector() {
     assert_eq!(outcome.records(), 2);
     let records = target_provenances(&fixture.target);
     assert_eq!(
-        records[0].description.topics,
+        records[0].summary.topics,
         Topics::single(Topic::new("spirit"))
     );
-    assert_eq!(records[0].description.certainty, Magnitude::High);
+    assert_eq!(records[0].summary.certainty, Magnitude::High);
     assert_eq!(records[0].date, Date::new(2026, 5, 25));
     assert_eq!(records[0].time, Time::new(21, 15, 0));
     assert_eq!(
-        records[1].description.topics,
+        records[1].summary.topics,
         Topics::single(Topic::new("nota"))
     );
 }
@@ -308,7 +308,7 @@ fn spirit_next_migration_binary_reads_one_nota_argument_and_writes_completed_rep
     );
     let records = target_provenances(&fixture.target);
     assert_eq!(
-        records[0].description.topics,
+        records[0].summary.topics,
         Topics::single(Topic::new("spirit"))
     );
 }
@@ -462,7 +462,7 @@ fn target_provenances(target: &StorePath) -> Vec<signal_persona_spirit::RecordPr
         })
         .expect("records observed");
     match reply {
-        WorkingReply::RecordProvenancesObserved(records) => records.records,
+        WorkingReply::RecordProvenancesObserved(records) => records.into_records(),
         other => panic!("expected provenance reply, got {other:?}"),
     }
 }

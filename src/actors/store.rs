@@ -1,7 +1,7 @@
 use kameo::actor::{Actor, ActorRef};
 use kameo::message::{Context, Message};
 use signal_persona_spirit::{
-    RecordDescription, RecordIdentifierQuery, RecordObservation, RecordSubscription,
+    RecordIdentifierQuery, RecordObservation, RecordSubscription, RecordSummary,
     Reply as WorkingReply,
 };
 use signal_version_handover::{HandoverMarker, MarkerRequest};
@@ -54,7 +54,7 @@ pub struct ReadHandoverMarker {
 
 #[derive(Debug, Clone, PartialEq, Eq, kameo::Reply)]
 pub struct RecordSnapshot {
-    pub records: Vec<RecordDescription>,
+    pub records: Vec<RecordSummary>,
     pub trace: ActorTrace,
 }
 
@@ -125,7 +125,7 @@ impl RecordStore {
         trace.record(TraceNode::SEMA_READER, TraceAction::MessageReceived);
         let records = self
             .store
-            .descriptions_for_topic(subscription.topic.as_ref())?;
+            .summaries_for_topic(subscription.topic.as_ref())?;
         trace.record(TraceNode::SEMA_READER, TraceAction::RecordsRead);
         trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReplied);
         Ok(RecordSnapshot { records, trace })

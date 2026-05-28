@@ -8,10 +8,9 @@ use sema_engine::{
     TableReference,
 };
 use signal_persona_spirit::{
-    Date, Entry, Kind, ObservationMode, RecordAccepted, RecordDescription, RecordIdentifier,
-    RecordIdentifierQuery, RecordObservation, RecordProvenance, RecordProvenancesObserved,
-    RecordQuery, RecordsObserved, Reply as WorkingReply, Time, Topic, TopicCount, Topics,
-    TopicsObserved,
+    Date, Entry, Kind, ObservationMode, RecordAccepted, RecordIdentifier, RecordIdentifierQuery,
+    RecordObservation, RecordProvenance, RecordProvenancesObserved, RecordQuery, RecordSummary,
+    RecordsObserved, Reply as WorkingReply, Time, Topic, TopicCount, Topics, TopicsObserved,
 };
 use signal_version_handover::{HandoverMarker, MarkerRequest};
 use version_projection::{ComponentName, ContractVersion, Projected};
@@ -143,21 +142,21 @@ impl SpiritStore {
     }
 
     pub fn observe_topics(&self) -> Result<WorkingReply> {
-        Ok(WorkingReply::TopicsObserved(TopicsObserved {
-            topics: self.topic_counts()?,
-        }))
+        Ok(WorkingReply::TopicsObserved(TopicsObserved::new(
+            self.topic_counts()?,
+        )))
     }
 
-    pub fn descriptions_for_topic(&self, topic: Option<&Topic>) -> Result<Vec<RecordDescription>> {
+    pub fn summaries_for_topic(&self, topic: Option<&Topic>) -> Result<Vec<RecordSummary>> {
         let query = RecordQuery {
             topic: topic.cloned(),
             kind: None,
-            mode: ObservationMode::DescriptionOnly,
+            mode: ObservationMode::SummaryOnly,
         };
         Ok(self
             .records_for_query(&query)?
             .iter()
-            .map(StoredRecord::description)
+            .map(StoredRecord::summary)
             .collect())
     }
 
@@ -252,13 +251,13 @@ impl RecordReply {
     fn into_working_reply(self) -> WorkingReply {
         let Self { records, mode } = self;
         match mode {
-            ObservationMode::DescriptionOnly => WorkingReply::RecordsObserved(RecordsObserved {
-                records: records.iter().map(StoredRecord::description).collect(),
-            }),
+            ObservationMode::SummaryOnly => WorkingReply::RecordsObserved(RecordsObserved::new(
+                records.iter().map(StoredRecord::summary).collect(),
+            )),
             ObservationMode::WithProvenance => {
-                WorkingReply::RecordProvenancesObserved(RecordProvenancesObserved {
-                    records: records.into_iter().map(StoredRecord::provenance).collect(),
-                })
+                WorkingReply::RecordProvenancesObserved(RecordProvenancesObserved::new(
+                    records.into_iter().map(StoredRecord::provenance).collect(),
+                ))
             }
         }
     }
@@ -348,8 +347,8 @@ impl StoredRecord {
         Self { identifier, entry }
     }
 
-    fn description(&self) -> RecordDescription {
-        RecordDescription {
+    fn summary(&self) -> RecordSummary {
+        RecordSummary {
             identifier: self.identifier,
             topics: self.entry.entry.topics.clone(),
             kind: self.entry.entry.kind,
@@ -360,7 +359,7 @@ impl StoredRecord {
 
     fn provenance(self) -> RecordProvenance {
         RecordProvenance {
-            description: self.description(),
+            summary: self.summary(),
             date: self.entry.date,
             time: self.entry.time,
         }

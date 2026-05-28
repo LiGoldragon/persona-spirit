@@ -146,7 +146,7 @@ fn observe_all() -> WorkingOperation {
     WorkingOperation::Observe(Observation::Records(RecordQuery {
         topic: None,
         kind: None,
-        mode: ObservationMode::DescriptionOnly,
+        mode: ObservationMode::SummaryOnly,
     }))
 }
 
@@ -367,15 +367,15 @@ fn persona_spirit_daemon_serves_signal_frames_through_actor_root() {
     let observed = client.submit(observe_all()).expect("records observed");
     assert_eq!(
         observed,
-        WorkingReply::RecordsObserved(signal_persona_spirit::RecordsObserved {
-            records: vec![signal_persona_spirit::RecordDescription {
+        WorkingReply::RecordsObserved(signal_persona_spirit::RecordsObserved::new(vec![
+            signal_persona_spirit::RecordSummary {
                 identifier: signal_persona_spirit::RecordIdentifier::new(1),
                 topics: Topics::single(Topic::new("workspace")),
                 kind: Kind::Decision,
                 description: Description::new("daemon accepted"),
                 certainty: Magnitude::Maximum,
-            }],
-        })
+            }
+        ]))
     );
 
     let served = handle
@@ -492,9 +492,7 @@ fn persona_spirit_daemon_rejects_multi_operation_batches_before_any_commit() {
         .expect("records observed");
     assert_eq!(
         observed,
-        WorkingReply::RecordsObserved(signal_persona_spirit::RecordsObserved {
-            records: Vec::new(),
-        })
+        WorkingReply::RecordsObserved(signal_persona_spirit::RecordsObserved::new(Vec::new()))
     );
 
     handle
@@ -545,7 +543,7 @@ fn persona_spirit_daemon_rejects_mismatched_short_header_before_dispatch() {
         .expect("store opens after rejected request");
     assert_eq!(
         store.observe_topics().expect("topics observed"),
-        WorkingReply::TopicsObserved(signal_persona_spirit::TopicsObserved { topics: vec![] })
+        WorkingReply::TopicsObserved(signal_persona_spirit::TopicsObserved::new(vec![]))
     );
 }
 
@@ -573,15 +571,15 @@ fn persona_spirit_daemon_classifies_state_frames_through_actor_root() {
     let observed = client.submit(observe_all()).expect("records observed");
     assert_eq!(
         observed,
-        WorkingReply::RecordsObserved(signal_persona_spirit::RecordsObserved {
-            records: vec![signal_persona_spirit::RecordDescription {
+        WorkingReply::RecordsObserved(signal_persona_spirit::RecordsObserved::new(vec![
+            signal_persona_spirit::RecordSummary {
                 identifier: signal_persona_spirit::RecordIdentifier::new(1),
                 topics: Topics::single(Topic::new("unclassified")),
                 kind: Kind::Clarification,
                 description: Description::new("daemon raw intent"),
                 certainty: Magnitude::Minimum,
-            }],
-        })
+            }
+        ]))
     );
 
     handle
@@ -617,18 +615,16 @@ fn persona_spirit_daemon_serves_topic_catalog_through_signal_frames() {
     let observed = client.submit(observe_topics()).expect("topics observed");
     assert_eq!(
         observed,
-        WorkingReply::TopicsObserved(signal_persona_spirit::TopicsObserved {
-            topics: vec![
-                signal_persona_spirit::TopicCount {
-                    topic: Topic::new("naming"),
-                    entries: 1,
-                },
-                signal_persona_spirit::TopicCount {
-                    topic: Topic::new("workspace"),
-                    entries: 2,
-                },
-            ],
-        })
+        WorkingReply::TopicsObserved(signal_persona_spirit::TopicsObserved::new(vec![
+            signal_persona_spirit::TopicCount {
+                topic: Topic::new("naming"),
+                entries: 1,
+            },
+            signal_persona_spirit::TopicCount {
+                topic: Topic::new("workspace"),
+                entries: 2,
+            },
+        ]))
     );
 
     handle
@@ -1023,7 +1019,7 @@ fn persona_spirit_upgrade_readiness_freezes_public_writes_until_completion() {
         .expect("ordinary read remains available during handover mode");
     assert_eq!(
         read_reply,
-        WorkingReply::TopicsObserved(signal_persona_spirit::TopicsObserved { topics: vec![] })
+        WorkingReply::TopicsObserved(signal_persona_spirit::TopicsObserved::new(vec![]))
     );
 
     let completion_client = client.clone();

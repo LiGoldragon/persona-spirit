@@ -63,9 +63,7 @@ impl StatePlane {
         trace.record(TraceNode::STATE_PLANE, TraceAction::RecordsRead);
         trace.record(TraceNode::STATE_PLANE, TraceAction::MessageReplied);
         PipelineReply::new(
-            WorkingReply::StateObserved(StateObserved {
-                state: self.working.state.clone(),
-            }),
+            WorkingReply::StateObserved(StateObserved::new(self.working.state.clone())),
             trace,
         )
     }
@@ -75,9 +73,7 @@ impl StatePlane {
         trace.record(TraceNode::STATE_PLANE, TraceAction::RecordsRead);
         trace.record(TraceNode::STATE_PLANE, TraceAction::MessageReplied);
         PipelineReply::new(
-            WorkingReply::QuestionsObserved(QuestionsObserved {
-                questions: self.working.questions.clone(),
-            }),
+            WorkingReply::QuestionsObserved(QuestionsObserved::new(self.working.questions.clone())),
             trace,
         )
     }

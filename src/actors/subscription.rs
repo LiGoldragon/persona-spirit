@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use kameo::actor::{Actor, ActorRef};
 use kameo::message::{Context, Message};
 use signal_persona_spirit::{
-    PresenceView, RecordDescription, RecordSubscription, RecordSubscriptionToken,
+    PresenceView, RecordSubscription, RecordSubscriptionToken, RecordSummary,
     Reply as WorkingReply, StateSubscriptionToken, SubscriptionOpened, SubscriptionRetracted,
     SubscriptionSnapshot, SubscriptionToken,
 };
@@ -35,7 +35,7 @@ pub struct OpenStateSubscription {
 
 pub struct OpenRecordSubscription {
     pub subscription: RecordSubscription,
-    pub snapshot: Vec<RecordDescription>,
+    pub snapshot: Vec<RecordSummary>,
     pub trace: ActorTrace,
 }
 
@@ -91,7 +91,7 @@ impl SubscriptionPlane {
     fn open_records(
         &mut self,
         subscription: RecordSubscription,
-        snapshot: Vec<RecordDescription>,
+        snapshot: Vec<RecordSummary>,
         mut trace: ActorTrace,
     ) -> PipelineReply {
         trace.record(TraceNode::SUBSCRIPTION_PLANE, TraceAction::MessageReceived);

@@ -117,7 +117,7 @@ async fn spirit_record_query_projects_to_matched_observation() {
     let request = WorkingOperation::Observe(Observation::Records(RecordQuery {
         topic: None,
         kind: None,
-        mode: ObservationMode::DescriptionOnly,
+        mode: ObservationMode::SummaryOnly,
     }));
     let runtime_reply = runtime
         .submit_request(request.clone())
@@ -145,7 +145,7 @@ async fn spirit_record_identifier_query_projects_to_matched_observation() {
     let request =
         WorkingOperation::Observe(Observation::RecordIdentifiers(RecordIdentifierQuery::new(
             RecordIdentifierSelection::Exact(RecordIdentifier::new(1)),
-            ObservationMode::DescriptionOnly,
+            ObservationMode::SummaryOnly,
         )));
     let runtime_reply = runtime
         .submit_request(request.clone())
