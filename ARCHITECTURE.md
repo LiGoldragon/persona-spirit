@@ -43,6 +43,14 @@ changed only through `owner-signal-persona-spirit`. Working state records
 captured intent, psyche presence, pending clarification questions, and
 downstream owner-Mutate audit once the runtime lands.
 
+Record removal is **irreversible**. The `Remove` operation Retracts the
+record from the sema-engine database; redb's copy-on-write page reuse then
+overwrites the freed bytes as the daemon keeps writing, so a removed intent
+record cannot be undone and is not forensically recoverable (see `sema`
+ARCHITECTURE §"Deletion durability"). Removing an intent record therefore
+requires capturing its full text and provenance first —
+tombstone-before-remove.
+
 ## Actor topology
 
 The daemon keeps the Kameo actor tree alive behind three domain Unix sockets
