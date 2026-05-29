@@ -555,6 +555,43 @@ fn persona_spirit_client_filters_record_observation_by_topic_and_kind() {
 }
 
 #[test]
+fn persona_spirit_client_filters_record_observation_by_certainty() {
+    let fixture = StoreFixture::new("certainty-filter");
+    fixture
+        .reply_text("(Record ([draft] Decision [minimum candidate] Minimum))")
+        .expect("minimum entry persisted");
+    fixture
+        .reply_text("(Record ([draft] Correction [low confidence] Low))")
+        .expect("low entry persisted");
+    fixture
+        .reply_text("(Record ([settled] Principle [high confidence] High))")
+        .expect("high entry persisted");
+
+    let removal_candidates = fixture
+        .reply_text("(Observe (Records ((Any []) None (Exact Minimum) SummaryOnly)))")
+        .expect("minimum certainty records observed");
+    let at_most_low = fixture
+        .reply_text("(Observe (Records ((Any []) None (AtMost Low) SummaryOnly)))")
+        .expect("low certainty records observed");
+    let at_least_high = fixture
+        .reply_text("(Observe (Records ((Any []) None (AtLeast High) SummaryOnly)))")
+        .expect("high certainty records observed");
+
+    assert_eq!(
+        removal_candidates,
+        "(RecordsObserved [(1 [draft] Decision [minimum candidate] Minimum)])"
+    );
+    assert_eq!(
+        at_most_low,
+        "(RecordsObserved [(1 [draft] Decision [minimum candidate] Minimum) (2 [draft] Correction [low confidence] Low)])"
+    );
+    assert_eq!(
+        at_least_high,
+        "(RecordsObserved [(3 [settled] Principle [high confidence] High)])"
+    );
+}
+
+#[test]
 fn persona_spirit_client_lists_topics_with_entry_counts() {
     let fixture = StoreFixture::new("topic-counts");
     fixture

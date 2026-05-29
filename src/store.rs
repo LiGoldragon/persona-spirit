@@ -8,10 +8,10 @@ use sema_engine::{
     TableName, TableReference,
 };
 use signal_persona_spirit::{
-    Date, Entry, Kind, ObservationMode, RecordAccepted, RecordIdentifier, RecordIdentifierQuery,
-    RecordObservation, RecordProvenance, RecordProvenancesObserved, RecordQuery, RecordRemoved,
-    RecordSummary, RecordsObserved, Reply as WorkingReply, Time, Topic, TopicCount, TopicSelection,
-    Topics, TopicsObserved,
+    CertaintySelection, Date, Entry, Kind, ObservationMode, RecordAccepted, RecordIdentifier,
+    RecordIdentifierQuery, RecordObservation, RecordProvenance, RecordProvenancesObserved,
+    RecordQuery, RecordRemoved, RecordSummary, RecordsObserved, Reply as WorkingReply, Time, Topic,
+    TopicCount, TopicSelection, Topics, TopicsObserved,
 };
 use signal_version_handover::{HandoverMarker, MarkerRequest};
 use version_projection::{ComponentName, ContractVersion, Projected};
@@ -163,6 +163,7 @@ impl SpiritStore {
         let query = RecordQuery {
             topic_selection,
             kind: None,
+            certainty_selection: CertaintySelection::Any,
             mode: ObservationMode::SummaryOnly,
         };
         Ok(self
@@ -298,6 +299,7 @@ struct HandoverClockReading {
 struct RecordFilter<'query> {
     topic_selection: &'query TopicSelection,
     kind: Option<Kind>,
+    certainty_selection: CertaintySelection,
 }
 
 impl HandoverClock {
@@ -396,11 +398,12 @@ impl<'query> RecordFilter<'query> {
         Self {
             topic_selection: &query.topic_selection,
             kind: query.kind,
+            certainty_selection: query.certainty_selection,
         }
     }
 
     fn matches(&self, record: &StoredRecord) -> bool {
-        self.matches_topic(record) && self.matches_kind(record)
+        self.matches_topic(record) && self.matches_kind(record) && self.matches_certainty(record)
     }
 
     fn matches_topic(&self, record: &StoredRecord) -> bool {
@@ -411,6 +414,11 @@ impl<'query> RecordFilter<'query> {
         self.kind
             .map(|expected| record.entry.entry.kind == expected)
             .unwrap_or(true)
+    }
+
+    fn matches_certainty(&self, record: &StoredRecord) -> bool {
+        self.certainty_selection
+            .matches(record.entry.entry.certainty)
     }
 }
 

@@ -10,8 +10,8 @@ use sema_engine::{
     Assertion, Engine, EngineOpen, EngineRecord, RecordKey, TableDescriptor, TableName,
 };
 use signal_persona_spirit::{
-    Date, Description, Entry, Kind, ObservationMode, RecordIdentifier, RecordObservation,
-    RecordQuery, Reply as WorkingReply, Time, Topic, TopicSelection, Topics,
+    CertaintySelection, Date, Description, Entry, Kind, ObservationMode, RecordIdentifier,
+    RecordObservation, RecordQuery, Reply as WorkingReply, Time, Topic, TopicSelection, Topics,
     migration::{v010, v020},
 };
 use signal_sema::Magnitude;
@@ -457,6 +457,7 @@ fn target_provenances(target: &StorePath) -> Vec<signal_persona_spirit::RecordPr
             query: RecordQuery {
                 topic_selection: TopicSelection::any(),
                 kind: None,
+                certainty_selection: CertaintySelection::Any,
                 mode: ObservationMode::WithProvenance,
             },
         })

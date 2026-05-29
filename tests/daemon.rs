@@ -29,9 +29,9 @@ use signal_frame::{
     RequestPayload, RetryClassification, SessionEpoch, SubReply,
 };
 use signal_persona_spirit::{
-    Date, Description, Entry, Frame, FrameBody, Kind, Observation, ObservationMode,
-    Operation as WorkingOperation, RecordQuery, Reply as WorkingReply, Statement, StatementText,
-    Time, Topic, TopicSelection, Topics,
+    CertaintySelection, Date, Description, Entry, Frame, FrameBody, Kind, Observation,
+    ObservationMode, Operation as WorkingOperation, RecordQuery, Reply as WorkingReply, Statement,
+    StatementText, Time, Topic, TopicSelection, Topics,
 };
 use signal_sema::Magnitude;
 use signal_version_handover::{
@@ -146,6 +146,7 @@ fn observe_all() -> WorkingOperation {
     WorkingOperation::Observe(Observation::Records(RecordQuery {
         topic_selection: TopicSelection::any(),
         kind: None,
+        certainty_selection: CertaintySelection::Any,
         mode: ObservationMode::SummaryOnly,
     }))
 }

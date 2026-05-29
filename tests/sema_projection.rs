@@ -3,7 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use persona_spirit::{Command, Effect, SpiritActorRuntime, StoreLocation};
 use signal_frame::SubscriptionTokenInner;
 use signal_persona_spirit::{
-    Description, Entry, Kind, Observation, ObservationMode, ObserverFilter,
+    CertaintySelection, Description, Entry, Kind, Observation, ObservationMode, ObserverFilter,
     ObserverSubscriptionToken, Operation as WorkingOperation, RecordIdentifier,
     RecordIdentifierQuery, RecordIdentifierSelection, RecordQuery, Reply as WorkingReply,
     StateSubscriptionToken, Statement, StatementText, Subscription, SubscriptionToken, Topic,
@@ -117,6 +117,7 @@ async fn spirit_record_query_projects_to_matched_observation() {
     let request = WorkingOperation::Observe(Observation::Records(RecordQuery {
         topic_selection: TopicSelection::any(),
         kind: None,
+        certainty_selection: CertaintySelection::Any,
         mode: ObservationMode::SummaryOnly,
     }));
     let runtime_reply = runtime

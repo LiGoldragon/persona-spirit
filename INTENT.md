@@ -265,6 +265,11 @@ Four related v0.3.0 disciplines:
 - **Multi-topic records and queries.** A `Record` carries a non-empty
   topic vector; filters can match one-or-more topics or every requested
   topic, and the topic catalog counts topic memberships.
+- **Certainty filtering and removal-candidate review.** Stored certainty is
+  required `Magnitude`, not an absent value; `Minimum` is the lowest stored
+  certainty. Record observations can filter certainty with `Any`, `Exact`,
+  `AtMost`, or `AtLeast`, and the removal-candidate review query is exact
+  `Minimum`.
 
 ## Daemon configuration — 9-field positional argument
 
