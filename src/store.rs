@@ -10,8 +10,8 @@ use sema_engine::{
 use signal_persona_spirit::{
     Date, Entry, Kind, ObservationMode, RecordAccepted, RecordIdentifier, RecordIdentifierQuery,
     RecordObservation, RecordProvenance, RecordProvenancesObserved, RecordQuery, RecordRemoved,
-    RecordSummary, RecordsObserved, Reply as WorkingReply, Time, Topic, TopicCount, Topics,
-    TopicsObserved,
+    RecordSummary, RecordsObserved, Reply as WorkingReply, Time, Topic, TopicCount, TopicSelection,
+    Topics, TopicsObserved,
 };
 use signal_version_handover::{HandoverMarker, MarkerRequest};
 use version_projection::{ComponentName, ContractVersion, Projected};
@@ -156,8 +156,12 @@ impl SpiritStore {
     }
 
     pub fn summaries_for_topic(&self, topic: Option<&Topic>) -> Result<Vec<RecordSummary>> {
+        let topic_selection = topic
+            .cloned()
+            .map(|topic| TopicSelection::partial(vec![topic]))
+            .unwrap_or_else(TopicSelection::any);
         let query = RecordQuery {
-            topic: topic.cloned(),
+            topic_selection,
             kind: None,
             mode: ObservationMode::SummaryOnly,
         };
@@ -292,7 +296,7 @@ struct HandoverClockReading {
 }
 
 struct RecordFilter<'query> {
-    topic: Option<&'query Topic>,
+    topic_selection: &'query TopicSelection,
     kind: Option<Kind>,
 }
 
@@ -390,7 +394,7 @@ impl StoredRecord {
 impl<'query> RecordFilter<'query> {
     fn new(query: &'query RecordQuery) -> Self {
         Self {
-            topic: query.topic.as_ref(),
+            topic_selection: &query.topic_selection,
             kind: query.kind,
         }
     }
@@ -400,9 +404,7 @@ impl<'query> RecordFilter<'query> {
     }
 
     fn matches_topic(&self, record: &StoredRecord) -> bool {
-        self.topic
-            .map(|expected| record.entry.entry.topics.contains(expected))
-            .unwrap_or(true)
+        self.topic_selection.matches(&record.entry.entry.topics)
     }
 
     fn matches_kind(&self, record: &StoredRecord) -> bool {

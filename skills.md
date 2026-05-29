@@ -89,8 +89,8 @@ Contract records stay in `signal-persona-spirit` and
 - Subscription retractions return typed close acknowledgements through
   `SubscriptionPlane`.
 - `RecordObservation` queries return descriptions by default and provenance only
-  when the caller asks for it. They filter by optional topic membership and
-  optional kind inside the daemon's read path.
+  when the caller asks for it. They filter by `Any`, `Partial`, or `Full`
+  topic selection plus optional kind inside the daemon's read path.
 - `Observation::RecordIdentifiers` queries return descriptions or provenance
   for an exact `RecordIdentifier` or inclusive `RecordIdentifierRange`.
 - `Remove(RecordIdentifier)` retracts one stored intent entry through

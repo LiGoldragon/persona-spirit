@@ -11,7 +11,7 @@ use sema_engine::{
 };
 use signal_persona_spirit::{
     Date, Description, Entry, Kind, ObservationMode, RecordIdentifier, RecordObservation,
-    RecordQuery, Reply as WorkingReply, Time, Topic, Topics,
+    RecordQuery, Reply as WorkingReply, Time, Topic, TopicSelection, Topics,
     migration::{v010, v020},
 };
 use signal_sema::Magnitude;
@@ -455,7 +455,7 @@ fn target_provenances(target: &StorePath) -> Vec<signal_persona_spirit::RecordPr
     let reply = store
         .observe_records(RecordObservation {
             query: RecordQuery {
-                topic: None,
+                topic_selection: TopicSelection::any(),
                 kind: None,
                 mode: ObservationMode::WithProvenance,
             },

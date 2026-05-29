@@ -23,7 +23,7 @@ use persona_spirit::{
 use signal_frame::{Reply, SubReply};
 use signal_persona_origin::EngineIdentifier;
 use signal_persona_spirit::{
-    Observation, Operation as SpiritOperation, RecordQuery, Reply as SpiritReply,
+    Observation, Operation as SpiritOperation, RecordQuery, Reply as SpiritReply, TopicSelection,
 };
 use version_projection::{ComponentName, ContractVersion};
 
@@ -171,7 +171,7 @@ impl SpiritInstance {
 
 fn observe_records() -> SpiritOperation {
     SpiritOperation::Observe(Observation::Records(RecordQuery {
-        topic: None,
+        topic_selection: TopicSelection::any(),
         kind: None,
         mode: signal_persona_spirit::ObservationMode::SummaryOnly,
     }))
@@ -265,7 +265,7 @@ fn persona_spirit_cli_reaches_daemon_through_persona_handoff_router() {
 
     let observe_output = spawn_spirit(
         fixture.public_socket.clone(),
-        "(Observe (Records (None None SummaryOnly)))",
+        "(Observe (Records ((Any []) None SummaryOnly)))",
     );
     runtime
         .block_on(router.handoff_one(&version))
@@ -382,7 +382,7 @@ fn persona_handoff_router_routes_new_connections_after_selector_flip_and_old_con
 
     let steady_output = spawn_spirit(
         public_socket.clone(),
-        "(Observe (Records (None None SummaryOnly)))",
+        "(Observe (Records ((Any []) None SummaryOnly)))",
     );
     runtime
         .block_on(router.handoff_one_from_manager_store(&active_version_reader))
@@ -425,7 +425,7 @@ fn persona_handoff_router_routes_new_connections_after_selector_flip_and_old_con
 
     let new_output = spawn_spirit(
         public_socket.clone(),
-        "(Observe (Records (None None SummaryOnly)))",
+        "(Observe (Records ((Any []) None SummaryOnly)))",
     );
     runtime
         .block_on(router.handoff_one_from_manager_store(&active_version_reader))

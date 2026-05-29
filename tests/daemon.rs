@@ -31,7 +31,7 @@ use signal_frame::{
 use signal_persona_spirit::{
     Date, Description, Entry, Frame, FrameBody, Kind, Observation, ObservationMode,
     Operation as WorkingOperation, RecordQuery, Reply as WorkingReply, Statement, StatementText,
-    Time, Topic, Topics,
+    Time, Topic, TopicSelection, Topics,
 };
 use signal_sema::Magnitude;
 use signal_version_handover::{
@@ -144,7 +144,7 @@ fn mirrored_stamped_entry_payload(description: &str) -> Vec<u8> {
 
 fn observe_all() -> WorkingOperation {
     WorkingOperation::Observe(Observation::Records(RecordQuery {
-        topic: None,
+        topic_selection: TopicSelection::any(),
         kind: None,
         mode: ObservationMode::SummaryOnly,
     }))

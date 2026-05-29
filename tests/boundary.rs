@@ -244,7 +244,7 @@ fn persona_spirit_client_accepts_high_magnitude_and_observes_it_back() {
         .expect("high-magnitude entry persisted");
 
     let reply = fixture
-        .reply_text("(Observe (Records (None None SummaryOnly)))")
+        .reply_text("(Observe (Records ((Any []) None SummaryOnly)))")
         .expect("records observed");
 
     assert_eq!(
@@ -282,7 +282,7 @@ fn persona_spirit_client_persists_entries_for_later_summary_observation() {
         .expect("second entry persisted");
 
     let reply = fixture
-        .reply_text("(Observe (Records (None None SummaryOnly)))")
+        .reply_text("(Observe (Records ((Any []) None SummaryOnly)))")
         .expect("records observed");
 
     assert_eq!(
@@ -346,7 +346,7 @@ fn persona_spirit_client_removes_entry_and_excludes_it_from_observation() {
 
     let removed = fixture.reply_text("(Remove 1)").expect("entry removed");
     let observed = fixture
-        .reply_text("(Observe (Records (None None SummaryOnly)))")
+        .reply_text("(Observe (Records ((Any []) None SummaryOnly)))")
         .expect("records observed");
 
     assert_eq!(removed, "(RecordRemoved 1)");
@@ -443,7 +443,7 @@ fn persona_spirit_client_filters_record_observation_by_topic() {
         .expect("naming entry persisted");
 
     let reply = fixture
-        .reply_text("(Observe (Records ((Some naming) None SummaryOnly)))")
+        .reply_text("(Observe (Records ((Partial [naming]) None SummaryOnly)))")
         .expect("records observed");
 
     assert_eq!(
@@ -460,13 +460,13 @@ fn persona_spirit_client_filters_record_observation_by_topic_membership() {
         .expect("multi-topic entry persisted");
 
     let spirit = fixture
-        .reply_text("(Observe (Records ((Some spirit) None SummaryOnly)))")
+        .reply_text("(Observe (Records ((Partial [spirit]) None SummaryOnly)))")
         .expect("spirit records observed");
     let nota = fixture
-        .reply_text("(Observe (Records ((Some nota) None SummaryOnly)))")
+        .reply_text("(Observe (Records ((Partial [nota]) None SummaryOnly)))")
         .expect("nota records observed");
     let schema = fixture
-        .reply_text("(Observe (Records ((Some schema) None SummaryOnly)))")
+        .reply_text("(Observe (Records ((Partial [schema]) None SummaryOnly)))")
         .expect("schema records observed");
 
     assert_eq!(
@@ -475,6 +475,40 @@ fn persona_spirit_client_filters_record_observation_by_topic_membership() {
     );
     assert_eq!(spirit, nota);
     assert_eq!(schema, "(RecordsObserved [])");
+}
+
+#[test]
+fn persona_spirit_client_filters_record_observation_by_partial_and_full_topic_sets() {
+    let fixture = StoreFixture::new("topic-set-filter");
+    fixture
+        .reply_text("(Record ([spirit nota] Correction [shared topic set] Maximum))")
+        .expect("multi-topic entry persisted");
+    fixture
+        .reply_text("(Record ([schema] Principle [schema entry] Maximum))")
+        .expect("schema entry persisted");
+    fixture
+        .reply_text("(Record ([naming] Decision [naming entry] Maximum))")
+        .expect("naming entry persisted");
+
+    let partial = fixture
+        .reply_text("(Observe (Records ((Partial [spirit schema]) None SummaryOnly)))")
+        .expect("partial topic-set records observed");
+    let full_match = fixture
+        .reply_text("(Observe (Records ((Full [spirit nota]) None SummaryOnly)))")
+        .expect("full topic-set records observed");
+    let full_miss = fixture
+        .reply_text("(Observe (Records ((Full [spirit schema]) None SummaryOnly)))")
+        .expect("full topic-set miss observed");
+
+    assert_eq!(
+        partial,
+        "(RecordsObserved [(1 [spirit nota] Correction [shared topic set] Maximum) (2 [schema] Principle [schema entry] Maximum)])"
+    );
+    assert_eq!(
+        full_match,
+        "(RecordsObserved [(1 [spirit nota] Correction [shared topic set] Maximum)])"
+    );
+    assert_eq!(full_miss, "(RecordsObserved [])");
 }
 
 #[test]
@@ -488,7 +522,7 @@ fn persona_spirit_client_filters_record_observation_by_kind() {
         .expect("correction entry persisted");
 
     let reply = fixture
-        .reply_text("(Observe (Records (None (Some Principle) SummaryOnly)))")
+        .reply_text("(Observe (Records ((Any []) (Some Principle) SummaryOnly)))")
         .expect("records observed");
 
     assert_eq!(
@@ -511,7 +545,7 @@ fn persona_spirit_client_filters_record_observation_by_topic_and_kind() {
         .expect("naming principle persisted");
 
     let reply = fixture
-        .reply_text("(Observe (Records ((Some spirit) (Some Principle) SummaryOnly)))")
+        .reply_text("(Observe (Records ((Partial [spirit]) (Some Principle) SummaryOnly)))")
         .expect("records observed");
 
     assert_eq!(
@@ -579,7 +613,7 @@ fn persona_spirit_client_returns_provenance_only_when_requested() {
         .expect("entry persisted");
 
     let reply = fixture
-        .reply_text("(Observe (Records (None None WithProvenance)))")
+        .reply_text("(Observe (Records ((Any []) None WithProvenance)))")
         .expect("provenance observed");
 
     assert!(reply.starts_with(
@@ -599,7 +633,7 @@ fn persona_spirit_client_repeated_entries_remain_distinct_records() {
         .expect("second entry persisted");
 
     let reply = fixture
-        .reply_text("(Observe (Records ((Some naming) None SummaryOnly)))")
+        .reply_text("(Observe (Records ((Partial [naming]) None SummaryOnly)))")
         .expect("records observed");
 
     assert_eq!(

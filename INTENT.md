@@ -262,9 +262,9 @@ Four related v0.3.0 disciplines:
   token-cheap.
 - **User-creatable topic strings.** Any new topic word a `Record`
   uses is registered by use; topics are not a pre-declared enum.
-- **Multi-topic records.** A `Record` carries a non-empty topic
-  vector; filters match membership, and the topic catalog counts
-  topic memberships.
+- **Multi-topic records and queries.** A `Record` carries a non-empty
+  topic vector; filters can match one-or-more topics or every requested
+  topic, and the topic catalog counts topic memberships.
 
 ## Daemon configuration — 9-field positional argument
 

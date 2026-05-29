@@ -7,7 +7,7 @@ use signal_persona_spirit::{
     ObserverSubscriptionToken, Operation as WorkingOperation, RecordIdentifier,
     RecordIdentifierQuery, RecordIdentifierSelection, RecordQuery, Reply as WorkingReply,
     StateSubscriptionToken, Statement, StatementText, Subscription, SubscriptionToken, Topic,
-    Topics,
+    TopicSelection, Topics,
 };
 use signal_sema::{Magnitude, SemaObservation, SemaOperation, SemaOutcome};
 
@@ -115,7 +115,7 @@ async fn spirit_record_query_projects_to_matched_observation() {
         .await
         .expect("record accepted");
     let request = WorkingOperation::Observe(Observation::Records(RecordQuery {
-        topic: None,
+        topic_selection: TopicSelection::any(),
         kind: None,
         mode: ObservationMode::SummaryOnly,
     }));
