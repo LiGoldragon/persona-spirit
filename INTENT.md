@@ -266,10 +266,10 @@ Four related v0.3.0 disciplines:
   topic vector; filters can match one-or-more topics or every requested
   topic, and the topic catalog counts topic memberships.
 - **Certainty filtering and removal-candidate review.** Stored certainty is
-  required `Magnitude`, not an absent value; `Minimum` is the lowest stored
-  certainty. Record observations can filter certainty with `Any`, `Exact`,
-  `AtMost`, or `AtLeast`, and the removal-candidate review query is exact
-  `Minimum`.
+  required `Magnitude`, not an absent value; `Zero` is the lowest semantic
+  certainty and Spirit interprets exact `Zero` as a removal candidate.
+  `Minimum` remains weak but real intent. Record observations can filter
+  certainty with `Any`, `Exact`, `AtMost`, or `AtLeast`.
 
 ## Daemon configuration — 9-field positional argument
 

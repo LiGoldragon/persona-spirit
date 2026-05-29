@@ -558,7 +558,10 @@ fn persona_spirit_client_filters_record_observation_by_topic_and_kind() {
 fn persona_spirit_client_filters_record_observation_by_certainty() {
     let fixture = StoreFixture::new("certainty-filter");
     fixture
-        .reply_text("(Record ([draft] Decision [minimum candidate] Minimum))")
+        .reply_text("(Record ([draft] Decision [zero candidate] Zero))")
+        .expect("zero entry persisted");
+    fixture
+        .reply_text("(Record ([draft] Principle [minimum weak intent] Minimum))")
         .expect("minimum entry persisted");
     fixture
         .reply_text("(Record ([draft] Correction [low confidence] Low))")
@@ -568,8 +571,8 @@ fn persona_spirit_client_filters_record_observation_by_certainty() {
         .expect("high entry persisted");
 
     let removal_candidates = fixture
-        .reply_text("(Observe (Records ((Any []) None (Exact Minimum) SummaryOnly)))")
-        .expect("minimum certainty records observed");
+        .reply_text("(Observe (Records ((Any []) None (Exact Zero) SummaryOnly)))")
+        .expect("zero certainty records observed");
     let at_most_low = fixture
         .reply_text("(Observe (Records ((Any []) None (AtMost Low) SummaryOnly)))")
         .expect("low certainty records observed");
@@ -579,15 +582,15 @@ fn persona_spirit_client_filters_record_observation_by_certainty() {
 
     assert_eq!(
         removal_candidates,
-        "(RecordsObserved [(1 [draft] Decision [minimum candidate] Minimum)])"
+        "(RecordsObserved [(1 [draft] Decision [zero candidate] Zero)])"
     );
     assert_eq!(
         at_most_low,
-        "(RecordsObserved [(1 [draft] Decision [minimum candidate] Minimum) (2 [draft] Correction [low confidence] Low)])"
+        "(RecordsObserved [(1 [draft] Decision [zero candidate] Zero) (2 [draft] Principle [minimum weak intent] Minimum) (3 [draft] Correction [low confidence] Low)])"
     );
     assert_eq!(
         at_least_high,
-        "(RecordsObserved [(3 [settled] Principle [high confidence] High)])"
+        "(RecordsObserved [(4 [settled] Principle [high confidence] High)])"
     );
 }
 
