@@ -1,8 +1,8 @@
 use kameo::actor::{Actor, ActorRef};
 use kameo::message::{Context, Message};
 use signal_persona_spirit::{
-    RecordIdentifier, RecordIdentifierQuery, RecordObservation, RecordSubscription, RecordSummary,
-    Reply as WorkingReply,
+    CertaintyChange as CertaintyChangePayload, RecordIdentifier, RecordIdentifierQuery,
+    RecordObservation, RecordSubscription, RecordSummary, Reply as WorkingReply,
 };
 use signal_version_handover::{HandoverMarker, MarkerRequest};
 
@@ -30,6 +30,11 @@ pub struct CaptureEntry {
 
 pub struct RemoveEntry {
     pub identifier: RecordIdentifier,
+    pub trace: ActorTrace,
+}
+
+pub struct ChangeCertainty {
+    pub change: CertaintyChangePayload,
     pub trace: ActorTrace,
 }
 
@@ -98,6 +103,22 @@ impl RecordStore {
         trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReplied);
         Ok(PipelineReply::new(
             WorkingReply::RecordRemoved(removed),
+            trace,
+        ))
+    }
+
+    fn change_certainty(
+        &self,
+        change: CertaintyChangePayload,
+        mut trace: ActorTrace,
+    ) -> Result<PipelineReply> {
+        trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReceived);
+        trace.record(TraceNode::SEMA_WRITER, TraceAction::MessageReceived);
+        let changed = self.store.change_certainty(change)?;
+        trace.record(TraceNode::SEMA_WRITER, TraceAction::RecordMutated);
+        trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReplied);
+        Ok(PipelineReply::new(
+            WorkingReply::CertaintyChanged(changed),
             trace,
         ))
     }
@@ -198,6 +219,18 @@ impl Message<RemoveEntry> for RecordStore {
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.remove_entry(message.identifier, message.trace)
+    }
+}
+
+impl Message<ChangeCertainty> for RecordStore {
+    type Reply = Result<PipelineReply>;
+
+    async fn handle(
+        &mut self,
+        message: ChangeCertainty,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.change_certainty(message.change, message.trace)
     }
 }
 

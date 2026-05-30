@@ -269,7 +269,9 @@ Four related v0.3.0 disciplines:
   required `Magnitude`, not an absent value; `Zero` is the lowest semantic
   certainty and Spirit interprets exact `Zero` as a removal candidate.
   `Minimum` remains weak but real intent. Record observations can filter
-  certainty with `Any`, `Exact`, `AtMost`, or `AtLeast`.
+  certainty with `Any`, `Exact`, `AtMost`, or `AtLeast`. `ChangeCertainty`
+  changes an existing record's certainty, including lowering it to `Zero`
+  for review without removing the record.
 
 ## Daemon configuration — 9-field positional argument
 

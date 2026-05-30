@@ -95,6 +95,9 @@ Contract records stay in `signal-persona-spirit` and
   `Minimum` remains weak but real intent.
 - `Observation::RecordIdentifiers` queries return descriptions or provenance
   for an exact `RecordIdentifier` or inclusive `RecordIdentifierRange`.
+- `ChangeCertainty(CertaintyChange)` mutates one stored intent entry's
+  certainty through `RecordStore` and returns `CertaintyChanged`; setting
+  certainty to `Zero` makes the record visible to removal-candidate review.
 - `Remove(RecordIdentifier)` retracts one stored intent entry through
   `RecordStore` and returns `RecordRemoved`; the CLI never opens the
   database directly. Removed record identifiers are not reused.

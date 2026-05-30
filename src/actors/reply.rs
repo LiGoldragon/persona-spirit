@@ -117,6 +117,7 @@ impl UnimplementedPolicy {
             | OperationKind::Watch
             | OperationKind::Unwatch
             | OperationKind::Remove
+            | OperationKind::ChangeCertainty
             | OperationKind::Tap
             | OperationKind::Untap => self.not_built,
             OperationKind::Record => self.integration_missing,

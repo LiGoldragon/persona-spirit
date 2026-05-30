@@ -357,6 +357,37 @@ fn persona_spirit_client_removes_entry_and_excludes_it_from_observation() {
 }
 
 #[test]
+fn persona_spirit_client_changes_certainty_to_zero_for_removal_candidate_review() {
+    let fixture = StoreFixture::new("change-certainty-zero");
+    fixture
+        .reply_text("(Record ([workspace] Decision [first description] Maximum))")
+        .expect("first entry persisted");
+    fixture
+        .reply_text("(Record ([workspace] Correction [second description] Medium))")
+        .expect("second entry persisted");
+
+    let changed = fixture
+        .reply_text("(ChangeCertainty (1 Zero))")
+        .expect("certainty changed");
+    let candidates = fixture
+        .reply_text("(Observe (Records ((Any []) None (Exact Zero) SummaryOnly)))")
+        .expect("removal candidates observed");
+    let active = fixture
+        .reply_text("(Observe (Records ((Any []) None (AtLeast Minimum) SummaryOnly)))")
+        .expect("active records observed");
+
+    assert_eq!(changed, "(CertaintyChanged (1 Zero))");
+    assert_eq!(
+        candidates,
+        "(RecordsObserved [(1 [workspace] Decision [first description] Zero)])"
+    );
+    assert_eq!(
+        active,
+        "(RecordsObserved [(2 [workspace] Correction [second description] Medium)])"
+    );
+}
+
+#[test]
 fn persona_spirit_client_does_not_reuse_removed_record_identifier() {
     let fixture = StoreFixture::new("remove-entry-no-reuse");
     fixture

@@ -239,6 +239,7 @@ impl SpiritCommandExecutor {
             Command::ClassifyStatement(statement) => self.classify_statement(statement).await?,
             Command::AssertEntry(entry) => self.capture_entry(entry).await?,
             Command::RemoveRecord(identifier) => self.remove_entry(identifier).await?,
+            Command::ChangeCertainty(change) => self.change_certainty(change).await?,
             Command::ReadRecords(observation) => self.observe_records(observation).await?,
             Command::ReadRecordIdentifiers(query) => self.observe_record_identifiers(query).await?,
             Command::ReadTopics => self.observe_topics().await?,
@@ -300,6 +301,21 @@ impl SpiritCommandExecutor {
         let pipeline = self
             .store
             .ask(store::RemoveEntry { identifier, trace })
+            .await
+            .map_err(Self::store_send_error)?;
+        let (reply, trace) = pipeline.into_parts();
+        self.trace.replace(trace);
+        Ok(reply)
+    }
+
+    async fn change_certainty(
+        &self,
+        change: signal_persona_spirit::CertaintyChange,
+    ) -> Result<WorkingReply> {
+        let trace = self.trace.snapshot();
+        let pipeline = self
+            .store
+            .ask(store::ChangeCertainty { change, trace })
             .await
             .map_err(Self::store_send_error)?;
         let (reply, trace) = pipeline.into_parts();

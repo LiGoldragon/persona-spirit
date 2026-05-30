@@ -4,14 +4,15 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use sema::SchemaVersion;
 use sema_engine::{
-    Assertion, Engine, EngineOpen, EngineRecord, QueryPlan, RecordKey, Retraction, TableDescriptor,
-    TableName, TableReference,
+    Assertion, Engine, EngineOpen, EngineRecord, Mutation, QueryPlan, RecordKey, Retraction,
+    TableDescriptor, TableName, TableReference,
 };
 use signal_persona_spirit::{
-    CertaintySelection, Date, Entry, Kind, ObservationMode, RecordAccepted, RecordIdentifier,
-    RecordIdentifierQuery, RecordObservation, RecordProvenance, RecordProvenancesObserved,
-    RecordQuery, RecordRemoved, RecordSummary, RecordsObserved, Reply as WorkingReply, Time, Topic,
-    TopicCount, TopicSelection, Topics, TopicsObserved,
+    Certainty, CertaintyChange, CertaintyChanged, CertaintySelection, Date, Entry, Kind,
+    ObservationMode, RecordAccepted, RecordIdentifier, RecordIdentifierQuery, RecordObservation,
+    RecordProvenance, RecordProvenancesObserved, RecordQuery, RecordRemoved, RecordSummary,
+    RecordsObserved, Reply as WorkingReply, Time, Topic, TopicCount, TopicSelection, Topics,
+    TopicsObserved,
 };
 use signal_version_handover::{HandoverMarker, MarkerRequest};
 use version_projection::{ComponentName, ContractVersion, Projected};
@@ -99,6 +100,19 @@ impl SpiritStore {
             .retract(Retraction::new(self.records, StoredRecord::key(identifier)))
             .map_err(Error::spirit_store)?;
         Ok(RecordRemoved::new(identifier))
+    }
+
+    pub fn change_certainty(&self, change: CertaintyChange) -> Result<CertaintyChanged> {
+        let stored = self
+            .stored_record(change.identifier)?
+            .with_certainty(change.certainty);
+        self.engine
+            .mutate(Mutation::new(self.records, stored))
+            .map_err(Error::spirit_store)?;
+        Ok(CertaintyChanged {
+            identifier: change.identifier,
+            certainty: change.certainty,
+        })
     }
 
     pub(crate) fn import_migrated_record(
@@ -224,6 +238,19 @@ impl SpiritStore {
             .to_vec();
         records.sort_by_key(|record| record.identifier.value());
         Ok(records)
+    }
+
+    fn stored_record(&self, identifier: RecordIdentifier) -> Result<StoredRecord> {
+        self.all_records()?
+            .into_iter()
+            .find(|record| record.identifier == identifier)
+            .ok_or_else(|| Error::RequestRejected {
+                reason: format!(
+                    "record is not stored: {}/{}",
+                    RECORDS.as_str(),
+                    identifier.value()
+                ),
+            })
     }
 
     fn topic_counts(&self) -> Result<Vec<TopicCount>> {
@@ -391,6 +418,11 @@ impl StoredRecord {
             time: self.entry.time,
         }
     }
+
+    fn with_certainty(mut self, certainty: Certainty) -> Self {
+        self.entry.change_certainty(certainty);
+        self
+    }
 }
 
 impl<'query> RecordFilter<'query> {
@@ -425,6 +457,10 @@ impl<'query> RecordFilter<'query> {
 impl StampedEntry {
     pub fn new(entry: Entry, date: Date, time: Time) -> Self {
         Self { entry, date, time }
+    }
+
+    fn change_certainty(&mut self, certainty: Certainty) {
+        self.entry.certainty = certainty;
     }
 }
 

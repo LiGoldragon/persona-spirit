@@ -213,6 +213,38 @@ async fn persona_spirit_record_removal_uses_write_plane() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn persona_spirit_certainty_change_uses_write_plane() {
+    let fixture = SpiritRuntimeFixture::new("certainty-change-write-plane");
+    let runtime = fixture.runtime().await;
+
+    runtime
+        .submit_text("(Record ([workspace] Decision description Maximum))")
+        .await
+        .expect("entry accepted");
+    let reply = runtime
+        .submit_text("(ChangeCertainty (1 Zero))")
+        .await
+        .expect("certainty changed");
+    let observed = runtime
+        .submit_text("(Observe (Records ((Any []) None (Exact Zero) SummaryOnly)))")
+        .await
+        .expect("records observed");
+
+    assert_eq!(reply.text(), "(CertaintyChanged (1 Zero))");
+    assert!(
+        reply
+            .trace()
+            .contains_action(TraceNode::SEMA_WRITER, TraceAction::RecordMutated)
+    );
+    assert_eq!(
+        observed.text(),
+        "(RecordsObserved [(1 [workspace] Decision description Zero)])"
+    );
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn persona_spirit_topic_catalog_observation_uses_read_plane_without_write_plane() {
     let fixture = SpiritRuntimeFixture::new("topic-catalog");
     let runtime = fixture.runtime().await;

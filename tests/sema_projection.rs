@@ -3,8 +3,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use persona_spirit::{Command, Effect, SpiritActorRuntime, StoreLocation};
 use signal_frame::SubscriptionTokenInner;
 use signal_persona_spirit::{
-    CertaintySelection, Description, Entry, Kind, Observation, ObservationMode, ObserverFilter,
-    ObserverSubscriptionToken, Operation as WorkingOperation, RecordIdentifier,
+    CertaintyChange, CertaintySelection, Description, Entry, Kind, Observation, ObservationMode,
+    ObserverFilter, ObserverSubscriptionToken, Operation as WorkingOperation, RecordIdentifier,
     RecordIdentifierQuery, RecordIdentifierSelection, RecordQuery, Reply as WorkingReply,
     StateSubscriptionToken, Statement, StatementText, Subscription, SubscriptionToken, Topic,
     TopicSelection, Topics,
@@ -182,6 +182,33 @@ async fn spirit_record_removal_projects_to_retracted_observation() {
     assert_eq!(
         observation_for(request, reply),
         SemaObservation::new(SemaOperation::Retract, SemaOutcome::Retracted)
+    );
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn spirit_certainty_change_projects_to_mutated_observation() {
+    let fixture = RuntimeFixture::new("certainty-change");
+    let runtime = fixture.runtime().await;
+    runtime
+        .submit_request(WorkingOperation::Record(entry("changed projection")))
+        .await
+        .expect("record accepted");
+    let request = WorkingOperation::ChangeCertainty(CertaintyChange {
+        identifier: RecordIdentifier::new(1),
+        certainty: Magnitude::Zero,
+    });
+    let runtime_reply = runtime
+        .submit_request(request.clone())
+        .await
+        .expect("certainty changed");
+    assert_runtime_projection_trace(runtime_reply.trace());
+    let reply = runtime_reply.into_reply();
+
+    assert_eq!(
+        observation_for(request, reply),
+        SemaObservation::new(SemaOperation::Mutate, SemaOutcome::Mutated)
     );
 
     runtime.stop().await.expect("runtime stops");
