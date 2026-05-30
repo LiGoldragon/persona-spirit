@@ -147,6 +147,7 @@ fn observe_all() -> WorkingOperation {
         topic_selection: TopicSelection::any(),
         kind: None,
         certainty_selection: CertaintySelection::Any,
+        recorded_time_selection: signal_persona_spirit::RecordedTimeSelection::Any,
         mode: ObservationMode::SummaryOnly,
     }))
 }

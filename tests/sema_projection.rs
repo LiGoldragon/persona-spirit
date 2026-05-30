@@ -5,9 +5,9 @@ use signal_frame::SubscriptionTokenInner;
 use signal_persona_spirit::{
     CertaintyChange, CertaintySelection, Description, Entry, Kind, Observation, ObservationMode,
     ObserverFilter, ObserverSubscriptionToken, Operation as WorkingOperation, RecordIdentifier,
-    RecordIdentifierQuery, RecordIdentifierSelection, RecordQuery, Reply as WorkingReply,
-    StateSubscriptionToken, Statement, StatementText, Subscription, SubscriptionToken, Topic,
-    TopicSelection, Topics,
+    RecordIdentifierQuery, RecordIdentifierSelection, RecordQuery, RecordedTimeSelection,
+    Reply as WorkingReply, StateSubscriptionToken, Statement, StatementText, Subscription,
+    SubscriptionToken, Topic, TopicSelection, Topics,
 };
 use signal_sema::{Magnitude, SemaObservation, SemaOperation, SemaOutcome};
 
@@ -118,6 +118,7 @@ async fn spirit_record_query_projects_to_matched_observation() {
         topic_selection: TopicSelection::any(),
         kind: None,
         certainty_selection: CertaintySelection::Any,
+        recorded_time_selection: RecordedTimeSelection::Any,
         mode: ObservationMode::SummaryOnly,
     }));
     let runtime_reply = runtime

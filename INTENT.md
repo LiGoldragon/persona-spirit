@@ -272,6 +272,12 @@ Four related v0.3.0 disciplines:
   certainty with `Any`, `Exact`, `AtMost`, or `AtLeast`. `ChangeCertainty`
   changes an existing record's certainty, including lowering it to `Zero`
   for review without removing the record.
+- **Recorded-time and recent filtering.** Record observations can filter
+  daemon-stamped provenance by inclusive time range, since a recorded
+  moment, until a recorded moment, or `Recent`. `Recent` is intentionally
+  adaptive to the query: Spirit first applies topic/kind/certainty filters,
+  then keeps the newest matching records, so quiet topics reach farther
+  back than active topics without inventing a scoring language prematurely.
 
 ## Daemon configuration — 9-field positional argument
 

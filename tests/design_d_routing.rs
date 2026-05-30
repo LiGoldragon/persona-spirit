@@ -175,6 +175,7 @@ fn observe_records() -> SpiritOperation {
         topic_selection: TopicSelection::any(),
         kind: None,
         certainty_selection: CertaintySelection::Any,
+        recorded_time_selection: signal_persona_spirit::RecordedTimeSelection::Any,
         mode: signal_persona_spirit::ObservationMode::SummaryOnly,
     }))
 }

@@ -90,9 +90,11 @@ Contract records stay in `signal-persona-spirit` and
   `SubscriptionPlane`.
 - `RecordObservation` queries return descriptions by default and provenance only
   when the caller asks for it. They filter by `Any`, `Partial`, or `Full`
-  topic selection, optional kind, and certainty selection inside the daemon's
-  read path. Removal-candidate review is the exact `Zero` certainty query;
-  `Minimum` remains weak but real intent.
+  topic selection, optional kind, certainty selection, and recorded-time
+  selection inside the daemon's read path. Removal-candidate review is the
+  exact `Zero` certainty query; `Minimum` remains weak but real intent.
+  `Recent` is applied after topic/kind/certainty matching and keeps the newest
+  matching records.
 - `Observation::RecordIdentifiers` queries return descriptions or provenance
   for an exact `RecordIdentifier` or inclusive `RecordIdentifierRange`.
 - `ChangeCertainty(CertaintyChange)` mutates one stored intent entry's

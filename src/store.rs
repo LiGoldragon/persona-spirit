@@ -11,8 +11,8 @@ use signal_persona_spirit::{
     Certainty, CertaintyChange, CertaintyChanged, CertaintySelection, Date, Entry, Kind,
     ObservationMode, RecordAccepted, RecordIdentifier, RecordIdentifierQuery, RecordObservation,
     RecordProvenance, RecordProvenancesObserved, RecordQuery, RecordRemoved, RecordSummary,
-    RecordsObserved, Reply as WorkingReply, Time, Topic, TopicCount, TopicSelection, Topics,
-    TopicsObserved,
+    RecordedTime, RecordedTimeSelection, RecordsObserved, Reply as WorkingReply, Time, Topic,
+    TopicCount, TopicSelection, Topics, TopicsObserved,
 };
 use signal_version_handover::{HandoverMarker, MarkerRequest};
 use version_projection::{ComponentName, ContractVersion, Projected};
@@ -27,6 +27,7 @@ const RECORDS: TableName = TableName::new("records");
 const DEFAULT_STORE_PATH: &str = "/tmp/persona-spirit.redb";
 const STORE_ENVIRONMENT_VARIABLE: &str = "PERSONA_SPIRIT_STORE";
 const STATE_ENVIRONMENT_VARIABLE: &str = "PERSONA_STATE_PATH";
+const RECENT_RECORD_LIMIT: usize = 20;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoreLocation {
@@ -156,11 +157,15 @@ impl SpiritStore {
     }
 
     fn records_for_query(&self, query: &RecordQuery) -> Result<Vec<StoredRecord>> {
-        Ok(self
+        let mut records = self
             .all_records()?
             .into_iter()
             .filter(|record| RecordFilter::new(query).matches(record))
-            .collect())
+            .collect::<Vec<_>>();
+        if query.recorded_time_selection == RecordedTimeSelection::Recent {
+            RecentRecordSelection::new(RECENT_RECORD_LIMIT).retain(&mut records);
+        }
+        Ok(records)
     }
 
     pub fn observe_topics(&self) -> Result<WorkingReply> {
@@ -178,6 +183,7 @@ impl SpiritStore {
             topic_selection,
             kind: None,
             certainty_selection: CertaintySelection::Any,
+            recorded_time_selection: RecordedTimeSelection::Any,
             mode: ObservationMode::SummaryOnly,
         };
         Ok(self
@@ -327,6 +333,12 @@ struct RecordFilter<'query> {
     topic_selection: &'query TopicSelection,
     kind: Option<Kind>,
     certainty_selection: CertaintySelection,
+    recorded_time_selection: RecordedTimeSelection,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RecentRecordSelection {
+    maximum_records: usize,
 }
 
 impl HandoverClock {
@@ -419,9 +431,27 @@ impl StoredRecord {
         }
     }
 
+    fn recorded_time(&self) -> RecordedTime {
+        RecordedTime::new(self.entry.date, self.entry.time)
+    }
+
     fn with_certainty(mut self, certainty: Certainty) -> Self {
         self.entry.change_certainty(certainty);
         self
+    }
+}
+
+impl RecentRecordSelection {
+    const fn new(maximum_records: usize) -> Self {
+        Self { maximum_records }
+    }
+
+    fn retain(self, records: &mut Vec<StoredRecord>) {
+        records.sort_by_key(|record| (record.recorded_time(), record.identifier.value()));
+        let overflow = records.len().saturating_sub(self.maximum_records);
+        if overflow > 0 {
+            records.drain(0..overflow);
+        }
     }
 }
 
@@ -431,11 +461,15 @@ impl<'query> RecordFilter<'query> {
             topic_selection: &query.topic_selection,
             kind: query.kind,
             certainty_selection: query.certainty_selection,
+            recorded_time_selection: query.recorded_time_selection,
         }
     }
 
     fn matches(&self, record: &StoredRecord) -> bool {
-        self.matches_topic(record) && self.matches_kind(record) && self.matches_certainty(record)
+        self.matches_topic(record)
+            && self.matches_kind(record)
+            && self.matches_certainty(record)
+            && self.matches_recorded_time(record)
     }
 
     fn matches_topic(&self, record: &StoredRecord) -> bool {
@@ -451,6 +485,10 @@ impl<'query> RecordFilter<'query> {
     fn matches_certainty(&self, record: &StoredRecord) -> bool {
         self.certainty_selection
             .matches(record.entry.entry.certainty)
+    }
+
+    fn matches_recorded_time(&self, record: &StoredRecord) -> bool {
+        self.recorded_time_selection.matches(record.recorded_time())
     }
 }
 
@@ -496,10 +534,33 @@ impl RecordIdentifierMint {
 
 #[cfg(test)]
 mod tests {
-    use signal_persona_spirit::{Description, Kind};
+    use signal_persona_spirit::{Description, Kind, RecordedTimeRange};
     use signal_sema::Magnitude;
 
     use super::*;
+
+    #[derive(Debug, Clone)]
+    struct StoreFixture {
+        location: StoreLocation,
+    }
+
+    impl StoreFixture {
+        fn new(test_name: &str) -> Self {
+            let nanos = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock after epoch")
+                .as_nanos();
+            let mut path = std::env::temp_dir();
+            path.push(format!("persona-spirit-store-{test_name}-{nanos}.redb"));
+            Self {
+                location: StoreLocation::new(path),
+            }
+        }
+
+        fn store(&self) -> SpiritStore {
+            SpiritStore::open(&self.location).expect("store opens")
+        }
+    }
 
     #[test]
     fn stamped_entry_composes_entry_with_daemon_date_and_time() {
@@ -517,5 +578,128 @@ mod tests {
         assert_eq!(stamped.entry, entry);
         assert_eq!(stamped.date, date);
         assert_eq!(stamped.time, time);
+    }
+
+    #[test]
+    fn record_query_filters_by_recorded_time_range_after_topic_match() {
+        let fixture = StoreFixture::new("time-range");
+        let store = fixture.store();
+        store
+            .assert_entry(StampedEntry::new(
+                Entry {
+                    topics: Topics::single(Topic::new("spirit")),
+                    kind: Kind::Decision,
+                    description: Description::new("outside early"),
+                    certainty: Magnitude::Maximum,
+                },
+                Date::new(2026, 5, 28),
+                Time::new(23, 59, 59),
+            ))
+            .expect("early record accepted");
+        store
+            .assert_entry(StampedEntry::new(
+                Entry {
+                    topics: Topics::single(Topic::new("spirit")),
+                    kind: Kind::Decision,
+                    description: Description::new("inside"),
+                    certainty: Magnitude::Maximum,
+                },
+                Date::new(2026, 5, 29),
+                Time::new(12, 0, 0),
+            ))
+            .expect("inside record accepted");
+        store
+            .assert_entry(StampedEntry::new(
+                Entry {
+                    topics: Topics::single(Topic::new("other")),
+                    kind: Kind::Decision,
+                    description: Description::new("matching time wrong topic"),
+                    certainty: Magnitude::Maximum,
+                },
+                Date::new(2026, 5, 29),
+                Time::new(13, 0, 0),
+            ))
+            .expect("other topic record accepted");
+
+        let reply = store
+            .observe_records(RecordObservation {
+                query: RecordQuery {
+                    topic_selection: TopicSelection::partial(vec![Topic::new("spirit")]),
+                    kind: None,
+                    certainty_selection: CertaintySelection::Any,
+                    recorded_time_selection: RecordedTimeSelection::Between(
+                        RecordedTimeRange::new(
+                            RecordedTime::new(Date::new(2026, 5, 29), Time::new(0, 0, 0)),
+                            RecordedTime::new(Date::new(2026, 5, 29), Time::new(23, 59, 59)),
+                        ),
+                    ),
+                    mode: ObservationMode::WithProvenance,
+                },
+            })
+            .expect("records observed");
+
+        let WorkingReply::RecordProvenancesObserved(records) = reply else {
+            panic!("expected provenances");
+        };
+        let records = records.into_records();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].summary.description, Description::new("inside"));
+    }
+
+    #[test]
+    fn recent_record_query_keeps_newest_records_after_other_filters() {
+        let fixture = StoreFixture::new("recent");
+        let store = fixture.store();
+        for day in 1..=25 {
+            store
+                .assert_entry(StampedEntry::new(
+                    Entry {
+                        topics: Topics::single(Topic::new("spirit")),
+                        kind: Kind::Decision,
+                        description: Description::new(format!("spirit day {day}")),
+                        certainty: Magnitude::Maximum,
+                    },
+                    Date::new(2026, 5, day),
+                    Time::new(12, 0, 0),
+                ))
+                .expect("spirit record accepted");
+            store
+                .assert_entry(StampedEntry::new(
+                    Entry {
+                        topics: Topics::single(Topic::new("other")),
+                        kind: Kind::Decision,
+                        description: Description::new(format!("other day {day}")),
+                        certainty: Magnitude::Maximum,
+                    },
+                    Date::new(2026, 5, day),
+                    Time::new(12, 30, 0),
+                ))
+                .expect("other record accepted");
+        }
+
+        let reply = store
+            .observe_records(RecordObservation {
+                query: RecordQuery {
+                    topic_selection: TopicSelection::partial(vec![Topic::new("spirit")]),
+                    kind: None,
+                    certainty_selection: CertaintySelection::Any,
+                    recorded_time_selection: RecordedTimeSelection::Recent,
+                    mode: ObservationMode::WithProvenance,
+                },
+            })
+            .expect("records observed");
+
+        let WorkingReply::RecordProvenancesObserved(records) = reply else {
+            panic!("expected provenances");
+        };
+        let records = records.into_records();
+        assert_eq!(records.len(), RECENT_RECORD_LIMIT);
+        assert_eq!(records[0].date, Date::new(2026, 5, 6));
+        assert_eq!(records[19].date, Date::new(2026, 5, 25));
+        assert!(
+            records
+                .iter()
+                .all(|record| record.summary.topics.contains(&Topic::new("spirit")))
+        );
     }
 }
