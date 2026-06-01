@@ -93,8 +93,9 @@ Contract records stay in `signal-persona-spirit` and
   topic selection, optional kind, certainty selection, and recorded-time
   selection inside the daemon's read path. Removal-candidate review is the
   exact `Zero` certainty query; `Minimum` remains weak but real intent.
-  `Recent` is applied after topic/kind/certainty matching and keeps the newest
-  matching records.
+  Qualitative recency depths (`Shallow`, `Recent`, `Deep`, `VeryDeep`) are
+  applied after topic/kind/certainty matching and keep the newest matching
+  records at the requested depth.
 - `Observation::RecordIdentifiers` queries return descriptions or provenance
   for an exact `RecordIdentifier` or inclusive `RecordIdentifierRange`.
 - `ChangeCertainty(CertaintyChange)` mutates one stored intent entry's

@@ -543,6 +543,41 @@ fn persona_spirit_client_filters_record_observation_by_partial_and_full_topic_se
 }
 
 #[test]
+fn persona_spirit_client_uses_qualitative_recent_depths_after_topic_filtering() {
+    let fixture = StoreFixture::new("qualitative-depth");
+    for index in 1..=25 {
+        fixture
+            .reply_text(&format!(
+                "(Record ([spirit] Decision [record {index}] Maximum))"
+            ))
+            .expect("entry persisted");
+    }
+
+    let shallow = fixture
+        .reply_text("(Observe (Records ((Partial [spirit]) None Any Shallow SummaryOnly)))")
+        .expect("shallow records observed");
+    let recent = fixture
+        .reply_text("(Observe (Records ((Partial [spirit]) None Any Recent SummaryOnly)))")
+        .expect("recent records observed");
+    let deep = fixture
+        .reply_text("(Observe (Records ((Partial [spirit]) None Any Deep SummaryOnly)))")
+        .expect("deep records observed");
+
+    assert!(
+        !shallow.contains("[record 20]"),
+        "shallow should trim older entries: {shallow}"
+    );
+    assert!(shallow.contains("[record 25]"));
+    assert!(
+        !recent.contains("[record 10]"),
+        "recent should trim older entries: {recent}"
+    );
+    assert!(recent.contains("[record 25]"));
+    assert!(deep.contains("[record 1]"));
+    assert!(deep.contains("[record 25]"));
+}
+
+#[test]
 fn persona_spirit_client_filters_record_observation_by_kind() {
     let fixture = StoreFixture::new("kind-filter");
     fixture

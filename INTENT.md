@@ -274,10 +274,12 @@ Four related v0.3.0 disciplines:
   for review without removing the record.
 - **Recorded-time and recent filtering.** Record observations can filter
   daemon-stamped provenance by inclusive time range, since a recorded
-  moment, until a recorded moment, or `Recent`. `Recent` is intentionally
-  adaptive to the query: Spirit first applies topic/kind/certainty filters,
-  then keeps the newest matching records, so quiet topics reach farther
-  back than active topics without inventing a scoring language prematurely.
+  moment, until a recorded moment, or qualitative recency depth.
+  `Shallow`, `Recent`, `Deep`, and `VeryDeep` are intentionally adaptive to
+  the query: Spirit first applies topic/kind/certainty filters, then keeps
+  the newest matching records at the requested depth, so quiet topics reach
+  farther back than active topics without inventing a scoring language
+  prematurely.
 
 ## Daemon configuration — 9-field positional argument
 

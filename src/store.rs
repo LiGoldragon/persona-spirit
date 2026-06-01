@@ -27,7 +27,10 @@ const RECORDS: TableName = TableName::new("records");
 const DEFAULT_STORE_PATH: &str = "/tmp/persona-spirit.redb";
 const STORE_ENVIRONMENT_VARIABLE: &str = "PERSONA_SPIRIT_STORE";
 const STATE_ENVIRONMENT_VARIABLE: &str = "PERSONA_STATE_PATH";
-const RECENT_RECORD_LIMIT: usize = 20;
+const SHALLOW_RECORD_LIMIT: usize = 5;
+const RECENT_RECORD_LIMIT: usize = 15;
+const DEEP_RECORD_LIMIT: usize = 30;
+const VERY_DEEP_RECORD_LIMIT: usize = 100;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoreLocation {
@@ -162,8 +165,10 @@ impl SpiritStore {
             .into_iter()
             .filter(|record| RecordFilter::new(query).matches(record))
             .collect::<Vec<_>>();
-        if query.recorded_time_selection == RecordedTimeSelection::Recent {
-            RecentRecordSelection::new(RECENT_RECORD_LIMIT).retain(&mut records);
+        if let Some(selection) =
+            RecentRecordSelection::from_recorded_time_selection(query.recorded_time_selection)
+        {
+            selection.retain(&mut records);
         }
         Ok(records)
     }
@@ -446,12 +451,21 @@ impl RecentRecordSelection {
         Self { maximum_records }
     }
 
-    fn retain(self, records: &mut Vec<StoredRecord>) {
-        records.sort_by_key(|record| (record.recorded_time(), record.identifier.value()));
-        let overflow = records.len().saturating_sub(self.maximum_records);
-        if overflow > 0 {
-            records.drain(0..overflow);
+    const fn from_recorded_time_selection(selection: RecordedTimeSelection) -> Option<Self> {
+        match selection {
+            RecordedTimeSelection::Shallow => Some(Self::new(SHALLOW_RECORD_LIMIT)),
+            RecordedTimeSelection::Recent => Some(Self::new(RECENT_RECORD_LIMIT)),
+            RecordedTimeSelection::Deep => Some(Self::new(DEEP_RECORD_LIMIT)),
+            RecordedTimeSelection::VeryDeep => Some(Self::new(VERY_DEEP_RECORD_LIMIT)),
+            _ => None,
         }
+    }
+
+    fn retain(self, records: &mut Vec<StoredRecord>) {
+        records.sort_by_key(|record| {
+            std::cmp::Reverse((record.recorded_time(), record.identifier.value()))
+        });
+        records.truncate(self.maximum_records);
     }
 }
 
@@ -694,12 +708,116 @@ mod tests {
         };
         let records = records.into_records();
         assert_eq!(records.len(), RECENT_RECORD_LIMIT);
-        assert_eq!(records[0].date, Date::new(2026, 5, 6));
-        assert_eq!(records[19].date, Date::new(2026, 5, 25));
+        assert_eq!(records[0].date, Date::new(2026, 5, 25));
+        assert_eq!(records[14].date, Date::new(2026, 5, 11));
         assert!(
             records
                 .iter()
                 .all(|record| record.summary.topics.contains(&Topic::new("spirit")))
+        );
+    }
+
+    #[test]
+    fn qualitative_depth_queries_keep_newest_records_at_larger_depths() {
+        let fixture = StoreFixture::new("qualitative-depth");
+        let store = fixture.store();
+        for index in 1..=80 {
+            let month = 5 + ((index - 1) / 28) as u8;
+            let day = 1 + ((index - 1) % 28) as u8;
+            store
+                .assert_entry(StampedEntry::new(
+                    Entry {
+                        topics: Topics::single(Topic::new("spirit")),
+                        kind: Kind::Decision,
+                        description: Description::new(format!("spirit item {index}")),
+                        certainty: Magnitude::Maximum,
+                    },
+                    Date::new(2026, month, day),
+                    Time::new(12, 0, 0),
+                ))
+                .expect("spirit record accepted");
+        }
+
+        let shallow = store
+            .observe_records(RecordObservation {
+                query: RecordQuery {
+                    topic_selection: TopicSelection::partial(vec![Topic::new("spirit")]),
+                    kind: None,
+                    certainty_selection: CertaintySelection::Any,
+                    recorded_time_selection: RecordedTimeSelection::Shallow,
+                    mode: ObservationMode::WithProvenance,
+                },
+            })
+            .expect("shallow records observed");
+        let recent = store
+            .observe_records(RecordObservation {
+                query: RecordQuery {
+                    topic_selection: TopicSelection::partial(vec![Topic::new("spirit")]),
+                    kind: None,
+                    certainty_selection: CertaintySelection::Any,
+                    recorded_time_selection: RecordedTimeSelection::Recent,
+                    mode: ObservationMode::WithProvenance,
+                },
+            })
+            .expect("recent records observed");
+        let deep = store
+            .observe_records(RecordObservation {
+                query: RecordQuery {
+                    topic_selection: TopicSelection::partial(vec![Topic::new("spirit")]),
+                    kind: None,
+                    certainty_selection: CertaintySelection::Any,
+                    recorded_time_selection: RecordedTimeSelection::Deep,
+                    mode: ObservationMode::WithProvenance,
+                },
+            })
+            .expect("deep records observed");
+        let very_deep = store
+            .observe_records(RecordObservation {
+                query: RecordQuery {
+                    topic_selection: TopicSelection::partial(vec![Topic::new("spirit")]),
+                    kind: None,
+                    certainty_selection: CertaintySelection::Any,
+                    recorded_time_selection: RecordedTimeSelection::VeryDeep,
+                    mode: ObservationMode::WithProvenance,
+                },
+            })
+            .expect("very deep records observed");
+
+        let WorkingReply::RecordProvenancesObserved(shallow) = shallow else {
+            panic!("expected shallow provenances");
+        };
+        let WorkingReply::RecordProvenancesObserved(recent) = recent else {
+            panic!("expected recent provenances");
+        };
+        let WorkingReply::RecordProvenancesObserved(deep) = deep else {
+            panic!("expected deep provenances");
+        };
+        let WorkingReply::RecordProvenancesObserved(very_deep) = very_deep else {
+            panic!("expected very deep provenances");
+        };
+        let shallow = shallow.into_records();
+        let recent = recent.into_records();
+        let deep = deep.into_records();
+        let very_deep = very_deep.into_records();
+        assert_eq!(shallow.len(), SHALLOW_RECORD_LIMIT);
+        assert_eq!(recent.len(), RECENT_RECORD_LIMIT);
+        assert_eq!(deep.len(), DEEP_RECORD_LIMIT);
+        assert_eq!(very_deep.len(), 80);
+        assert_eq!(
+            shallow[0].summary.description,
+            Description::new("spirit item 80")
+        );
+        assert_eq!(
+            recent[0].summary.description,
+            Description::new("spirit item 80")
+        );
+        assert_eq!(
+            deep[0].summary.description,
+            Description::new("spirit item 80")
+        );
+        assert_eq!(
+            very_deep[79].summary.description,
+            Description::new("spirit item 1")
         );
     }
 }
