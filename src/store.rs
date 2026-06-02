@@ -9,10 +9,10 @@ use sema_engine::{
 };
 use signal_persona_spirit::{
     Certainty, CertaintyChange, CertaintyChanged, CertaintySelection, Date, Entry, Kind,
-    ObservationMode, RecordAccepted, RecordIdentifier, RecordIdentifierQuery, RecordObservation,
-    RecordProvenance, RecordProvenancesObserved, RecordQuery, RecordRemoved, RecordSummary,
-    RecordedTime, RecordedTimeSelection, RecordsObserved, Reply as WorkingReply, Time, Topic,
-    TopicCount, TopicSelection, Topics, TopicsObserved,
+    ObservationMode, PrivacySelection, RecordAccepted, RecordIdentifier, RecordIdentifierQuery,
+    RecordObservation, RecordProvenance, RecordProvenancesObserved, RecordQuery, RecordRemoved,
+    RecordSummary, RecordedTime, RecordedTimeSelection, RecordsObserved, Reply as WorkingReply,
+    Time, Topic, TopicCount, TopicSelection, Topics, TopicsObserved,
 };
 use signal_version_handover::{HandoverMarker, MarkerRequest};
 use version_projection::{ComponentName, ContractVersion, Projected};
@@ -189,6 +189,7 @@ impl SpiritStore {
             kind: None,
             certainty_selection: CertaintySelection::Any,
             recorded_time_selection: RecordedTimeSelection::Any,
+            privacy_selection: PrivacySelection::default_observation_privacy(),
             mode: ObservationMode::SummaryOnly,
         };
         Ok(self
@@ -339,6 +340,7 @@ struct RecordFilter<'query> {
     kind: Option<Kind>,
     certainty_selection: CertaintySelection,
     recorded_time_selection: RecordedTimeSelection,
+    privacy_selection: PrivacySelection,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -425,6 +427,7 @@ impl StoredRecord {
             kind: self.entry.entry.kind,
             description: self.entry.entry.description.clone(),
             certainty: self.entry.entry.certainty,
+            privacy: self.entry.entry.privacy,
         }
     }
 
@@ -476,6 +479,7 @@ impl<'query> RecordFilter<'query> {
             kind: query.kind,
             certainty_selection: query.certainty_selection,
             recorded_time_selection: query.recorded_time_selection,
+            privacy_selection: query.privacy_selection,
         }
     }
 
@@ -484,6 +488,7 @@ impl<'query> RecordFilter<'query> {
             && self.matches_kind(record)
             && self.matches_certainty(record)
             && self.matches_recorded_time(record)
+            && self.matches_privacy(record)
     }
 
     fn matches_topic(&self, record: &StoredRecord) -> bool {
@@ -503,6 +508,10 @@ impl<'query> RecordFilter<'query> {
 
     fn matches_recorded_time(&self, record: &StoredRecord) -> bool {
         self.recorded_time_selection.matches(record.recorded_time())
+    }
+
+    fn matches_privacy(&self, record: &StoredRecord) -> bool {
+        self.privacy_selection.matches(record.entry.entry.privacy)
     }
 }
 
@@ -583,6 +592,7 @@ mod tests {
             kind: Kind::Decision,
             description: Description::new("composition"),
             certainty: Magnitude::Maximum,
+            privacy: Magnitude::Zero,
         };
         let date = Date::new(2026, 5, 21);
         let time = Time::new(10, 45, 0);
@@ -605,6 +615,7 @@ mod tests {
                     kind: Kind::Decision,
                     description: Description::new("outside early"),
                     certainty: Magnitude::Maximum,
+                    privacy: Magnitude::Zero,
                 },
                 Date::new(2026, 5, 28),
                 Time::new(23, 59, 59),
@@ -617,6 +628,7 @@ mod tests {
                     kind: Kind::Decision,
                     description: Description::new("inside"),
                     certainty: Magnitude::Maximum,
+                    privacy: Magnitude::Zero,
                 },
                 Date::new(2026, 5, 29),
                 Time::new(12, 0, 0),
@@ -629,6 +641,7 @@ mod tests {
                     kind: Kind::Decision,
                     description: Description::new("matching time wrong topic"),
                     certainty: Magnitude::Maximum,
+                    privacy: Magnitude::Zero,
                 },
                 Date::new(2026, 5, 29),
                 Time::new(13, 0, 0),
@@ -647,6 +660,7 @@ mod tests {
                             RecordedTime::new(Date::new(2026, 5, 29), Time::new(23, 59, 59)),
                         ),
                     ),
+                    privacy_selection: PrivacySelection::default_observation_privacy(),
                     mode: ObservationMode::WithProvenance,
                 },
             })
@@ -672,6 +686,7 @@ mod tests {
                         kind: Kind::Decision,
                         description: Description::new(format!("spirit day {day}")),
                         certainty: Magnitude::Maximum,
+                        privacy: Magnitude::Zero,
                     },
                     Date::new(2026, 5, day),
                     Time::new(12, 0, 0),
@@ -684,6 +699,7 @@ mod tests {
                         kind: Kind::Decision,
                         description: Description::new(format!("other day {day}")),
                         certainty: Magnitude::Maximum,
+                        privacy: Magnitude::Zero,
                     },
                     Date::new(2026, 5, day),
                     Time::new(12, 30, 0),
@@ -698,6 +714,7 @@ mod tests {
                     kind: None,
                     certainty_selection: CertaintySelection::Any,
                     recorded_time_selection: RecordedTimeSelection::Recent,
+                    privacy_selection: PrivacySelection::default_observation_privacy(),
                     mode: ObservationMode::WithProvenance,
                 },
             })
@@ -731,6 +748,7 @@ mod tests {
                         kind: Kind::Decision,
                         description: Description::new(format!("spirit item {index}")),
                         certainty: Magnitude::Maximum,
+                        privacy: Magnitude::Zero,
                     },
                     Date::new(2026, month, day),
                     Time::new(12, 0, 0),
@@ -745,6 +763,7 @@ mod tests {
                     kind: None,
                     certainty_selection: CertaintySelection::Any,
                     recorded_time_selection: RecordedTimeSelection::Shallow,
+                    privacy_selection: PrivacySelection::default_observation_privacy(),
                     mode: ObservationMode::WithProvenance,
                 },
             })
@@ -756,6 +775,7 @@ mod tests {
                     kind: None,
                     certainty_selection: CertaintySelection::Any,
                     recorded_time_selection: RecordedTimeSelection::Recent,
+                    privacy_selection: PrivacySelection::default_observation_privacy(),
                     mode: ObservationMode::WithProvenance,
                 },
             })
@@ -767,6 +787,7 @@ mod tests {
                     kind: None,
                     certainty_selection: CertaintySelection::Any,
                     recorded_time_selection: RecordedTimeSelection::Deep,
+                    privacy_selection: PrivacySelection::default_observation_privacy(),
                     mode: ObservationMode::WithProvenance,
                 },
             })
@@ -778,6 +799,7 @@ mod tests {
                     kind: None,
                     certainty_selection: CertaintySelection::Any,
                     recorded_time_selection: RecordedTimeSelection::VeryDeep,
+                    privacy_selection: PrivacySelection::default_observation_privacy(),
                     mode: ObservationMode::WithProvenance,
                 },
             })

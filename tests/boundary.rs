@@ -249,7 +249,7 @@ fn persona_spirit_client_accepts_high_magnitude_and_observes_it_back() {
 
     assert_eq!(
         reply,
-        "(RecordsObserved [(1 [workspace] Decision [high description] High)])"
+        "(RecordsObserved [(1 [workspace] Decision [high description] High Zero)])"
     );
 }
 
@@ -287,7 +287,7 @@ fn persona_spirit_client_persists_entries_for_later_summary_observation() {
 
     assert_eq!(
         reply,
-        "(RecordsObserved [(1 [workspace] Decision [first description] Maximum) (2 [workspace] Correction [second description] Medium)])"
+        "(RecordsObserved [(1 [workspace] Decision [first description] Maximum Zero) (2 [workspace] Correction [second description] Medium Zero)])"
     );
 }
 
@@ -307,7 +307,7 @@ fn persona_spirit_client_observes_records_by_exact_identifier() {
 
     assert_eq!(
         reply,
-        "(RecordsObserved [(2 [workspace] Correction [second description] Medium)])"
+        "(RecordsObserved [(2 [workspace] Correction [second description] Medium Zero)])"
     );
 }
 
@@ -330,7 +330,7 @@ fn persona_spirit_client_observes_records_by_identifier_range() {
 
     assert_eq!(
         reply,
-        "(RecordsObserved [(2 [workspace] Correction [second description] Medium) (3 [workspace] Constraint [third description] High)])"
+        "(RecordsObserved [(2 [workspace] Correction [second description] Medium Zero) (3 [workspace] Constraint [third description] High Zero)])"
     );
 }
 
@@ -352,7 +352,7 @@ fn persona_spirit_client_removes_entry_and_excludes_it_from_observation() {
     assert_eq!(removed, "(RecordRemoved 1)");
     assert_eq!(
         observed,
-        "(RecordsObserved [(2 [workspace] Correction [second description] Medium)])"
+        "(RecordsObserved [(2 [workspace] Correction [second description] Medium Zero)])"
     );
 }
 
@@ -379,11 +379,11 @@ fn persona_spirit_client_changes_certainty_to_zero_for_removal_candidate_review(
     assert_eq!(changed, "(CertaintyChanged (1 Zero))");
     assert_eq!(
         candidates,
-        "(RecordsObserved [(1 [workspace] Decision [first description] Zero)])"
+        "(RecordsObserved [(1 [workspace] Decision [first description] Zero Zero)])"
     );
     assert_eq!(
         active,
-        "(RecordsObserved [(2 [workspace] Correction [second description] Medium)])"
+        "(RecordsObserved [(2 [workspace] Correction [second description] Medium Zero)])"
     );
 }
 
@@ -458,7 +458,7 @@ fn persona_spirit_client_opens_record_subscription_with_summary_snapshot() {
 
     assert_eq!(
         opened,
-        "(SubscriptionOpened ((Records (1)) (Records [(1 [workspace] Decision [subscription description] Maximum)])))"
+        "(SubscriptionOpened ((Records (1)) (Records [(1 [workspace] Decision [subscription description] Maximum Zero)])))"
     );
     assert_eq!(retracted, "(SubscriptionRetracted ((Records (1))))");
 }
@@ -479,7 +479,7 @@ fn persona_spirit_client_filters_record_observation_by_topic() {
 
     assert_eq!(
         reply,
-        "(RecordsObserved [(2 [naming] Correction [naming description] Maximum)])"
+        "(RecordsObserved [(2 [naming] Correction [naming description] Maximum Zero)])"
     );
 }
 
@@ -502,7 +502,7 @@ fn persona_spirit_client_filters_record_observation_by_topic_membership() {
 
     assert_eq!(
         spirit,
-        "(RecordsObserved [(1 [spirit nota] Correction [quote-free cli shape] Maximum)])"
+        "(RecordsObserved [(1 [spirit nota] Correction [quote-free cli shape] Maximum Zero)])"
     );
     assert_eq!(spirit, nota);
     assert_eq!(schema, "(RecordsObserved [])");
@@ -533,11 +533,11 @@ fn persona_spirit_client_filters_record_observation_by_partial_and_full_topic_se
 
     assert_eq!(
         partial,
-        "(RecordsObserved [(1 [spirit nota] Correction [shared topic set] Maximum) (2 [schema] Principle [schema entry] Maximum)])"
+        "(RecordsObserved [(1 [spirit nota] Correction [shared topic set] Maximum Zero) (2 [schema] Principle [schema entry] Maximum Zero)])"
     );
     assert_eq!(
         full_match,
-        "(RecordsObserved [(1 [spirit nota] Correction [shared topic set] Maximum)])"
+        "(RecordsObserved [(1 [spirit nota] Correction [shared topic set] Maximum Zero)])"
     );
     assert_eq!(full_miss, "(RecordsObserved [])");
 }
@@ -593,7 +593,7 @@ fn persona_spirit_client_filters_record_observation_by_kind() {
 
     assert_eq!(
         reply,
-        "(RecordsObserved [(1 [workspace] Principle [workspace principle] Maximum)])"
+        "(RecordsObserved [(1 [workspace] Principle [workspace principle] Maximum Zero)])"
     );
 }
 
@@ -616,7 +616,7 @@ fn persona_spirit_client_filters_record_observation_by_topic_and_kind() {
 
     assert_eq!(
         reply,
-        "(RecordsObserved [(1 [spirit] Principle [spirit principle] Maximum)])"
+        "(RecordsObserved [(1 [spirit] Principle [spirit principle] Maximum Zero)])"
     );
 }
 
@@ -648,15 +648,49 @@ fn persona_spirit_client_filters_record_observation_by_certainty() {
 
     assert_eq!(
         removal_candidates,
-        "(RecordsObserved [(1 [draft] Decision [zero candidate] Zero)])"
+        "(RecordsObserved [(1 [draft] Decision [zero candidate] Zero Zero)])"
     );
     assert_eq!(
         at_most_low,
-        "(RecordsObserved [(1 [draft] Decision [zero candidate] Zero) (2 [draft] Principle [minimum weak intent] Minimum) (3 [draft] Correction [low confidence] Low)])"
+        "(RecordsObserved [(1 [draft] Decision [zero candidate] Zero Zero) (2 [draft] Principle [minimum weak intent] Minimum Zero) (3 [draft] Correction [low confidence] Low Zero)])"
     );
     assert_eq!(
         at_least_high,
-        "(RecordsObserved [(4 [settled] Principle [high confidence] High)])"
+        "(RecordsObserved [(4 [settled] Principle [high confidence] High Zero)])"
+    );
+}
+
+#[test]
+fn persona_spirit_client_filters_record_observation_by_privacy() {
+    let fixture = StoreFixture::new("privacy-filter");
+    fixture
+        .reply_text("(Record ([workspace] Decision [open note] Maximum Zero))")
+        .expect("open entry persisted");
+    fixture
+        .reply_text("(Record ([workspace] Decision [private note] Maximum High))")
+        .expect("private entry persisted");
+
+    let default_observation = fixture
+        .reply_text("(Observe (Records ((Any []) None SummaryOnly)))")
+        .expect("default records observed");
+    let all_privacy = fixture
+        .reply_text("(Observe (Records ((Any []) None Any Any Any SummaryOnly)))")
+        .expect("all privacy records observed");
+    let high_privacy = fixture
+        .reply_text("(Observe (Records ((Any []) None Any Any (AtLeast High) SummaryOnly)))")
+        .expect("high privacy records observed");
+
+    assert_eq!(
+        default_observation,
+        "(RecordsObserved [(1 [workspace] Decision [open note] Maximum Zero)])"
+    );
+    assert_eq!(
+        all_privacy,
+        "(RecordsObserved [(1 [workspace] Decision [open note] Maximum Zero) (2 [workspace] Decision [private note] Maximum High)])"
+    );
+    assert_eq!(
+        high_privacy,
+        "(RecordsObserved [(2 [workspace] Decision [private note] Maximum High)])"
     );
 }
 
@@ -723,7 +757,7 @@ fn persona_spirit_client_returns_provenance_only_when_requested() {
         .expect("provenance observed");
 
     assert!(reply.starts_with(
-        "(RecordProvenancesObserved [((1 [workspace] Decision [description only] Maximum) "
+        "(RecordProvenancesObserved [((1 [workspace] Decision [description only] Maximum Zero) "
     ));
     assert!(reply.ends_with(")])"));
 }
@@ -744,7 +778,7 @@ fn persona_spirit_client_repeated_entries_remain_distinct_records() {
 
     assert_eq!(
         reply,
-        "(RecordsObserved [(1 [naming] Correction [drop ancestor prefixes] Maximum) (2 [naming] Correction [drop ancestor prefixes] Maximum)])"
+        "(RecordsObserved [(1 [naming] Correction [drop ancestor prefixes] Maximum Zero) (2 [naming] Correction [drop ancestor prefixes] Maximum Zero)])"
     );
 }
 

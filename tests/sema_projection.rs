@@ -4,10 +4,10 @@ use persona_spirit::{Command, Effect, SpiritActorRuntime, StoreLocation};
 use signal_frame::SubscriptionTokenInner;
 use signal_persona_spirit::{
     CertaintyChange, CertaintySelection, Description, Entry, Kind, Observation, ObservationMode,
-    ObserverFilter, ObserverSubscriptionToken, Operation as WorkingOperation, RecordIdentifier,
-    RecordIdentifierQuery, RecordIdentifierSelection, RecordQuery, RecordedTimeSelection,
-    Reply as WorkingReply, StateSubscriptionToken, Statement, StatementText, Subscription,
-    SubscriptionToken, Topic, TopicSelection, Topics,
+    ObserverFilter, ObserverSubscriptionToken, Operation as WorkingOperation, PrivacySelection,
+    RecordIdentifier, RecordIdentifierQuery, RecordIdentifierSelection, RecordQuery,
+    RecordedTimeSelection, Reply as WorkingReply, StateSubscriptionToken, Statement, StatementText,
+    Subscription, SubscriptionToken, Topic, TopicSelection, Topics,
 };
 use signal_sema::{Magnitude, SemaObservation, SemaOperation, SemaOutcome};
 
@@ -44,6 +44,7 @@ fn entry(description: &str) -> Entry {
         kind: Kind::Decision,
         description: Description::new(description),
         certainty: Magnitude::Maximum,
+        privacy: Magnitude::Zero,
     }
 }
 
@@ -119,6 +120,7 @@ async fn spirit_record_query_projects_to_matched_observation() {
         kind: None,
         certainty_selection: CertaintySelection::Any,
         recorded_time_selection: RecordedTimeSelection::Any,
+        privacy_selection: PrivacySelection::default_observation_privacy(),
         mode: ObservationMode::SummaryOnly,
     }));
     let runtime_reply = runtime

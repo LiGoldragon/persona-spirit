@@ -23,7 +23,7 @@ use persona_spirit::{
 use signal_frame::{Reply, SubReply};
 use signal_persona_origin::EngineIdentifier;
 use signal_persona_spirit::{
-    CertaintySelection, Observation, Operation as SpiritOperation, RecordQuery,
+    CertaintySelection, Observation, Operation as SpiritOperation, PrivacySelection, RecordQuery,
     Reply as SpiritReply, TopicSelection,
 };
 use version_projection::{ComponentName, ContractVersion};
@@ -176,6 +176,7 @@ fn observe_records() -> SpiritOperation {
         kind: None,
         certainty_selection: CertaintySelection::Any,
         recorded_time_selection: signal_persona_spirit::RecordedTimeSelection::Any,
+        privacy_selection: PrivacySelection::default_observation_privacy(),
         mode: signal_persona_spirit::ObservationMode::SummaryOnly,
     }))
 }
@@ -275,7 +276,7 @@ fn persona_spirit_cli_reaches_daemon_through_persona_handoff_router() {
         .expect("Persona hands observe client descriptor to Spirit");
     assert_spirit_output(
         observe_output.join().expect("observe client exits"),
-        "(RecordsObserved [(1 [workspace] Decision [design d route] Maximum)])",
+        "(RecordsObserved [(1 [workspace] Decision [design d route] Maximum Zero)])",
     );
 
     let served = daemon_thread
@@ -392,7 +393,7 @@ fn persona_handoff_router_routes_new_connections_after_selector_flip_and_old_con
         .expect("Persona routes steady-state client to current version");
     assert_spirit_output(
         steady_output.join().expect("steady-state client exits"),
-        "(RecordsObserved [(1 [workspace] Decision [selector seed] Maximum)])",
+        "(RecordsObserved [(1 [workspace] Decision [selector seed] Maximum Zero)])",
     );
 
     let mut old_stream =
@@ -435,7 +436,7 @@ fn persona_handoff_router_routes_new_connections_after_selector_flip_and_old_con
         .expect("Persona routes new client to next version after selector flip");
     assert_spirit_output(
         new_output.join().expect("new client exits"),
-        "(RecordsObserved [(1 [workspace] Decision [selector seed] Maximum)])",
+        "(RecordsObserved [(1 [workspace] Decision [selector seed] Maximum Zero)])",
     );
 
     let (current_handoffs, current_upgrades) = current_thread

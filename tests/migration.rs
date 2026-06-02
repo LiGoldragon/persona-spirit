@@ -10,9 +10,9 @@ use sema_engine::{
     Assertion, Engine, EngineOpen, EngineRecord, RecordKey, TableDescriptor, TableName,
 };
 use signal_persona_spirit::{
-    CertaintySelection, Date, Description, Entry, Kind, ObservationMode, RecordIdentifier,
-    RecordObservation, RecordQuery, RecordedTimeSelection, Reply as WorkingReply, Time, Topic,
-    TopicSelection, Topics,
+    CertaintySelection, Date, Description, Entry, Kind, ObservationMode, PrivacySelection,
+    RecordIdentifier, RecordObservation, RecordQuery, RecordedTimeSelection, Reply as WorkingReply,
+    Time, Topic, TopicSelection, Topics,
     migration::{v010, v020},
 };
 use signal_sema::Magnitude;
@@ -169,6 +169,7 @@ fn spirit_migration_preserves_timestamp_and_identifier_order() {
                 kind: Kind::Clarification,
                 description: Description::new("post migration"),
                 certainty: Magnitude::High,
+                privacy: Magnitude::Zero,
             },
             Date::new(2026, 5, 21),
             Time::new(12, 45, 3),
@@ -203,6 +204,7 @@ fn spirit_migration_refuses_non_empty_target() {
                 kind: Kind::Correction,
                 description: Description::new("already here"),
                 certainty: Magnitude::Maximum,
+                privacy: Magnitude::Zero,
             },
             Date::new(2026, 5, 21),
             Time::new(12, 45, 3),
@@ -460,6 +462,7 @@ fn target_provenances(target: &StorePath) -> Vec<signal_persona_spirit::RecordPr
                 kind: None,
                 certainty_selection: CertaintySelection::Any,
                 recorded_time_selection: RecordedTimeSelection::Any,
+                privacy_selection: PrivacySelection::default_observation_privacy(),
                 mode: ObservationMode::WithProvenance,
             },
         })

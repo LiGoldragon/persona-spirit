@@ -48,6 +48,12 @@ Record certainty changes are reversible ordinary maintenance. The
 identifier and preserves the daemon-stamped provenance; lowering to
 `Zero` nominates the record for removal-candidate review without deleting it.
 
+Record privacy is a second directional `Magnitude` stored on the same
+entry. `Zero` is open/public; higher magnitudes narrow the intended
+audience. `RecordStore` applies privacy selection in the read path, and
+the default observation selection is exact `Zero` so elevated records do
+not appear unless a caller explicitly widens the privacy selector.
+
 Record removal is **irreversible**. The `Remove` operation Retracts the
 record from the sema-engine database; redb's copy-on-write page reuse then
 overwrites the freed bytes as the daemon keeps writing, so a removed intent

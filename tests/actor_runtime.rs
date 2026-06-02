@@ -95,6 +95,7 @@ async fn persona_spirit_ordinary_request_path_uses_signal_executor_and_sema_obse
             kind: signal_persona_spirit::Kind::Decision,
             description: signal_persona_spirit::Description::new("executor path"),
             certainty: signal_sema::Magnitude::Maximum,
+            privacy: signal_sema::Magnitude::Zero,
         }))
         .await
         .expect("entry accepted");
@@ -138,6 +139,7 @@ async fn persona_spirit_frame_request_observes_non_init_caller() {
         kind: signal_persona_spirit::Kind::Decision,
         description: signal_persona_spirit::Description::new("caller witness"),
         certainty: signal_sema::Magnitude::Maximum,
+        privacy: signal_sema::Magnitude::Zero,
     }))
     .with_caller(Some(Caller::new(ProcessIdentifier::new(42), None, None)));
 
@@ -171,7 +173,7 @@ async fn persona_spirit_record_observation_uses_read_plane_without_write_plane()
 
     assert_eq!(
         reply.text(),
-        "(RecordsObserved [(1 [workspace] Decision description Maximum)])"
+        "(RecordsObserved [(1 [workspace] Decision description Maximum Zero)])"
     );
     assert!(
         reply
@@ -238,7 +240,7 @@ async fn persona_spirit_certainty_change_uses_write_plane() {
     );
     assert_eq!(
         observed.text(),
-        "(RecordsObserved [(1 [workspace] Decision description Zero)])"
+        "(RecordsObserved [(1 [workspace] Decision description Zero Zero)])"
     );
 
     runtime.stop().await.expect("runtime stops");
@@ -385,7 +387,7 @@ async fn persona_spirit_record_subscription_uses_read_plane_then_subscription_pl
 
     assert_eq!(
         reply.text(),
-        "(SubscriptionOpened ((Records (1)) (Records [(1 [workspace] Decision [subscription path] Maximum)])))"
+        "(SubscriptionOpened ((Records (1)) (Records [(1 [workspace] Decision [subscription path] Maximum Zero)])))"
     );
     assert!(reply.trace().contains_ordered(&[
         TraceNode::RECORD_STORE,
@@ -609,7 +611,7 @@ async fn persona_spirit_shutdown_releases_store_for_restart() {
 
     assert_eq!(
         reply.text(),
-        "(RecordsObserved [(1 [workspace] Decision [restart survives] Maximum)])"
+        "(RecordsObserved [(1 [workspace] Decision [restart survives] Maximum Zero)])"
     );
 
     second_runtime.stop().await.expect("second runtime stops");

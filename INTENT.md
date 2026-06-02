@@ -65,11 +65,17 @@ of today's spirit.
 ## Query surface is description-first
 
 Routine queries return record descriptions — topics, kind,
-description, certainty, identifier. *"any agent reading [the intent file] is
+description, certainty, privacy, identifier. *"any agent reading [the intent file] is
 going to get a lot of noise. Like the timestamps isn't always
 useful. … most of the time just the summary is enough."*
 Daemon-stamped date and time are available on demand through
 provenance variants for verification.
+Privacy is a directional `Magnitude` on the record, not a named
+audience-tier enum. `Zero` is the open/public baseline; higher
+magnitudes narrow the audience. Ordinary record observation defaults
+to exact `Zero` privacy so elevated records remain stored and
+recoverable but are not returned unless the caller explicitly selects
+them.
 
 ## Restatement is signal by repetition
 

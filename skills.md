@@ -72,7 +72,9 @@ Contract records stay in `signal-persona-spirit` and
 - `Entry` assertions persist one top-level record in the local sema-engine
   store and return `RecordAccepted`.
 - `Entry` requests never carry client-provided capture time. They carry one or
-  more topics, kind, one clarified description, and certainty.
+  more topics, kind, one clarified description, certainty, and privacy.
+  Privacy is directional `Magnitude`: `Zero` is open/public, higher values
+  narrow the intended audience.
 - Capture time is daemon-owned. `ClockPlane` stamps submitted entries before
   `RecordStore` persists them; provenance replies expose the daemon-produced
   bare `YYYY-MM-DD` date and bare `HH:MM:SS` time.
@@ -91,8 +93,10 @@ Contract records stay in `signal-persona-spirit` and
 - `RecordObservation` queries return descriptions by default and provenance only
   when the caller asks for it. They filter by `Any`, `Partial`, or `Full`
   topic selection, optional kind, certainty selection, and recorded-time
-  selection inside the daemon's read path. Removal-candidate review is the
-  exact `Zero` certainty query; `Minimum` remains weak but real intent.
+  selection inside the daemon's read path. They also filter by privacy
+  selection; the default selector is exact `Zero`, so elevated privacy records
+  must be explicitly requested. Removal-candidate review is the exact `Zero`
+  certainty query; `Minimum` remains weak but real intent.
   Qualitative recency depths (`Shallow`, `Recent`, `Deep`, `VeryDeep`) are
   applied after topic/kind/certainty matching and keep the newest matching
   records at the requested depth.

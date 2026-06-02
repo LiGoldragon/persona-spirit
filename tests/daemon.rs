@@ -30,8 +30,8 @@ use signal_frame::{
 };
 use signal_persona_spirit::{
     CertaintySelection, Date, Description, Entry, Frame, FrameBody, Kind, Observation,
-    ObservationMode, Operation as WorkingOperation, RecordQuery, Reply as WorkingReply, Statement,
-    StatementText, Time, Topic, TopicSelection, Topics,
+    ObservationMode, Operation as WorkingOperation, PrivacySelection, RecordQuery,
+    Reply as WorkingReply, Statement, StatementText, Time, Topic, TopicSelection, Topics,
 };
 use signal_sema::Magnitude;
 use signal_version_handover::{
@@ -127,6 +127,7 @@ fn entry(description: &str) -> Entry {
         kind: Kind::Decision,
         description: Description::new(description),
         certainty: Magnitude::Maximum,
+        privacy: Magnitude::Zero,
     }
 }
 
@@ -148,6 +149,7 @@ fn observe_all() -> WorkingOperation {
         kind: None,
         certainty_selection: CertaintySelection::Any,
         recorded_time_selection: signal_persona_spirit::RecordedTimeSelection::Any,
+        privacy_selection: PrivacySelection::default_observation_privacy(),
         mode: ObservationMode::SummaryOnly,
     }))
 }
@@ -376,6 +378,7 @@ fn persona_spirit_daemon_serves_signal_frames_through_actor_root() {
                 kind: Kind::Decision,
                 description: Description::new("daemon accepted"),
                 certainty: Magnitude::Maximum,
+                privacy: Magnitude::Zero,
             }
         ]))
     );
@@ -580,6 +583,7 @@ fn persona_spirit_daemon_classifies_state_frames_through_actor_root() {
                 kind: Kind::Clarification,
                 description: Description::new("daemon raw intent"),
                 certainty: Magnitude::Minimum,
+                privacy: Magnitude::Zero,
             }
         ]))
     );
@@ -608,6 +612,7 @@ fn persona_spirit_daemon_serves_topic_catalog_through_signal_frames() {
             kind: Kind::Correction,
             description: Description::new("naming entry"),
             certainty: Magnitude::Maximum,
+            privacy: Magnitude::Zero,
         }))
         .expect("second entry accepted through signal frame");
     client

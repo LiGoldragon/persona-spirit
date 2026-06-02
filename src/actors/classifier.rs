@@ -56,6 +56,7 @@ impl ClassifierPlane {
             kind: self.policy.fallback_kind,
             description: Description::new(text.clone()),
             certainty: self.policy.fallback_certainty,
+            privacy: Magnitude::Zero,
         };
         trace.record(
             TraceNode::CLASSIFIER_PLANE,
