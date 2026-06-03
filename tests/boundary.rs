@@ -388,6 +388,88 @@ fn persona_spirit_client_changes_certainty_to_zero_for_removal_candidate_review(
 }
 
 #[test]
+fn persona_spirit_client_collects_zero_candidates_to_file_before_removing_them() {
+    let fixture = StoreFixture::new("collect-zero-candidates");
+    let mut archive_path = std::env::temp_dir();
+    archive_path.push(format!(
+        "persona-spirit-boundary-collect-{}.nota",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock after epoch")
+            .as_nanos()
+    ));
+    fixture
+        .reply_text("(Record ([workspace] Correction [candidate description] Zero))")
+        .expect("candidate persisted");
+    fixture
+        .reply_text("(Record ([workspace] Decision [active description] High))")
+        .expect("active record persisted");
+
+    let request = format!(
+        "(CollectRemovalCandidates (((Any []) None (Exact Zero) Any (Exact Zero) SummaryOnly) (File [{}])))",
+        archive_path.to_string_lossy()
+    );
+    let collected = fixture.reply_text(&request).expect("candidate collected");
+    let candidates = fixture
+        .reply_text("(Observe (Records ((Any []) None (Exact Zero) SummaryOnly)))")
+        .expect("remaining candidates observed");
+    let active = fixture
+        .reply_text("(Observe (Records ((Any []) None (AtLeast Minimum) SummaryOnly)))")
+        .expect("active records observed");
+
+    assert_eq!(
+        collected,
+        "(RemovalCandidatesCollected ([(1 [workspace] Correction [candidate description] Zero Zero)] [1] []))"
+    );
+    assert_eq!(
+        fs::read_to_string(&archive_path).expect("archive file readable"),
+        "(RecordsObserved [(1 [workspace] Correction [candidate description] Zero Zero)])\n"
+    );
+    assert_eq!(candidates, "(RecordsObserved [])");
+    assert_eq!(
+        active,
+        "(RecordsObserved [(2 [workspace] Decision [active description] High Zero)])"
+    );
+}
+
+#[test]
+fn persona_spirit_client_archive_failure_preserves_zero_candidates() {
+    let fixture = StoreFixture::new("collect-archive-failure");
+    let mut archive_directory = std::env::temp_dir();
+    archive_directory.push(format!(
+        "persona-spirit-boundary-archive-failure-{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock after epoch")
+            .as_nanos()
+    ));
+    fs::create_dir(&archive_directory).expect("archive failure directory created");
+    fixture
+        .reply_text("(Record ([workspace] Correction [candidate description] Zero))")
+        .expect("candidate persisted");
+
+    let request = format!(
+        "(CollectRemovalCandidates (((Any []) None (Exact Zero) Any (Exact Zero) SummaryOnly) (File [{}])))",
+        archive_directory.to_string_lossy()
+    );
+    let collected = fixture
+        .reply_text(&request)
+        .expect("directory target produces skipped archive receipt");
+    let candidates = fixture
+        .reply_text("(Observe (Records ((Any []) None (Exact Zero) SummaryOnly)))")
+        .expect("candidate still observed");
+
+    assert_eq!(
+        collected,
+        "(RemovalCandidatesCollected ([] [] [(1 ArchiveFailed)]))"
+    );
+    assert_eq!(
+        candidates,
+        "(RecordsObserved [(1 [workspace] Correction [candidate description] Zero Zero)])"
+    );
+}
+
+#[test]
 fn persona_spirit_client_does_not_reuse_removed_record_identifier() {
     let fixture = StoreFixture::new("remove-entry-no-reuse");
     fixture

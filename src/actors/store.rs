@@ -2,7 +2,8 @@ use kameo::actor::{Actor, ActorRef};
 use kameo::message::{Context, Message};
 use signal_persona_spirit::{
     CertaintyChange as CertaintyChangePayload, RecordIdentifier, RecordIdentifierQuery,
-    RecordObservation, RecordSubscription, RecordSummary, Reply as WorkingReply,
+    RecordObservation, RecordSubscription, RecordSummary, RemovalCandidateCollection,
+    Reply as WorkingReply,
 };
 use signal_version_handover::{HandoverMarker, MarkerRequest};
 
@@ -35,6 +36,11 @@ pub struct RemoveEntry {
 
 pub struct ChangeCertainty {
     pub change: CertaintyChangePayload,
+    pub trace: ActorTrace,
+}
+
+pub struct CollectRemovalCandidates {
+    pub collection: RemovalCandidateCollection,
     pub trace: ActorTrace,
 }
 
@@ -119,6 +125,26 @@ impl RecordStore {
         trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReplied);
         Ok(PipelineReply::new(
             WorkingReply::CertaintyChanged(changed),
+            trace,
+        ))
+    }
+
+    fn collect_removal_candidates(
+        &self,
+        collection: RemovalCandidateCollection,
+        mut trace: ActorTrace,
+    ) -> Result<PipelineReply> {
+        trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReceived);
+        trace.record(TraceNode::SEMA_READER, TraceAction::MessageReceived);
+        let collected = self.store.collect_removal_candidates(collection)?;
+        trace.record(TraceNode::SEMA_READER, TraceAction::RecordsRead);
+        if !collected.removed_identifiers().is_empty() {
+            trace.record(TraceNode::SEMA_WRITER, TraceAction::MessageReceived);
+            trace.record(TraceNode::SEMA_WRITER, TraceAction::RecordRetracted);
+        }
+        trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReplied);
+        Ok(PipelineReply::new(
+            WorkingReply::RemovalCandidatesCollected(collected),
             trace,
         ))
     }
@@ -231,6 +257,18 @@ impl Message<ChangeCertainty> for RecordStore {
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.change_certainty(message.change, message.trace)
+    }
+}
+
+impl Message<CollectRemovalCandidates> for RecordStore {
+    type Reply = Result<PipelineReply>;
+
+    async fn handle(
+        &mut self,
+        message: CollectRemovalCandidates,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.collect_removal_candidates(message.collection, message.trace)
     }
 }
 

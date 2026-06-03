@@ -38,6 +38,9 @@ pub enum Error {
     #[error("persona-spirit input/output error: {reason}")]
     InputOutput { reason: String },
 
+    #[error("persona-spirit archive write error: {reason}")]
+    ArchiveWrite { reason: String },
+
     #[error("persona-spirit signal frame error: {reason}")]
     SignalFrame { reason: String },
 
@@ -91,6 +94,12 @@ impl Error {
 
     pub fn input_output(error: std::io::Error) -> Self {
         Self::InputOutput {
+            reason: error.to_string(),
+        }
+    }
+
+    pub fn archive_write(error: std::io::Error) -> Self {
+        Self::ArchiveWrite {
             reason: error.to_string(),
         }
     }
@@ -209,7 +218,8 @@ impl BatchErrorClassification for Error {
             | Self::MissingOwnerSpiritSocket
             | Self::CommandLineRoute { .. }
             | Self::WrongArgumentCount { .. }
-            | Self::FlagArgument { .. } => CommitStatus::NotCommitted,
+            | Self::FlagArgument { .. }
+            | Self::ArchiveWrite { .. } => CommitStatus::NotCommitted,
             Self::InputOutput { .. } | Self::ActorRuntime { .. } | Self::SpiritStore { .. } => {
                 CommitStatus::Unknown
             }

@@ -48,6 +48,17 @@ Record certainty changes are reversible ordinary maintenance. The
 identifier and preserves the daemon-stamped provenance; lowering to
 `Zero` nominates the record for removal-candidate review without deleting it.
 
+Removal-candidate collection is explicit archive-before-retract
+maintenance. `CollectRemovalCandidates` runs as one Spirit-local
+`Command`: `RecordStore` reads exact-`Zero` candidates, writes compact
+`RecordSummary` archive material to the requested target, then retracts
+only the candidates whose archive step succeeded. `ArchiveTarget::Inline`
+returns the compact material in `RemovalCandidatesCollected`;
+`ArchiveTarget::File(ArchivePath)` writes a tagged `RecordsObserved` NOTA
+archive file before retraction. Archive write failure returns
+`RemovalCandidatesCollected` with `ArchiveFailed` skipped candidates and
+does not retract those records.
+
 Record privacy is a second directional `Magnitude` stored on the same
 entry. `Zero` is open/public; higher magnitudes narrow the intended
 audience. `RecordStore` applies privacy selection in the read path, and

@@ -1,18 +1,23 @@
 use std::collections::BTreeMap;
+use std::fs::File as FileSystemFile;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use nota_codec::{Encoder, NotaEncode};
 use sema::SchemaVersion;
 use sema_engine::{
     Assertion, Engine, EngineOpen, EngineRecord, Mutation, QueryPlan, RecordKey, Retraction,
     TableDescriptor, TableName, TableReference,
 };
 use signal_persona_spirit::{
-    Certainty, CertaintyChange, CertaintyChanged, CertaintySelection, Date, Entry, Kind,
-    ObservationMode, PrivacySelection, RecordAccepted, RecordIdentifier, RecordIdentifierQuery,
-    RecordObservation, RecordProvenance, RecordProvenancesObserved, RecordQuery, RecordRemoved,
-    RecordSummary, RecordedTime, RecordedTimeSelection, RecordsObserved, Reply as WorkingReply,
-    Time, Topic, TopicCount, TopicSelection, Topics, TopicsObserved,
+    ArchivePath, ArchiveTarget, Certainty, CertaintyChange, CertaintyChanged, CertaintySelection,
+    Date, Entry, Kind, ObservationMode, PrivacySelection, RecordAccepted, RecordIdentifier,
+    RecordIdentifierQuery, RecordObservation, RecordProvenance, RecordProvenancesObserved,
+    RecordQuery, RecordRemoved, RecordSummary, RecordedTime, RecordedTimeSelection,
+    RecordsObserved, RemovalCandidateCollection, RemovalCandidateSkipReason,
+    RemovalCandidatesCollected, Reply as WorkingReply, SkippedRemovalCandidate, Time, Topic,
+    TopicCount, TopicSelection, Topics, TopicsObserved,
 };
 use signal_version_handover::{HandoverMarker, MarkerRequest};
 use version_projection::{ComponentName, ContractVersion, Projected};
@@ -117,6 +122,41 @@ impl SpiritStore {
             identifier: change.identifier,
             certainty: change.certainty,
         })
+    }
+
+    pub fn collect_removal_candidates(
+        &self,
+        collection: RemovalCandidateCollection,
+    ) -> Result<RemovalCandidatesCollected> {
+        CollectionQueryGuard::new(&collection).validate()?;
+        let candidates = self.records_for_query(&collection.record_query)?;
+        let archive = RemovalCandidateArchive::from_stored_records(&candidates);
+        if archive.write_to_target(&collection.archive_target).is_err() {
+            return Ok(RemovalCandidatesCollected::new(
+                Vec::new(),
+                Vec::new(),
+                candidates
+                    .iter()
+                    .map(|record| SkippedRemovalCandidate {
+                        identifier: record.identifier,
+                        reason: RemovalCandidateSkipReason::ArchiveFailed,
+                    })
+                    .collect(),
+            ));
+        }
+        for record in &candidates {
+            self.engine
+                .retract(Retraction::new(
+                    self.records,
+                    StoredRecord::key(record.identifier),
+                ))
+                .map_err(Error::spirit_store)?;
+        }
+        Ok(RemovalCandidatesCollected::new(
+            archive.records(),
+            candidates.iter().map(|record| record.identifier).collect(),
+            Vec::new(),
+        ))
     }
 
     pub(crate) fn import_migrated_record(
@@ -304,6 +344,14 @@ struct RecordReply {
     mode: ObservationMode,
 }
 
+struct CollectionQueryGuard<'collection> {
+    collection: &'collection RemovalCandidateCollection,
+}
+
+struct RemovalCandidateArchive {
+    records: Vec<RecordSummary>,
+}
+
 impl RecordReply {
     fn new(records: Vec<StoredRecord>, mode: ObservationMode) -> Self {
         Self { records, mode }
@@ -321,6 +369,54 @@ impl RecordReply {
                 ))
             }
         }
+    }
+}
+
+impl<'collection> CollectionQueryGuard<'collection> {
+    fn new(collection: &'collection RemovalCandidateCollection) -> Self {
+        Self { collection }
+    }
+
+    fn validate(&self) -> Result<()> {
+        if self.collection.is_exact_zero_candidate_query() {
+            return Ok(());
+        }
+        Err(Error::RequestRejected {
+            reason: "CollectRemovalCandidates requires an exact Zero certainty query".to_string(),
+        })
+    }
+}
+
+impl RemovalCandidateArchive {
+    fn from_stored_records(records: &[StoredRecord]) -> Self {
+        Self {
+            records: records.iter().map(StoredRecord::summary).collect(),
+        }
+    }
+
+    fn records(&self) -> Vec<RecordSummary> {
+        self.records.clone()
+    }
+
+    fn write_to_target(&self, target: &ArchiveTarget) -> Result<()> {
+        match target {
+            ArchiveTarget::Inline => Ok(()),
+            ArchiveTarget::File(path) => self.write_to_file(path),
+        }
+    }
+
+    fn write_to_file(&self, path: &ArchivePath) -> Result<()> {
+        let observed = WorkingReply::RecordsObserved(RecordsObserved::new(self.records.clone()));
+        let mut encoder = Encoder::new();
+        observed
+            .encode(&mut encoder)
+            .map_err(Error::invalid_spirit_reply)?;
+        let mut file = FileSystemFile::create(path.as_str()).map_err(Error::archive_write)?;
+        file.write_all(encoder.into_string().as_bytes())
+            .map_err(Error::archive_write)?;
+        file.write_all(b"\n").map_err(Error::archive_write)?;
+        file.sync_all().map_err(Error::archive_write)?;
+        Ok(())
     }
 }
 
@@ -557,7 +653,9 @@ impl RecordIdentifierMint {
 
 #[cfg(test)]
 mod tests {
-    use signal_persona_spirit::{Description, Kind, RecordedTimeRange};
+    use signal_persona_spirit::{
+        ArchiveTarget, Description, Kind, RecordedTimeRange, RemovalCandidateCollection,
+    };
     use signal_sema::Magnitude;
 
     use super::*;
@@ -841,5 +939,203 @@ mod tests {
             very_deep[79].summary.description,
             Description::new("spirit item 1")
         );
+    }
+
+    #[test]
+    fn spirit_store_collects_only_exact_zero_candidates_before_removing_them() {
+        let fixture = StoreFixture::new("collect-zero-candidates");
+        let store = fixture.store();
+        store
+            .assert_entry(StampedEntry::new(
+                Entry {
+                    topics: Topics::single(Topic::new("spirit")),
+                    kind: Kind::Decision,
+                    description: Description::new("first candidate"),
+                    certainty: Magnitude::Zero,
+                    privacy: Magnitude::Zero,
+                },
+                Date::new(2026, 6, 3),
+                Time::new(9, 0, 0),
+            ))
+            .expect("first candidate accepted");
+        store
+            .assert_entry(StampedEntry::new(
+                Entry {
+                    topics: Topics::single(Topic::new("spirit")),
+                    kind: Kind::Decision,
+                    description: Description::new("weak but real"),
+                    certainty: Magnitude::Minimum,
+                    privacy: Magnitude::Zero,
+                },
+                Date::new(2026, 6, 3),
+                Time::new(9, 1, 0),
+            ))
+            .expect("minimum record accepted");
+        store
+            .assert_entry(StampedEntry::new(
+                Entry {
+                    topics: Topics::single(Topic::new("spirit")),
+                    kind: Kind::Decision,
+                    description: Description::new("high record"),
+                    certainty: Magnitude::High,
+                    privacy: Magnitude::Zero,
+                },
+                Date::new(2026, 6, 3),
+                Time::new(9, 2, 0),
+            ))
+            .expect("high record accepted");
+        store
+            .assert_entry(StampedEntry::new(
+                Entry {
+                    topics: Topics::single(Topic::new("spirit")),
+                    kind: Kind::Correction,
+                    description: Description::new("second candidate"),
+                    certainty: Magnitude::Zero,
+                    privacy: Magnitude::Zero,
+                },
+                Date::new(2026, 6, 3),
+                Time::new(9, 3, 0),
+            ))
+            .expect("second candidate accepted");
+
+        let collected = store
+            .collect_removal_candidates(RemovalCandidateCollection::inline())
+            .expect("candidates collected");
+        let remaining = store
+            .observe_records(RecordObservation {
+                query: RecordQuery {
+                    topic_selection: TopicSelection::any(),
+                    kind: None,
+                    certainty_selection: CertaintySelection::Any,
+                    recorded_time_selection: RecordedTimeSelection::Any,
+                    privacy_selection: PrivacySelection::default_observation_privacy(),
+                    mode: ObservationMode::SummaryOnly,
+                },
+            })
+            .expect("remaining records observed");
+
+        assert_eq!(
+            collected.removed_identifiers(),
+            &[RecordIdentifier::new(1), RecordIdentifier::new(4)]
+        );
+        assert_eq!(
+            collected
+                .archived_records()
+                .iter()
+                .map(|record| record.description.as_str())
+                .collect::<Vec<_>>(),
+            vec!["first candidate", "second candidate"]
+        );
+        let WorkingReply::RecordsObserved(records) = remaining else {
+            panic!("expected summary records");
+        };
+        assert_eq!(
+            records
+                .records()
+                .iter()
+                .map(|record| record.identifier)
+                .collect::<Vec<_>>(),
+            vec![RecordIdentifier::new(2), RecordIdentifier::new(3)]
+        );
+    }
+
+    #[test]
+    fn spirit_store_rejects_non_zero_collection_query_without_retracting() {
+        let fixture = StoreFixture::new("reject-broad-collection");
+        let store = fixture.store();
+        store
+            .assert_entry(StampedEntry::new(
+                Entry {
+                    topics: Topics::single(Topic::new("spirit")),
+                    kind: Kind::Decision,
+                    description: Description::new("candidate"),
+                    certainty: Magnitude::Zero,
+                    privacy: Magnitude::Zero,
+                },
+                Date::new(2026, 6, 3),
+                Time::new(10, 0, 0),
+            ))
+            .expect("candidate accepted");
+
+        let error = store
+            .collect_removal_candidates(RemovalCandidateCollection::new(
+                RecordQuery {
+                    topic_selection: TopicSelection::any(),
+                    kind: None,
+                    certainty_selection: CertaintySelection::Any,
+                    recorded_time_selection: RecordedTimeSelection::Any,
+                    privacy_selection: PrivacySelection::default_observation_privacy(),
+                    mode: ObservationMode::SummaryOnly,
+                },
+                ArchiveTarget::Inline,
+            ))
+            .expect_err("broad query rejected");
+        let candidates = store
+            .observe_records(RecordObservation {
+                query: RecordQuery::removal_candidates(ObservationMode::SummaryOnly),
+            })
+            .expect("candidate still observed");
+
+        assert!(
+            matches!(error, Error::RequestRejected { reason } if reason.contains("exact Zero"))
+        );
+        let WorkingReply::RecordsObserved(records) = candidates else {
+            panic!("expected summary records");
+        };
+        assert_eq!(records.records().len(), 1);
+        assert_eq!(records.records()[0].identifier, RecordIdentifier::new(1));
+    }
+
+    #[test]
+    fn spirit_store_archive_file_failure_preserves_candidates() {
+        let fixture = StoreFixture::new("archive-failure");
+        let store = fixture.store();
+        store
+            .assert_entry(StampedEntry::new(
+                Entry {
+                    topics: Topics::single(Topic::new("spirit")),
+                    kind: Kind::Decision,
+                    description: Description::new("candidate"),
+                    certainty: Magnitude::Zero,
+                    privacy: Magnitude::Zero,
+                },
+                Date::new(2026, 6, 3),
+                Time::new(11, 0, 0),
+            ))
+            .expect("candidate accepted");
+        let mut directory = std::env::temp_dir();
+        directory.push(format!(
+            "persona-spirit-archive-failure-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock after epoch")
+                .as_nanos()
+        ));
+        std::fs::create_dir(&directory).expect("archive failure directory created");
+
+        let collected = store
+            .collect_removal_candidates(RemovalCandidateCollection::new(
+                RecordQuery::removal_candidates(ObservationMode::SummaryOnly),
+                ArchiveTarget::File(ArchivePath::new(directory.to_string_lossy().into_owned())),
+            ))
+            .expect("directory target produces skipped archive receipt");
+        let candidates = store
+            .observe_records(RecordObservation {
+                query: RecordQuery::removal_candidates(ObservationMode::SummaryOnly),
+            })
+            .expect("candidate still observed");
+
+        assert!(collected.archived_records().is_empty());
+        assert!(collected.removed_identifiers().is_empty());
+        assert_eq!(collected.skipped_candidates().len(), 1);
+        assert_eq!(
+            collected.skipped_candidates()[0].reason,
+            RemovalCandidateSkipReason::ArchiveFailed
+        );
+        let WorkingReply::RecordsObserved(records) = candidates else {
+            panic!("expected summary records");
+        };
+        assert_eq!(records.records().len(), 1);
+        assert_eq!(records.records()[0].identifier, RecordIdentifier::new(1));
     }
 }

@@ -9,8 +9,9 @@ use signal_persona_spirit::{
     ObserverSubscriptionToken, Operation as WorkingOperation, QuestionsObserved, RecordAccepted,
     RecordIdentifier, RecordIdentifierQuery, RecordObservation, RecordProvenancesObserved,
     RecordQuery, RecordRemoved, RecordSubscription, RecordSubscriptionToken, RecordsObserved,
-    Reply as WorkingReply, RequestUnimplemented, StateObserved, StateSubscriptionToken, Statement,
-    Subscription, SubscriptionOpened, SubscriptionRetracted, SubscriptionToken, TopicsObserved,
+    RemovalCandidateCollection, RemovalCandidatesCollected, Reply as WorkingReply,
+    RequestUnimplemented, StateObserved, StateSubscriptionToken, Statement, Subscription,
+    SubscriptionOpened, SubscriptionRetracted, SubscriptionToken, TopicsObserved,
 };
 use signal_sema::{SemaObservation, SemaOperation, SemaOutcome, ToSemaOperation, ToSemaOutcome};
 
@@ -20,6 +21,7 @@ pub enum Command {
     AssertEntry(signal_persona_spirit::Entry),
     RemoveRecord(RecordIdentifier),
     ChangeCertainty(CertaintyChange),
+    CollectRemovalCandidates(RemovalCandidateCollection),
     ReadRecords(RecordObservation),
     ReadRecordIdentifiers(RecordIdentifierQuery),
     ReadTopics,
@@ -38,6 +40,7 @@ pub enum Effect {
     RecordAccepted(RecordAccepted),
     RecordRemoved(RecordRemoved),
     CertaintyChanged(CertaintyChanged),
+    RemovalCandidatesCollected(RemovalCandidatesCollected),
     StateObserved(StateObserved),
     RecordsObserved(RecordsObserved),
     RecordProvenancesObserved(RecordProvenancesObserved),
@@ -56,6 +59,9 @@ impl Command {
             WorkingOperation::Record(entry) => Some(Self::AssertEntry(entry)),
             WorkingOperation::Remove(identifier) => Some(Self::RemoveRecord(identifier)),
             WorkingOperation::ChangeCertainty(change) => Some(Self::ChangeCertainty(change)),
+            WorkingOperation::CollectRemovalCandidates(collection) => {
+                Some(Self::CollectRemovalCandidates(collection))
+            }
             WorkingOperation::Observe(Observation::Records(query)) => {
                 Some(Self::ReadRecords(RecordObservation { query }))
             }
@@ -87,6 +93,9 @@ impl Effect {
             WorkingReply::RecordAccepted(payload) => Self::RecordAccepted(payload),
             WorkingReply::RecordRemoved(payload) => Self::RecordRemoved(payload),
             WorkingReply::CertaintyChanged(payload) => Self::CertaintyChanged(payload),
+            WorkingReply::RemovalCandidatesCollected(payload) => {
+                Self::RemovalCandidatesCollected(payload)
+            }
             WorkingReply::StateObserved(payload) => Self::StateObserved(payload),
             WorkingReply::RecordsObserved(payload) => Self::RecordsObserved(payload),
             WorkingReply::RecordProvenancesObserved(payload) => {
@@ -112,6 +121,9 @@ impl Effect {
             Self::RecordAccepted(payload) => WorkingReply::RecordAccepted(payload),
             Self::RecordRemoved(payload) => WorkingReply::RecordRemoved(payload),
             Self::CertaintyChanged(payload) => WorkingReply::CertaintyChanged(payload),
+            Self::RemovalCandidatesCollected(payload) => {
+                WorkingReply::RemovalCandidatesCollected(payload)
+            }
             Self::StateObserved(payload) => WorkingReply::StateObserved(payload),
             Self::RecordsObserved(payload) => WorkingReply::RecordsObserved(payload),
             Self::RecordProvenancesObserved(payload) => {
@@ -134,7 +146,7 @@ impl ToSemaOperation for Command {
         match self {
             Self::ClassifyStatement(_) | Self::AssertEntry(_) => SemaOperation::Assert,
             Self::ChangeCertainty(_) => SemaOperation::Mutate,
-            Self::RemoveRecord(_) => SemaOperation::Retract,
+            Self::RemoveRecord(_) | Self::CollectRemovalCandidates(_) => SemaOperation::Retract,
             Self::ReadRecords(_)
             | Self::ReadRecordIdentifiers(_)
             | Self::ReadTopics
@@ -155,7 +167,7 @@ impl ToSemaOutcome for Effect {
         match self {
             Self::RecordAccepted(_) => SemaOutcome::Asserted,
             Self::CertaintyChanged(_) => SemaOutcome::Mutated,
-            Self::RecordRemoved(_) => SemaOutcome::Retracted,
+            Self::RecordRemoved(_) | Self::RemovalCandidatesCollected(_) => SemaOutcome::Retracted,
             Self::StateObserved(_)
             | Self::RecordsObserved(_)
             | Self::RecordProvenancesObserved(_)

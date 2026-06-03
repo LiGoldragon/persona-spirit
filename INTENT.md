@@ -77,6 +77,12 @@ to exact `Zero` privacy so elevated records remain stored and
 recoverable but are not returned unless the caller explicitly selects
 them.
 
+Records lowered to `Zero` are not hard-deleted by that act. They are
+removal candidates. The explicit collection path archives compact record
+summaries before retraction; archive failure leaves candidates in the hot
+store and reports skipped candidates rather than hiding loss behind a
+bulk delete.
+
 ## Restatement is signal by repetition
 
 The data model expresses intent intensity through repetition

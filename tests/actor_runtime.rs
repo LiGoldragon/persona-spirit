@@ -1,3 +1,4 @@
+use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use owner_signal_persona_spirit::{
@@ -241,6 +242,80 @@ async fn persona_spirit_certainty_change_uses_write_plane() {
     assert_eq!(
         observed.text(),
         "(RecordsObserved [(1 [workspace] Decision description Zero Zero)])"
+    );
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn persona_spirit_collect_removal_candidates_archives_before_retracting() {
+    let fixture = SpiritRuntimeFixture::new("collect-removal-candidates");
+    let runtime = fixture.runtime().await;
+    let mut archive_path = std::env::temp_dir();
+    archive_path.push(format!(
+        "persona-spirit-collect-removal-candidates-{}.nota",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock after epoch")
+            .as_nanos()
+    ));
+
+    runtime
+        .submit_text("(Record ([workspace] Correction [candidate description] Zero))")
+        .await
+        .expect("candidate accepted");
+    runtime
+        .submit_text("(Record ([workspace] Decision [active description] High))")
+        .await
+        .expect("active record accepted");
+    let request = format!(
+        "(CollectRemovalCandidates (((Any []) None (Exact Zero) Any (Exact Zero) SummaryOnly) (File [{}])))",
+        archive_path.to_string_lossy()
+    );
+    let reply = runtime
+        .submit_text(&request)
+        .await
+        .expect("candidates collected");
+    let candidates = runtime
+        .submit_text("(Observe (Records ((Any []) None (Exact Zero) SummaryOnly)))")
+        .await
+        .expect("candidates observed after collection");
+    let active = runtime
+        .submit_text("(Observe (Records ((Any []) None (AtLeast Minimum) SummaryOnly)))")
+        .await
+        .expect("active records observed after collection");
+
+    assert_eq!(
+        reply.text(),
+        "(RemovalCandidatesCollected ([(1 [workspace] Correction [candidate description] Zero Zero)] [1] []))"
+    );
+    assert_eq!(
+        fs::read_to_string(&archive_path).expect("archive file readable"),
+        "(RecordsObserved [(1 [workspace] Correction [candidate description] Zero Zero)])\n"
+    );
+    assert_eq!(candidates.text(), "(RecordsObserved [])");
+    assert_eq!(
+        active.text(),
+        "(RecordsObserved [(2 [workspace] Decision [active description] High Zero)])"
+    );
+    assert!(reply.trace().contains_ordered(&[
+        TraceNode::DISPATCH_PHASE,
+        TraceNode::SIGNAL_EXECUTOR,
+        TraceNode::RECORD_STORE,
+        TraceNode::SEMA_READER,
+        TraceNode::SEMA_WRITER,
+        TraceNode::SEMA_OBSERVER,
+        TraceNode::SPIRIT_ROOT,
+    ]));
+    assert!(
+        reply
+            .trace()
+            .contains_action(TraceNode::SEMA_READER, TraceAction::RecordsRead)
+    );
+    assert!(
+        reply
+            .trace()
+            .contains_action(TraceNode::SEMA_WRITER, TraceAction::RecordRetracted)
     );
 
     runtime.stop().await.expect("runtime stops");

@@ -105,6 +105,11 @@ Contract records stay in `signal-persona-spirit` and
 - `ChangeCertainty(CertaintyChange)` mutates one stored intent entry's
   certainty through `RecordStore` and returns `CertaintyChanged`; setting
   certainty to `Zero` makes the record visible to removal-candidate review.
+- `CollectRemovalCandidates(RemovalCandidateCollection)` is the only
+  bulk removal-candidate collection path. It must require exact-`Zero`
+  certainty, preserve compact `RecordSummary` archive material before any
+  retract, and return skipped candidates instead of retracting when archive
+  output fails.
 - `Remove(RecordIdentifier)` retracts one stored intent entry through
   `RecordStore` and returns `RecordRemoved`; the CLI never opens the
   database directly. Removed record identifiers are not reused.

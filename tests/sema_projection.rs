@@ -6,8 +6,9 @@ use signal_persona_spirit::{
     CertaintyChange, CertaintySelection, Description, Entry, Kind, Observation, ObservationMode,
     ObserverFilter, ObserverSubscriptionToken, Operation as WorkingOperation, PrivacySelection,
     RecordIdentifier, RecordIdentifierQuery, RecordIdentifierSelection, RecordQuery,
-    RecordedTimeSelection, Reply as WorkingReply, StateSubscriptionToken, Statement, StatementText,
-    Subscription, SubscriptionToken, Topic, TopicSelection, Topics,
+    RecordedTimeSelection, RemovalCandidateCollection, Reply as WorkingReply,
+    StateSubscriptionToken, Statement, StatementText, Subscription, SubscriptionToken, Topic,
+    TopicSelection, Topics,
 };
 use signal_sema::{Magnitude, SemaObservation, SemaOperation, SemaOutcome};
 
@@ -212,6 +213,32 @@ async fn spirit_certainty_change_projects_to_mutated_observation() {
     assert_eq!(
         observation_for(request, reply),
         SemaObservation::new(SemaOperation::Mutate, SemaOutcome::Mutated)
+    );
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn spirit_collect_removal_candidates_projects_to_retracted_observation() {
+    let fixture = RuntimeFixture::new("collect-removal-candidates");
+    let runtime = fixture.runtime().await;
+    let mut candidate = entry("collected projection");
+    candidate.certainty = Magnitude::Zero;
+    runtime
+        .submit_request(WorkingOperation::Record(candidate))
+        .await
+        .expect("candidate accepted");
+    let request = WorkingOperation::CollectRemovalCandidates(RemovalCandidateCollection::inline());
+    let runtime_reply = runtime
+        .submit_request(request.clone())
+        .await
+        .expect("candidates collected");
+    assert_runtime_projection_trace(runtime_reply.trace());
+    let reply = runtime_reply.into_reply();
+
+    assert_eq!(
+        observation_for(request, reply),
+        SemaObservation::new(SemaOperation::Retract, SemaOutcome::Retracted)
     );
 
     runtime.stop().await.expect("runtime stops");
