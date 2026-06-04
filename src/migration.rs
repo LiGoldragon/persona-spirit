@@ -1,5 +1,3 @@
-use std::fs;
-
 use nota_codec::{Decoder, Encoder, NotaDecode, NotaEncode, NotaRecord};
 use sema::SchemaVersion;
 use sema_engine::{
@@ -13,6 +11,7 @@ use version_projection::VersionProjection;
 
 use crate::{
     Error, Result, StoreLocation, StorePath,
+    argument::SpiritArgument,
     store::{SpiritStore, StampedEntry},
 };
 
@@ -68,7 +67,7 @@ impl MigrationConfiguration {
     }
 
     pub fn from_argument(argument: signal_frame::SingleArgument) -> Result<Self> {
-        Self::from_text(&migration_configuration_argument_text(argument)?)
+        Self::from_text(&SpiritArgument::from(argument).into_nota_text()?)
     }
 
     pub fn from_text(text: &str) -> Result<Self> {
@@ -241,14 +240,5 @@ impl EngineRecord for V010StoredRecord {
 impl EngineRecord for V020StoredRecord {
     fn record_key(&self) -> RecordKey {
         RecordKey::new(self.identifier.value().to_string())
-    }
-}
-
-fn migration_configuration_argument_text(argument: signal_frame::SingleArgument) -> Result<String> {
-    let value = argument.as_str();
-    if value.starts_with('(') {
-        Ok(value.to_string())
-    } else {
-        fs::read_to_string(value).map_err(Error::input_output)
     }
 }

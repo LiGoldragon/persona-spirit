@@ -1,4 +1,3 @@
-use std::fs;
 use std::io::ErrorKind;
 use std::io::{Read, Write};
 use std::os::unix::fs::PermissionsExt;
@@ -38,6 +37,7 @@ use unix_ancillary::UnixStreamExt;
 use crate::{
     Error, Result, StoreLocation,
     actors::{policy::BootstrapPolicySource, root::SpiritRoot},
+    argument::SpiritArgument,
 };
 
 const DEFAULT_MAXIMUM_FRAME_BYTES: usize = 1024 * 1024;
@@ -590,7 +590,7 @@ impl DaemonRuntime {
     }
 
     pub fn from_argument(argument: signal_frame::SingleArgument) -> Result<Self> {
-        let text = daemon_configuration_argument_text(argument)?;
+        let text = SpiritArgument::from(argument).into_nota_text()?;
         Ok(Self::from_configuration(DaemonConfiguration::from_text(
             &text,
         )?))
@@ -716,15 +716,6 @@ impl DaemonRuntime {
                 self.configuration.owner_socket_path.clone(),
             ),
         })
-    }
-}
-
-fn daemon_configuration_argument_text(argument: signal_frame::SingleArgument) -> Result<String> {
-    let value = argument.as_str();
-    if value.starts_with('(') {
-        Ok(value.to_string())
-    } else {
-        fs::read_to_string(value).map_err(Error::input_output)
     }
 }
 

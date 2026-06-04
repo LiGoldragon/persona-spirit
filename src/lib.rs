@@ -1,4 +1,5 @@
 pub mod actors;
+pub mod argument;
 pub mod daemon;
 pub mod error;
 pub mod migration;
