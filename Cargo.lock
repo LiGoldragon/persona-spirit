@@ -614,7 +614,7 @@ dependencies = [
 
 [[package]]
 name = "persona-spirit"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "kameo 0.20.0 (git+https://github.com/LiGoldragon/kameo?branch=persona-lifecycle-terminal-outcome)",
  "nota-codec",
@@ -1120,8 +1120,8 @@ dependencies = [
 
 [[package]]
 name = "signal-persona-spirit"
-version = "0.3.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#a69769b3667814f5fe1b8f7e4410d09f25842984"
+version = "0.4.0"
+source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#b1659586e2a71a331fa4bdd481db5cc9b7b5e8ff"
 dependencies = [
  "nota-box",
  "nota-codec",

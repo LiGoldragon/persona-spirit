@@ -6,12 +6,13 @@
 
 use signal_persona_spirit::{
     CertaintyChange, CertaintyChanged, Observation, ObserverFilter, ObserverSubscriptionOpened,
-    ObserverSubscriptionToken, Operation as WorkingOperation, QuestionsObserved, RecordAccepted,
-    RecordIdentifier, RecordIdentifierQuery, RecordObservation, RecordProvenancesObserved,
-    RecordQuery, RecordRemoved, RecordSubscription, RecordSubscriptionToken, RecordsObserved,
-    RemovalCandidateCollection, RemovalCandidatesCollected, Reply as WorkingReply,
-    RequestUnimplemented, StateObserved, StateSubscriptionToken, Statement, Subscription,
-    SubscriptionOpened, SubscriptionRetracted, SubscriptionToken, TopicsObserved,
+    ObserverSubscriptionToken, Operation as WorkingOperation, PrivacySelection, QuestionsObserved,
+    RecordAccepted, RecordIdentifier, RecordIdentifierQuery, RecordObservation,
+    RecordProvenancesObserved, RecordQuery, RecordRemoved, RecordSubscription,
+    RecordSubscriptionToken, RecordsObserved, RemovalCandidateCollection,
+    RemovalCandidatesCollected, Reply as WorkingReply, RequestUnimplemented, StateObserved,
+    StateSubscriptionToken, Statement, Subscription, SubscriptionOpened, SubscriptionRetracted,
+    SubscriptionToken, TopicsObserved,
 };
 use signal_sema::{SemaObservation, SemaOperation, SemaOutcome, ToSemaOperation, ToSemaOutcome};
 
@@ -23,12 +24,12 @@ pub enum Command {
     ChangeCertainty(CertaintyChange),
     CollectRemovalCandidates(RemovalCandidateCollection),
     ReadRecords(RecordObservation),
-    ReadRecordIdentifiers(RecordIdentifierQuery),
+    ReadRecordIdentifiers(RecordIdentifierObservation),
     ReadTopics,
     ReadState,
     ReadQuestions,
     OpenStateSubscription,
-    OpenRecordSubscription(RecordSubscription),
+    OpenRecordSubscription(RecordSubscriptionObservation),
     CloseStateSubscription(StateSubscriptionToken),
     CloseRecordSubscription(RecordSubscriptionToken),
     OpenObserverSubscription(ObserverFilter),
@@ -52,6 +53,50 @@ pub enum Effect {
     RequestUnimplemented(RequestUnimplemented),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordIdentifierObservation {
+    pub query: RecordIdentifierQuery,
+    pub privacy_selection: PrivacySelection,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordSubscriptionObservation {
+    pub subscription: RecordSubscription,
+    pub privacy_selection: PrivacySelection,
+}
+
+impl RecordIdentifierObservation {
+    pub fn public(query: RecordIdentifierQuery) -> Self {
+        Self {
+            query,
+            privacy_selection: PrivacySelection::default_observation_privacy(),
+        }
+    }
+
+    pub fn private(query: signal_persona_spirit::PrivacyScopedRecordIdentifierQuery) -> Self {
+        Self {
+            query: query.record_identifier_query,
+            privacy_selection: query.privacy_selection,
+        }
+    }
+}
+
+impl RecordSubscriptionObservation {
+    pub fn public(subscription: RecordSubscription) -> Self {
+        Self {
+            subscription,
+            privacy_selection: PrivacySelection::default_observation_privacy(),
+        }
+    }
+
+    pub fn private(subscription: signal_persona_spirit::PrivacyScopedRecordSubscription) -> Self {
+        Self {
+            subscription: subscription.record_subscription,
+            privacy_selection: subscription.privacy_selection,
+        }
+    }
+}
+
 impl Command {
     pub fn from_request(request: WorkingOperation) -> Option<Self> {
         match request {
@@ -63,18 +108,31 @@ impl Command {
                 Some(Self::CollectRemovalCandidates(collection))
             }
             WorkingOperation::Observe(Observation::Records(query)) => {
-                Some(Self::ReadRecords(RecordObservation { query }))
+                Some(Self::ReadRecords(RecordObservation {
+                    query: query.into_record_query(),
+                }))
             }
-            WorkingOperation::Observe(Observation::RecordIdentifiers(query)) => {
-                Some(Self::ReadRecordIdentifiers(query))
+            WorkingOperation::Observe(Observation::PrivateRecords(query)) => {
+                Some(Self::ReadRecords(RecordObservation {
+                    query: query.into_record_query(),
+                }))
             }
+            WorkingOperation::Observe(Observation::RecordIdentifiers(query)) => Some(
+                Self::ReadRecordIdentifiers(RecordIdentifierObservation::public(query)),
+            ),
+            WorkingOperation::Observe(Observation::PrivateRecordIdentifiers(query)) => Some(
+                Self::ReadRecordIdentifiers(RecordIdentifierObservation::private(query)),
+            ),
             WorkingOperation::Observe(Observation::Topics) => Some(Self::ReadTopics),
             WorkingOperation::Observe(Observation::State) => Some(Self::ReadState),
             WorkingOperation::Observe(Observation::Questions) => Some(Self::ReadQuestions),
             WorkingOperation::Watch(Subscription::State) => Some(Self::OpenStateSubscription),
-            WorkingOperation::Watch(Subscription::Records(subscription)) => {
-                Some(Self::OpenRecordSubscription(subscription))
-            }
+            WorkingOperation::Watch(Subscription::Records(subscription)) => Some(
+                Self::OpenRecordSubscription(RecordSubscriptionObservation::public(subscription)),
+            ),
+            WorkingOperation::Watch(Subscription::PrivateRecords(subscription)) => Some(
+                Self::OpenRecordSubscription(RecordSubscriptionObservation::private(subscription)),
+            ),
             WorkingOperation::Unwatch(SubscriptionToken::State(token)) => {
                 Some(Self::CloseStateSubscription(token))
             }

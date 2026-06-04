@@ -1,35 +1,41 @@
 use std::collections::BTreeMap;
-use std::fs::File as FileSystemFile;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use nota_codec::{Encoder, NotaEncode};
 use sema::SchemaVersion;
 use sema_engine::{
     Assertion, Engine, EngineOpen, EngineRecord, Mutation, QueryPlan, RecordKey, Retraction,
     TableDescriptor, TableName, TableReference,
 };
 use signal_persona_spirit::{
-    ArchivePath, ArchiveTarget, Certainty, CertaintyChange, CertaintyChanged, CertaintySelection,
-    Date, Entry, Kind, ObservationMode, PrivacySelection, RecordAccepted, RecordIdentifier,
-    RecordIdentifierQuery, RecordObservation, RecordProvenance, RecordProvenancesObserved,
-    RecordQuery, RecordRemoved, RecordSummary, RecordedTime, RecordedTimeSelection,
-    RecordsObserved, RemovalCandidateCollection, RemovalCandidateSkipReason,
-    RemovalCandidatesCollected, Reply as WorkingReply, SkippedRemovalCandidate, Time, Topic,
-    TopicCount, TopicSelection, Topics, TopicsObserved,
+    ArchiveDatabaseTarget, Certainty, CertaintyChange, CertaintyChanged, CertaintySelection, Date,
+    Entry, Kind, ObservationMode, OutputTarget, PrivacySelection, RecordAccepted, RecordIdentifier,
+    RecordObservation, RecordProvenance, RecordProvenancesObserved, RecordQuery, RecordRemoved,
+    RecordSummary, RecordedTime, RecordedTimeSelection, RecordsObserved,
+    RemovalCandidateCollection, RemovalCandidateSkipReason, RemovalCandidatesCollected,
+    Reply as WorkingReply, SkippedRemovalCandidate, Time, Topic, TopicCount, TopicSelection,
+    Topics, TopicsObserved,
 };
 use signal_version_handover::{HandoverMarker, MarkerRequest};
 use version_projection::{ComponentName, ContractVersion, Projected};
 
-use crate::{Result, error::Error};
+use crate::{
+    Result,
+    error::{Error, RequestRejectionReason},
+    observation::RecordIdentifierObservation,
+};
 
 const SPIRIT_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(3);
+const REMOVAL_CANDIDATE_ARCHIVE_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
 const SPIRIT_CONTRACT_VERSION: ContractVersion = ContractVersion::new([
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0,
 ]);
 const RECORDS: TableName = TableName::new("records");
+const REMOVAL_CANDIDATE_ARCHIVE_RECORDS: TableName = TableName::new("removal_candidate_records");
 const DEFAULT_STORE_PATH: &str = "/tmp/persona-spirit.redb";
+const DEFAULT_REMOVAL_CANDIDATE_ARCHIVE_FILE_NAME: &str = "removal-candidate-archive.sema";
+const BACKUP_REMOVAL_CANDIDATE_ARCHIVE_FILE_NAME: &str =
+    "persona-spirit-removal-candidate-archive-backup.sema";
 const STORE_ENVIRONMENT_VARIABLE: &str = "PERSONA_SPIRIT_STORE";
 const STATE_ENVIRONMENT_VARIABLE: &str = "PERSONA_STATE_PATH";
 const SHALLOW_RECORD_LIMIT: usize = 5;
@@ -43,6 +49,7 @@ pub struct StoreLocation {
 }
 
 pub struct SpiritStore {
+    location: StoreLocation,
     engine: Engine,
     records: TableReference<StoredRecord>,
 }
@@ -51,6 +58,11 @@ pub struct SpiritStore {
 struct StoredRecord {
     identifier: RecordIdentifier,
     entry: StampedEntry,
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+struct ArchivedRemovalCandidate {
+    summary: RecordSummary,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -83,6 +95,23 @@ impl StoreLocation {
     pub fn as_path(&self) -> &Path {
         &self.path
     }
+
+    fn default_removal_candidate_archive_path(&self) -> PathBuf {
+        let archive_name = self
+            .path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(|name| format!("{name}.{DEFAULT_REMOVAL_CANDIDATE_ARCHIVE_FILE_NAME}"))
+            .unwrap_or_else(|| DEFAULT_REMOVAL_CANDIDATE_ARCHIVE_FILE_NAME.to_string());
+        self.path
+            .parent()
+            .map(|parent| parent.join(&archive_name))
+            .unwrap_or_else(|| std::env::temp_dir().join(archive_name))
+    }
+
+    fn backup_removal_candidate_archive_path(&self) -> PathBuf {
+        std::env::temp_dir().join(BACKUP_REMOVAL_CANDIDATE_ARCHIVE_FILE_NAME)
+    }
 }
 
 impl SpiritStore {
@@ -92,7 +121,11 @@ impl SpiritStore {
         let records = engine
             .register_table(TableDescriptor::new(RECORDS))
             .map_err(Error::spirit_store)?;
-        Ok(Self { engine, records })
+        Ok(Self {
+            location: location.clone(),
+            engine,
+            records,
+        })
     }
 
     pub fn assert_entry(&self, entry: StampedEntry) -> Result<RecordAccepted> {
@@ -131,7 +164,10 @@ impl SpiritStore {
         CollectionQueryGuard::new(&collection).validate()?;
         let candidates = self.records_for_query(&collection.record_query)?;
         let archive = RemovalCandidateArchive::from_stored_records(&candidates);
-        if archive.write_to_target(&collection.archive_target).is_err() {
+        if archive
+            .capture_to_target(&collection.output_target, &self.location)
+            .is_err()
+        {
             return Ok(RemovalCandidatesCollected::new(
                 Vec::new(),
                 Vec::new(),
@@ -183,19 +219,28 @@ impl SpiritStore {
         Ok(RecordReply::new(records, observation.query.mode).into_working_reply())
     }
 
-    pub fn observe_record_identifiers(&self, query: RecordIdentifierQuery) -> Result<WorkingReply> {
-        let records = self.records_for_identifier_query(query)?;
-        Ok(RecordReply::new(records, query.mode).into_working_reply())
+    pub fn observe_record_identifiers(
+        &self,
+        observation: RecordIdentifierObservation,
+    ) -> Result<WorkingReply> {
+        let mode = observation.query.mode;
+        let records = self.records_for_identifier_query(observation)?;
+        Ok(RecordReply::new(records, mode).into_working_reply())
     }
 
     fn records_for_identifier_query(
         &self,
-        query: RecordIdentifierQuery,
+        observation: RecordIdentifierObservation,
     ) -> Result<Vec<StoredRecord>> {
         Ok(self
             .all_records()?
             .into_iter()
-            .filter(|record| query.contains(record.identifier))
+            .filter(|record| observation.query.contains(record.identifier))
+            .filter(|record| {
+                observation
+                    .privacy_selection
+                    .matches(record.entry.entry.privacy)
+            })
             .collect())
     }
 
@@ -215,11 +260,15 @@ impl SpiritStore {
 
     pub fn observe_topics(&self) -> Result<WorkingReply> {
         Ok(WorkingReply::TopicsObserved(TopicsObserved::new(
-            self.topic_counts()?,
+            self.topic_counts(PrivacySelection::default_observation_privacy())?,
         )))
     }
 
-    pub fn summaries_for_topic(&self, topic: Option<&Topic>) -> Result<Vec<RecordSummary>> {
+    pub fn summaries_for_topic(
+        &self,
+        topic: Option<&Topic>,
+        privacy_selection: PrivacySelection,
+    ) -> Result<Vec<RecordSummary>> {
         let topic_selection = topic
             .cloned()
             .map(|topic| TopicSelection::partial(vec![topic]))
@@ -229,7 +278,7 @@ impl SpiritStore {
             kind: None,
             certainty_selection: CertaintySelection::Any,
             recorded_time_selection: RecordedTimeSelection::Any,
-            privacy_selection: PrivacySelection::default_observation_privacy(),
+            privacy_selection,
             mode: ObservationMode::SummaryOnly,
         };
         Ok(self
@@ -297,17 +346,19 @@ impl SpiritStore {
             .into_iter()
             .find(|record| record.identifier == identifier)
             .ok_or_else(|| Error::RequestRejected {
-                reason: format!(
-                    "record is not stored: {}/{}",
-                    RECORDS.as_str(),
-                    identifier.value()
-                ),
+                reason: RequestRejectionReason::RecordNotStored {
+                    collection: RECORDS.as_str().to_string(),
+                    identifier: identifier.value(),
+                },
             })
     }
 
-    fn topic_counts(&self) -> Result<Vec<TopicCount>> {
+    fn topic_counts(&self, privacy_selection: PrivacySelection) -> Result<Vec<TopicCount>> {
         let mut counts = BTreeMap::<String, u64>::new();
         for record in self.all_records()? {
+            if !privacy_selection.matches(record.entry.entry.privacy) {
+                continue;
+            }
             for topic in record.entry.entry.topics.as_slice() {
                 *counts.entry(topic.as_str().to_owned()).or_insert(0) += 1;
             }
@@ -324,14 +375,16 @@ impl SpiritStore {
     fn validate_topics(topics: &Topics) -> Result<()> {
         if topics.is_empty() {
             return Err(Error::RequestRejected {
-                reason: "record must carry at least one topic".to_string(),
+                reason: RequestRejectionReason::EmptyTopics,
             });
         }
         let mut seen = std::collections::BTreeSet::<&str>::new();
         for topic in topics.as_slice() {
             if !seen.insert(topic.as_str()) {
                 return Err(Error::RequestRejected {
-                    reason: format!("record repeats topic {}", topic.as_str()),
+                    reason: RequestRejectionReason::DuplicateTopic {
+                        topic: topic.as_str().to_string(),
+                    },
                 });
             }
         }
@@ -382,7 +435,7 @@ impl<'collection> CollectionQueryGuard<'collection> {
             return Ok(());
         }
         Err(Error::RequestRejected {
-            reason: "CollectRemovalCandidates requires an exact Zero certainty query".to_string(),
+            reason: RequestRejectionReason::CollectionQueryNotExactZeroPublic,
         })
     }
 }
@@ -398,25 +451,77 @@ impl RemovalCandidateArchive {
         self.records.clone()
     }
 
-    fn write_to_target(&self, target: &ArchiveTarget) -> Result<()> {
+    fn capture_to_target(
+        &self,
+        target: &OutputTarget,
+        store_location: &StoreLocation,
+    ) -> Result<()> {
         match target {
-            ArchiveTarget::Inline => Ok(()),
-            ArchiveTarget::File(path) => self.write_to_file(path),
+            OutputTarget::ArchiveDatabase(ArchiveDatabaseTarget::Default) => {
+                self.write_to_default_archive(store_location)
+            }
+            OutputTarget::ArchiveDatabase(ArchiveDatabaseTarget::Path(path)) => {
+                self.write_to_archive_database(Path::new(path.as_str()))
+            }
+            OutputTarget::Print(_) => Ok(()),
         }
     }
 
-    fn write_to_file(&self, path: &ArchivePath) -> Result<()> {
-        let observed = WorkingReply::RecordsObserved(RecordsObserved::new(self.records.clone()));
-        let mut encoder = Encoder::new();
-        observed
-            .encode(&mut encoder)
-            .map_err(Error::invalid_spirit_reply)?;
-        let mut file = FileSystemFile::create(path.as_str()).map_err(Error::archive_write)?;
-        file.write_all(encoder.into_string().as_bytes())
-            .map_err(Error::archive_write)?;
-        file.write_all(b"\n").map_err(Error::archive_write)?;
-        file.sync_all().map_err(Error::archive_write)?;
+    fn write_to_default_archive(&self, store_location: &StoreLocation) -> Result<()> {
+        self.write_to_archive_database(&store_location.default_removal_candidate_archive_path())
+            .or_else(|_| {
+                self.write_to_archive_database(
+                    &store_location.backup_removal_candidate_archive_path(),
+                )
+            })
+    }
+
+    fn write_to_archive_database(&self, path: &Path) -> Result<()> {
+        let archive = RemovalCandidateArchiveStore::open(path)?;
+        archive.append(self.records.clone())
+    }
+}
+
+struct RemovalCandidateArchiveStore {
+    engine: Engine,
+    records: TableReference<ArchivedRemovalCandidate>,
+}
+
+impl RemovalCandidateArchiveStore {
+    fn open(path: &Path) -> Result<Self> {
+        let mut engine = Engine::open(EngineOpen::new(
+            path,
+            REMOVAL_CANDIDATE_ARCHIVE_SCHEMA_VERSION,
+        ))
+        .map_err(Error::spirit_store)?;
+        let records = engine
+            .register_table(TableDescriptor::new(REMOVAL_CANDIDATE_ARCHIVE_RECORDS))
+            .map_err(Error::spirit_store)?;
+        Ok(Self { engine, records })
+    }
+
+    fn append(&self, records: Vec<RecordSummary>) -> Result<()> {
+        for summary in records {
+            self.engine
+                .assert(Assertion::new(
+                    self.records,
+                    ArchivedRemovalCandidate { summary },
+                ))
+                .map_err(Error::spirit_store)?;
+        }
         Ok(())
+    }
+
+    #[cfg(test)]
+    fn summaries(&self) -> Result<Vec<RecordSummary>> {
+        Ok(self
+            .engine
+            .match_records(QueryPlan::all(self.records))
+            .map_err(Error::spirit_store)?
+            .records()
+            .iter()
+            .map(|record| record.summary.clone())
+            .collect())
     }
 }
 
@@ -635,6 +740,12 @@ impl EngineRecord for StoredRecord {
     }
 }
 
+impl EngineRecord for ArchivedRemovalCandidate {
+    fn record_key(&self) -> RecordKey {
+        RecordKey::new(self.summary.identifier.value().to_string())
+    }
+}
+
 impl RecordIdentifierMint {
     fn from_records_and_commit_sequence(records: &[StoredRecord], commit_sequence: u64) -> Self {
         let last_record_identifier = records
@@ -654,7 +765,7 @@ impl RecordIdentifierMint {
 #[cfg(test)]
 mod tests {
     use signal_persona_spirit::{
-        ArchiveTarget, Description, Kind, RecordedTimeRange, RemovalCandidateCollection,
+        Description, Kind, OutputTarget, RecordedTimeRange, RemovalCandidateCollection,
     };
     use signal_sema::Magnitude;
 
@@ -999,7 +1110,7 @@ mod tests {
             .expect("second candidate accepted");
 
         let collected = store
-            .collect_removal_candidates(RemovalCandidateCollection::inline())
+            .collect_removal_candidates(RemovalCandidateCollection::default_archive_database())
             .expect("candidates collected");
         let remaining = store
             .observe_records(RecordObservation {
@@ -1037,6 +1148,67 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![RecordIdentifier::new(2), RecordIdentifier::new(3)]
         );
+        let archive = RemovalCandidateArchiveStore::open(
+            &fixture.location.default_removal_candidate_archive_path(),
+        )
+        .expect("default archive opens");
+        assert_eq!(
+            archive
+                .summaries()
+                .expect("archived summaries read")
+                .iter()
+                .map(|record| record.description.as_str())
+                .collect::<Vec<_>>(),
+            vec!["first candidate", "second candidate"]
+        );
+    }
+
+    #[test]
+    fn spirit_store_print_target_collects_without_archive_database() {
+        let fixture = StoreFixture::new("print-zero-candidates");
+        let store = fixture.store();
+        store
+            .assert_entry(StampedEntry::new(
+                Entry {
+                    topics: Topics::single(Topic::new("spirit")),
+                    kind: Kind::Correction,
+                    description: Description::new("printed candidate"),
+                    certainty: Magnitude::Zero,
+                    privacy: Magnitude::Zero,
+                },
+                Date::new(2026, 6, 4),
+                Time::new(12, 0, 0),
+            ))
+            .expect("candidate accepted");
+
+        let collected = store
+            .collect_removal_candidates(RemovalCandidateCollection::print_standard_output())
+            .expect("print target collects candidates");
+        let remaining = store
+            .observe_records(RecordObservation {
+                query: RecordQuery::removal_candidates(ObservationMode::SummaryOnly),
+            })
+            .expect("remaining candidates observed");
+
+        assert_eq!(
+            collected
+                .archived_records()
+                .iter()
+                .map(|record| record.description.as_str())
+                .collect::<Vec<_>>(),
+            vec!["printed candidate"]
+        );
+        assert_eq!(collected.removed_identifiers(), &[RecordIdentifier::new(1)]);
+        assert!(
+            !fixture
+                .location
+                .default_removal_candidate_archive_path()
+                .exists()
+        );
+        let WorkingReply::RecordsObserved(records) = remaining else {
+            panic!("expected summary records");
+        };
+        assert!(records.records().is_empty());
     }
 
     #[test]
@@ -1067,7 +1239,7 @@ mod tests {
                     privacy_selection: PrivacySelection::default_observation_privacy(),
                     mode: ObservationMode::SummaryOnly,
                 },
-                ArchiveTarget::Inline,
+                OutputTarget::default_archive_database(),
             ))
             .expect_err("broad query rejected");
         let candidates = store
@@ -1076,9 +1248,69 @@ mod tests {
             })
             .expect("candidate still observed");
 
-        assert!(
-            matches!(error, Error::RequestRejected { reason } if reason.contains("exact Zero"))
-        );
+        assert!(matches!(
+            error,
+            Error::RequestRejected {
+                reason: RequestRejectionReason::CollectionQueryNotExactZeroPublic
+            }
+        ));
+        let WorkingReply::RecordsObserved(records) = candidates else {
+            panic!("expected summary records");
+        };
+        assert_eq!(records.records().len(), 1);
+        assert_eq!(records.records()[0].identifier, RecordIdentifier::new(1));
+    }
+
+    #[test]
+    fn spirit_store_rejects_private_collection_query_without_retracting() {
+        let fixture = StoreFixture::new("reject-private-collection");
+        let store = fixture.store();
+        store
+            .assert_entry(StampedEntry::new(
+                Entry {
+                    topics: Topics::single(Topic::new("spirit")),
+                    kind: Kind::Decision,
+                    description: Description::new("private candidate"),
+                    certainty: Magnitude::Zero,
+                    privacy: Magnitude::High,
+                },
+                Date::new(2026, 6, 4),
+                Time::new(10, 30, 0),
+            ))
+            .expect("candidate accepted");
+
+        let error = store
+            .collect_removal_candidates(RemovalCandidateCollection::new(
+                RecordQuery {
+                    topic_selection: TopicSelection::any(),
+                    kind: None,
+                    certainty_selection: CertaintySelection::removal_candidates(),
+                    recorded_time_selection: RecordedTimeSelection::Any,
+                    privacy_selection: PrivacySelection::AtMost(Magnitude::High),
+                    mode: ObservationMode::SummaryOnly,
+                },
+                OutputTarget::default_archive_database(),
+            ))
+            .expect_err("private collection query rejected");
+        let candidates = store
+            .observe_records(RecordObservation {
+                query: RecordQuery {
+                    topic_selection: TopicSelection::any(),
+                    kind: None,
+                    certainty_selection: CertaintySelection::removal_candidates(),
+                    recorded_time_selection: RecordedTimeSelection::Any,
+                    privacy_selection: PrivacySelection::AtMost(Magnitude::High),
+                    mode: ObservationMode::SummaryOnly,
+                },
+            })
+            .expect("candidate still observed");
+
+        assert!(matches!(
+            error,
+            Error::RequestRejected {
+                reason: RequestRejectionReason::CollectionQueryNotExactZeroPublic
+            }
+        ));
         let WorkingReply::RecordsObserved(records) = candidates else {
             panic!("expected summary records");
         };
@@ -1116,7 +1348,7 @@ mod tests {
         let collected = store
             .collect_removal_candidates(RemovalCandidateCollection::new(
                 RecordQuery::removal_candidates(ObservationMode::SummaryOnly),
-                ArchiveTarget::File(ArchivePath::new(directory.to_string_lossy().into_owned())),
+                OutputTarget::archive_database(directory.to_string_lossy().into_owned()),
             ))
             .expect("directory target produces skipped archive receipt");
         let candidates = store

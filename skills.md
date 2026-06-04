@@ -107,9 +107,11 @@ Contract records stay in `signal-persona-spirit` and
   certainty to `Zero` makes the record visible to removal-candidate review.
 - `CollectRemovalCandidates(RemovalCandidateCollection)` is the only
   bulk removal-candidate collection path. It must require exact-`Zero`
-  certainty, preserve compact `RecordSummary` archive material before any
-  retract, and return skipped candidates instead of retracting when archive
-  output fails.
+  certainty and exact-`Zero` privacy, preserve compact `RecordSummary`
+  material before any retract, and return skipped candidates instead of
+  retracting when archive database output fails. `OutputTarget::Print`
+  writes no archive database; the typed `RemovalCandidatesCollected` reply is
+  the capture material rendered by the CLI to the requested stream.
 - `Remove(RecordIdentifier)` retracts one stored intent entry through
   `RecordStore` and returns `RecordRemoved`; the CLI never opens the
   database directly. Removed record identifiers are not reused.

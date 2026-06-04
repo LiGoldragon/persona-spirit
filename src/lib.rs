@@ -1,4 +1,5 @@
 pub mod actors;
+pub mod command_line;
 pub mod daemon;
 pub mod error;
 pub mod migration;
@@ -11,6 +12,7 @@ pub use actors::root::{
     SpiritActorRuntime,
 };
 pub use actors::trace::{ActorTrace, TraceAction, TraceNode};
+pub use command_line::{CommandLine, CommandLineReply};
 pub use daemon::{
     BootstrapPolicyPath, BoundDaemon, DaemonConfiguration, DaemonRuntime,
     ServedEngineManagementExchange, ServedExchange, ServedOwnerExchange, ServedUpgradeExchange,

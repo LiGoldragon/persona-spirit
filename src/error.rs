@@ -3,6 +3,15 @@ use signal_frame::{
 };
 use thiserror::Error as ThisError;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RequestRejectionReason {
+    RecordNotStored { collection: String, identifier: u64 },
+    EmptyTopics,
+    DuplicateTopic { topic: String },
+    CollectionQueryNotExactZeroPublic,
+    External { message: String },
+}
+
 #[derive(ThisError, Debug, Clone, PartialEq, Eq)]
 pub enum Error {
     #[error("{program} expects exactly one NOTA or signal-file argument, found {found}")]
@@ -51,7 +60,7 @@ pub enum Error {
     UnexpectedFrame { expected: &'static str, got: String },
 
     #[error("persona-spirit request rejected before execution: {reason}")]
-    RequestRejected { reason: String },
+    RequestRejected { reason: RequestRejectionReason },
 
     #[error("persona-spirit does not yet support atomic batches with {operation_count} operations")]
     UnsupportedAtomicBatch { operation_count: usize },
@@ -72,6 +81,23 @@ pub enum Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+impl std::fmt::Display for RequestRejectionReason {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::RecordNotStored {
+                collection,
+                identifier,
+            } => write!(formatter, "RecordNotStored({collection}, {identifier})"),
+            Self::EmptyTopics => formatter.write_str("EmptyTopics"),
+            Self::DuplicateTopic { topic } => write!(formatter, "DuplicateTopic({topic})"),
+            Self::CollectionQueryNotExactZeroPublic => {
+                formatter.write_str("CollectionQueryNotExactZeroPublic")
+            }
+            Self::External { message } => write!(formatter, "External({message})"),
+        }
+    }
+}
 
 impl Error {
     pub fn invalid_spirit_request(error: nota_codec::Error) -> Self {
@@ -174,9 +200,9 @@ impl From<signal_frame::CommandLineError> for Error {
             signal_frame::CommandLineError::UnexpectedFrame { expected, got } => {
                 Self::UnexpectedFrame { expected, got }
             }
-            signal_frame::CommandLineError::RequestRejected { reason } => {
-                Self::RequestRejected { reason }
-            }
+            signal_frame::CommandLineError::RequestRejected { reason } => Self::RequestRejected {
+                reason: RequestRejectionReason::External { message: reason },
+            },
         }
     }
 }

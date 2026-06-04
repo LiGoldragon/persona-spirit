@@ -48,16 +48,18 @@ Record certainty changes are reversible ordinary maintenance. The
 identifier and preserves the daemon-stamped provenance; lowering to
 `Zero` nominates the record for removal-candidate review without deleting it.
 
-Removal-candidate collection is explicit archive-before-retract
+Removal-candidate collection is explicit capture-before-retract
 maintenance. `CollectRemovalCandidates` runs as one Spirit-local
 `Command`: `RecordStore` reads exact-`Zero` candidates, writes compact
-`RecordSummary` archive material to the requested target, then retracts
-only the candidates whose archive step succeeded. `ArchiveTarget::Inline`
-returns the compact material in `RemovalCandidatesCollected`;
-`ArchiveTarget::File(ArchivePath)` writes a tagged `RecordsObserved` NOTA
-archive file before retraction. Archive write failure returns
+`RecordSummary` material to the requested target, then retracts only the
+candidates whose capture step succeeded. `OutputTarget::ArchiveDatabase`
+writes to the daemon-derived archive database or an explicit archive
+database path before retraction; database write failure returns
 `RemovalCandidatesCollected` with `ArchiveFailed` skipped candidates and
-does not retract those records.
+does not retract those records. `OutputTarget::Print` writes no archive
+database; the `RemovalCandidatesCollected` reply is the typed capture
+material, and the `spirit` CLI wrapper renders it to standard output or
+standard error according to the requested stream.
 
 Record privacy is a second directional `Magnitude` stored on the same
 entry. `Zero` is open/public; higher magnitudes narrow the intended
@@ -410,7 +412,7 @@ work today against the hand-written types.
 | Spirit mints `RecordIdentifier`; agents never submit it. | `persona_spirit_client_asserts_entry_and_mints_record_identifier` sends no identifier and receives one. |
 | Repeated similar entries remain distinct records. | `persona_spirit_client_repeated_entries_remain_distinct_records` stores two matching descriptions. |
 | Record observations use the read plane and not the write plane. | `persona_spirit_record_observation_uses_read_plane_without_write_plane` checks `SemaReader` without `SemaWriter`. |
-| Record observations filter by topic selection, kind, certainty, and recorded time inside the daemon store read path. | `persona_spirit_client_filters_record_observation_by_topic`, `persona_spirit_client_filters_record_observation_by_topic_membership`, `persona_spirit_client_filters_record_observation_by_partial_and_full_topic_sets`, `persona_spirit_client_filters_record_observation_by_kind`, `persona_spirit_client_filters_record_observation_by_topic_and_kind`, `persona_spirit_client_filters_record_observation_by_certainty`, `record_query_filters_by_recorded_time_range_after_topic_match`, `recent_record_query_keeps_newest_records_after_other_filters`, and `qualitative_depth_queries_keep_newest_records_at_larger_depths` store multiple records and expect only matching descriptions/provenance. Removal-candidate review is the exact-`Zero` certainty query; exact `Minimum` remains weak but real intent. Qualitative recency depths (`Shallow`, `Recent`, `Deep`, `VeryDeep`) are applied after topic/kind/certainty matching and keep the newest matching records at the requested depth. |
+| Record observations filter by topic selection, kind, certainty, recorded time, and privacy inside the daemon store read path. | `persona_spirit_client_filters_record_observation_by_topic`, `persona_spirit_client_filters_record_observation_by_topic_membership`, `persona_spirit_client_filters_record_observation_by_partial_and_full_topic_sets`, `persona_spirit_client_filters_record_observation_by_kind`, `persona_spirit_client_filters_record_observation_by_topic_and_kind`, `persona_spirit_client_filters_record_observation_by_certainty`, `persona_spirit_client_filters_record_observation_by_privacy`, `persona_spirit_client_filters_identifier_observation_by_privacy`, `persona_spirit_client_hides_private_records_from_topic_counts`, `record_query_filters_by_recorded_time_range_after_topic_match`, `recent_record_query_keeps_newest_records_after_other_filters`, and `qualitative_depth_queries_keep_newest_records_at_larger_depths` store multiple records and expect only matching descriptions/provenance. Public observations are exact-`Zero` privacy by type; elevated records require explicit private query variants. Removal-candidate review is the exact-`Zero` certainty query; exact `Minimum` remains weak but real intent. Qualitative recency depths (`Shallow`, `Recent`, `Deep`, `VeryDeep`) are applied after topic/kind/certainty/privacy matching and keep the newest matching records at the requested depth. |
 | Record observations can select exact identifiers and inclusive identifier ranges. | `persona_spirit_client_observes_records_by_exact_identifier` and `persona_spirit_client_observes_records_by_identifier_range` use `Observation::RecordIdentifiers`. |
 | Record certainty changes use the write plane and project to Sema `Mutate`. | `persona_spirit_client_changes_certainty_to_zero_for_removal_candidate_review`, `persona_spirit_certainty_change_uses_write_plane`, and `spirit_certainty_change_projects_to_mutated_observation` check `ChangeCertainty`, `CertaintyChanged`, exact-`Zero` review visibility, `RecordMutated`, and `SemaOperation::Mutate`. |
 | Record removal uses the write plane, leaves later observations clean, and does not reuse removed identifiers. | `persona_spirit_record_removal_uses_write_plane`, `spirit_record_removal_projects_to_retracted_observation`, `persona_spirit_client_removes_entry_and_excludes_it_from_observation`, and `persona_spirit_client_does_not_reuse_removed_record_identifier` check `Remove`, `RecordRemoved`, `SemaOperation::Retract`, and monotonic identifier minting. |

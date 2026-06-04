@@ -253,7 +253,7 @@ async fn persona_spirit_collect_removal_candidates_archives_before_retracting() 
     let runtime = fixture.runtime().await;
     let mut archive_path = std::env::temp_dir();
     archive_path.push(format!(
-        "persona-spirit-collect-removal-candidates-{}.nota",
+        "persona-spirit-collect-removal-candidates-{}.sema",
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("system clock after epoch")
@@ -269,7 +269,7 @@ async fn persona_spirit_collect_removal_candidates_archives_before_retracting() 
         .await
         .expect("active record accepted");
     let request = format!(
-        "(CollectRemovalCandidates (((Any []) None (Exact Zero) Any (Exact Zero) SummaryOnly) (File [{}])))",
+        "(CollectRemovalCandidates (((Any []) None (Exact Zero) Any (Exact Zero) SummaryOnly) (ArchiveDatabase (Path [{}]))))",
         archive_path.to_string_lossy()
     );
     let reply = runtime
@@ -289,9 +289,11 @@ async fn persona_spirit_collect_removal_candidates_archives_before_retracting() 
         reply.text(),
         "(RemovalCandidatesCollected ([(1 [workspace] Correction [candidate description] Zero Zero)] [1] []))"
     );
-    assert_eq!(
-        fs::read_to_string(&archive_path).expect("archive file readable"),
-        "(RecordsObserved [(1 [workspace] Correction [candidate description] Zero Zero)])\n"
+    assert!(
+        fs::metadata(&archive_path)
+            .expect("archive database metadata readable")
+            .len()
+            > 0
     );
     assert_eq!(candidates.text(), "(RecordsObserved [])");
     assert_eq!(
@@ -713,10 +715,7 @@ fn persona_spirit_command_line_path_does_not_use_actor_runtime_directly() {
         std::fs::read_to_string(format!("{}/src/bin/spirit.rs", env!("CARGO_MANIFEST_DIR")))
             .expect("spirit binary source is readable");
 
-    assert_eq!(
-        source.trim(),
-        "signal_frame::signal_cli!(spirit, signal_persona_spirit);"
-    );
+    assert!(source.contains("persona_spirit::CommandLine::run_from_environment(\"spirit\")"));
     assert!(!source.contains("SpiritActorRuntime"));
     assert!(!source.contains("StoreLocation"));
 }

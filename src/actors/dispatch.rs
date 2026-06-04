@@ -13,7 +13,9 @@ use signal_persona_spirit::{
     RecordObservation, Reply as WorkingReply, RequestUnimplemented, UnimplementedReason,
 };
 
-use crate::observation::{Command, Effect};
+use crate::observation::{
+    Command, Effect, RecordIdentifierObservation, RecordSubscriptionObservation,
+};
 use crate::store::StampedEntry;
 use crate::{Error, Result};
 
@@ -369,12 +371,12 @@ impl SpiritCommandExecutor {
 
     async fn observe_record_identifiers(
         &self,
-        query: signal_persona_spirit::RecordIdentifierQuery,
+        observation: RecordIdentifierObservation,
     ) -> Result<WorkingReply> {
         let trace = self.trace.snapshot();
         let pipeline = self
             .store
-            .ask(store::ObserveRecordIdentifiers { query, trace })
+            .ask(store::ObserveRecordIdentifiers { observation, trace })
             .await
             .map_err(Self::store_send_error)?;
         let (reply, trace) = pipeline.into_parts();
@@ -441,13 +443,13 @@ impl SpiritCommandExecutor {
 
     async fn subscribe_records(
         &self,
-        subscription: signal_persona_spirit::RecordSubscription,
+        observation: RecordSubscriptionObservation,
     ) -> Result<WorkingReply> {
         let trace = self.trace.snapshot();
         let snapshot = self
             .store
             .ask(store::ReadRecordSnapshot {
-                subscription: subscription.clone(),
+                observation: observation.clone(),
                 trace,
             })
             .await
@@ -456,7 +458,7 @@ impl SpiritCommandExecutor {
         let pipeline = self
             .subscription
             .ask(subscription::OpenRecordSubscription {
-                subscription,
+                subscription: observation.subscription,
                 snapshot: snapshot.records,
                 trace: snapshot.trace,
             })

@@ -79,9 +79,9 @@ them.
 
 Records lowered to `Zero` are not hard-deleted by that act. They are
 removal candidates. The explicit collection path archives compact record
-summaries before retraction; archive failure leaves candidates in the hot
-store and reports skipped candidates rather than hiding loss behind a
-bulk delete.
+summaries before retraction through a database target or a typed print
+target; archive database failure leaves candidates in the hot store and
+reports skipped candidates rather than hiding loss behind a bulk delete.
 
 ## Restatement is signal by repetition
 
@@ -292,6 +292,28 @@ Four related v0.3.0 disciplines:
   the newest matching records at the requested depth, so quiet topics reach
   farther back than active topics without inventing a scoring language
   prematurely.
+
+## v0.4.0 wire discipline — privacy, collection targets, typed rejection
+
+The v0.4.0 shape makes private use explicit. Privacy is a required
+directional `Magnitude` on every stored record. Public observations
+carry no privacy selector and are exact `Zero` by type. Elevated reads
+use explicit private query variants carrying `PrivacySelection` with
+`Any`, `Exact`, `AtMost`, or `AtLeast`.
+
+Removal-candidate collection now carries an explicit `OutputTarget`.
+`ArchiveDatabase(Default)` writes the daemon-derived archive database
+and falls back to the backup archive database if needed.
+`ArchiveDatabase(Path(...))` writes the caller-selected archive
+database. `Print(StandardOutput)` and `Print(StandardError)` write no
+database; the typed `RemovalCandidatesCollected` reply is the capture
+material, and the CLI renders it to the requested stream.
+
+Request rejections use typed reasons at the Spirit boundary for
+store-domain failures: missing records, empty topic vectors, duplicate
+topics, and non-exact-zero public collection queries. Foreign boundary
+errors are wrapped explicitly as external rejections rather than
+pretending they are Spirit store reasons.
 
 ## Daemon configuration — 9-field positional argument
 

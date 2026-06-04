@@ -38,6 +38,7 @@ use unix_ancillary::UnixStreamExt;
 use crate::{
     Error, Result, StoreLocation,
     actors::{policy::BootstrapPolicySource, root::SpiritRoot},
+    error::RequestRejectionReason as SpiritRequestRejectionReason,
 };
 
 const DEFAULT_MAXIMUM_FRAME_BYTES: usize = 1024 * 1024;
@@ -1579,7 +1580,9 @@ impl ordinary::SignalClient {
                 }),
             },
             Reply::Rejected { reason } => Err(Error::RequestRejected {
-                reason: reason.to_string(),
+                reason: SpiritRequestRejectionReason::External {
+                    message: reason.to_string(),
+                },
             }),
         }
     }
@@ -1611,7 +1614,9 @@ impl owner::SignalClient {
                 }),
             },
             Reply::Rejected { reason } => Err(Error::RequestRejected {
-                reason: reason.to_string(),
+                reason: SpiritRequestRejectionReason::External {
+                    message: reason.to_string(),
+                },
             }),
         }
     }
@@ -1643,7 +1648,9 @@ impl upgrade::SignalClient {
                 }),
             },
             Reply::Rejected { reason } => Err(Error::RequestRejected {
-                reason: reason.to_string(),
+                reason: SpiritRequestRejectionReason::External {
+                    message: reason.to_string(),
+                },
             }),
         }
     }

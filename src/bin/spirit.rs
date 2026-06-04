@@ -1,1 +1,3 @@
-signal_frame::signal_cli!(spirit, signal_persona_spirit);
+fn main() -> std::process::ExitCode {
+    persona_spirit::CommandLine::run_from_environment("spirit")
+}

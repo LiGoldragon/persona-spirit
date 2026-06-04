@@ -4,11 +4,10 @@ use persona_spirit::{Command, Effect, SpiritActorRuntime, StoreLocation};
 use signal_frame::SubscriptionTokenInner;
 use signal_persona_spirit::{
     CertaintyChange, CertaintySelection, Description, Entry, Kind, Observation, ObservationMode,
-    ObserverFilter, ObserverSubscriptionToken, Operation as WorkingOperation, PrivacySelection,
-    RecordIdentifier, RecordIdentifierQuery, RecordIdentifierSelection, RecordQuery,
-    RecordedTimeSelection, RemovalCandidateCollection, Reply as WorkingReply,
-    StateSubscriptionToken, Statement, StatementText, Subscription, SubscriptionToken, Topic,
-    TopicSelection, Topics,
+    ObserverFilter, ObserverSubscriptionToken, Operation as WorkingOperation, PublicRecordQuery,
+    RecordIdentifier, RecordIdentifierQuery, RecordIdentifierSelection, RecordedTimeSelection,
+    RemovalCandidateCollection, Reply as WorkingReply, StateSubscriptionToken, Statement,
+    StatementText, Subscription, SubscriptionToken, Topic, TopicSelection, Topics,
 };
 use signal_sema::{Magnitude, SemaObservation, SemaOperation, SemaOutcome};
 
@@ -116,12 +115,11 @@ async fn spirit_record_query_projects_to_matched_observation() {
         .submit_request(WorkingOperation::Record(entry("matched projection")))
         .await
         .expect("record accepted");
-    let request = WorkingOperation::Observe(Observation::Records(RecordQuery {
+    let request = WorkingOperation::Observe(Observation::Records(PublicRecordQuery {
         topic_selection: TopicSelection::any(),
         kind: None,
         certainty_selection: CertaintySelection::Any,
         recorded_time_selection: RecordedTimeSelection::Any,
-        privacy_selection: PrivacySelection::default_observation_privacy(),
         mode: ObservationMode::SummaryOnly,
     }));
     let runtime_reply = runtime
@@ -228,7 +226,9 @@ async fn spirit_collect_removal_candidates_projects_to_retracted_observation() {
         .submit_request(WorkingOperation::Record(candidate))
         .await
         .expect("candidate accepted");
-    let request = WorkingOperation::CollectRemovalCandidates(RemovalCandidateCollection::inline());
+    let request = WorkingOperation::CollectRemovalCandidates(
+        RemovalCandidateCollection::default_archive_database(),
+    );
     let runtime_reply = runtime
         .submit_request(request.clone())
         .await

@@ -1,5 +1,5 @@
 use std::fs;
-use std::process::Command;
+use std::process::{Command, Output};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use persona_spirit::{
@@ -69,6 +69,30 @@ impl StoreFixture {
             .expect("daemon thread exits")
             .expect("daemon served request");
         reply
+    }
+
+    fn binary_output(&self, text: &str) -> Output {
+        let daemon = DaemonRuntime::from_configuration(DaemonConfiguration::new(
+            self.ordinary_socket.clone(),
+            self.owner_socket.clone(),
+            self.upgrade_socket.clone(),
+            self.store.clone(),
+            SocketMode::from_octal(0o600),
+        ))
+        .bind()
+        .expect("daemon binds");
+        let handle = std::thread::spawn(move || daemon.serve_count(1));
+        let output = Command::new(env!("CARGO_BIN_EXE_spirit"))
+            .env("PERSONA_SPIRIT_SOCKET", self.ordinary_socket.as_path())
+            .env_remove("PERSONA_SPIRIT_OWNER_SOCKET")
+            .arg(text)
+            .output()
+            .expect("binary runs");
+        handle
+            .join()
+            .expect("daemon thread exits")
+            .expect("daemon served request");
+        output
     }
 }
 
@@ -392,7 +416,7 @@ fn persona_spirit_client_collects_zero_candidates_to_file_before_removing_them()
     let fixture = StoreFixture::new("collect-zero-candidates");
     let mut archive_path = std::env::temp_dir();
     archive_path.push(format!(
-        "persona-spirit-boundary-collect-{}.nota",
+        "persona-spirit-boundary-collect-{}.sema",
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("system clock after epoch")
@@ -406,7 +430,7 @@ fn persona_spirit_client_collects_zero_candidates_to_file_before_removing_them()
         .expect("active record persisted");
 
     let request = format!(
-        "(CollectRemovalCandidates (((Any []) None (Exact Zero) Any (Exact Zero) SummaryOnly) (File [{}])))",
+        "(CollectRemovalCandidates (((Any []) None (Exact Zero) Any (Exact Zero) SummaryOnly) (ArchiveDatabase (Path [{}]))))",
         archive_path.to_string_lossy()
     );
     let collected = fixture.reply_text(&request).expect("candidate collected");
@@ -421,9 +445,11 @@ fn persona_spirit_client_collects_zero_candidates_to_file_before_removing_them()
         collected,
         "(RemovalCandidatesCollected ([(1 [workspace] Correction [candidate description] Zero Zero)] [1] []))"
     );
-    assert_eq!(
-        fs::read_to_string(&archive_path).expect("archive file readable"),
-        "(RecordsObserved [(1 [workspace] Correction [candidate description] Zero Zero)])\n"
+    assert!(
+        fs::metadata(&archive_path)
+            .expect("archive database metadata readable")
+            .len()
+            > 0
     );
     assert_eq!(candidates, "(RecordsObserved [])");
     assert_eq!(
@@ -449,7 +475,7 @@ fn persona_spirit_client_archive_failure_preserves_zero_candidates() {
         .expect("candidate persisted");
 
     let request = format!(
-        "(CollectRemovalCandidates (((Any []) None (Exact Zero) Any (Exact Zero) SummaryOnly) (File [{}])))",
+        "(CollectRemovalCandidates (((Any []) None (Exact Zero) Any (Exact Zero) SummaryOnly) (ArchiveDatabase (Path [{}]))))",
         archive_directory.to_string_lossy()
     );
     let collected = fixture
@@ -467,6 +493,29 @@ fn persona_spirit_client_archive_failure_preserves_zero_candidates() {
         candidates,
         "(RecordsObserved [(1 [workspace] Correction [candidate description] Zero Zero)])"
     );
+}
+
+#[test]
+fn persona_spirit_binary_print_target_can_route_collection_reply_to_standard_error() {
+    let fixture = StoreFixture::new("collect-print-standard-error");
+    fixture
+        .reply_text("(Record ([workspace] Correction [candidate description] Zero))")
+        .expect("candidate persisted");
+
+    let output = fixture.binary_output(
+        "(CollectRemovalCandidates (((Any []) None (Exact Zero) Any (Exact Zero) SummaryOnly) (Print StandardError)))",
+    );
+    let candidates = fixture
+        .reply_text("(Observe (Records ((Any []) None (Exact Zero) SummaryOnly)))")
+        .expect("remaining candidates observed");
+
+    assert!(output.status.success());
+    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr).trim(),
+        "(RemovalCandidatesCollected ([(1 [workspace] Correction [candidate description] Zero Zero)] [1] []))"
+    );
+    assert_eq!(candidates, "(RecordsObserved [])");
 }
 
 #[test]
@@ -756,10 +805,12 @@ fn persona_spirit_client_filters_record_observation_by_privacy() {
         .reply_text("(Observe (Records ((Any []) None SummaryOnly)))")
         .expect("default records observed");
     let all_privacy = fixture
-        .reply_text("(Observe (Records ((Any []) None Any Any Any SummaryOnly)))")
+        .reply_text("(Observe (PrivateRecords (Any ((Any []) None Any Any SummaryOnly))))")
         .expect("all privacy records observed");
     let high_privacy = fixture
-        .reply_text("(Observe (Records ((Any []) None Any Any (AtLeast High) SummaryOnly)))")
+        .reply_text(
+            "(Observe (PrivateRecords ((AtLeast High) ((Any []) None Any Any SummaryOnly))))",
+        )
         .expect("high privacy records observed");
 
     assert_eq!(
@@ -773,6 +824,35 @@ fn persona_spirit_client_filters_record_observation_by_privacy() {
     assert_eq!(
         high_privacy,
         "(RecordsObserved [(2 [workspace] Decision [private note] Maximum High)])"
+    );
+}
+
+#[test]
+fn persona_spirit_client_filters_identifier_observation_by_privacy() {
+    let fixture = StoreFixture::new("identifier-privacy-filter");
+    fixture
+        .reply_text("(Record ([workspace] Decision [open note] Maximum Zero))")
+        .expect("open entry persisted");
+    fixture
+        .reply_text("(Record ([workspace] Decision [private note] Maximum High))")
+        .expect("private entry persisted");
+
+    let default_observation = fixture
+        .reply_text("(Observe (RecordIdentifiers ((Range (1 2)) SummaryOnly)))")
+        .expect("default identifiers observed");
+    let private_observation = fixture
+        .reply_text(
+            "(Observe (PrivateRecordIdentifiers ((AtMost High) ((Range (1 2)) SummaryOnly))))",
+        )
+        .expect("private identifiers observed");
+
+    assert_eq!(
+        default_observation,
+        "(RecordsObserved [(1 [workspace] Decision [open note] Maximum Zero)])"
+    );
+    assert_eq!(
+        private_observation,
+        "(RecordsObserved [(1 [workspace] Decision [open note] Maximum Zero) (2 [workspace] Decision [private note] Maximum High)])"
     );
 }
 
@@ -794,6 +874,26 @@ fn persona_spirit_client_lists_topics_with_entry_counts() {
         .expect("topics observed");
 
     assert_eq!(reply, "(TopicsObserved [(naming 1) (spirit 2)])");
+}
+
+#[test]
+fn persona_spirit_client_hides_private_records_from_topic_counts() {
+    let fixture = StoreFixture::new("topic-count-privacy");
+    fixture
+        .reply_text("(Record ([spirit] Principle [open spirit] Maximum Zero))")
+        .expect("open spirit entry persisted");
+    fixture
+        .reply_text("(Record ([spirit] Principle [private spirit] Maximum High))")
+        .expect("private spirit entry persisted");
+    fixture
+        .reply_text("(Record ([naming] Principle [open naming] Maximum Zero))")
+        .expect("open naming entry persisted");
+
+    let reply = fixture
+        .reply_text("(Observe Topics)")
+        .expect("topics observed");
+
+    assert_eq!(reply, "(TopicsObserved [(naming 1) (spirit 1)])");
 }
 
 #[test]

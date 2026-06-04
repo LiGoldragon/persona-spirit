@@ -1,14 +1,14 @@
 use kameo::actor::{Actor, ActorRef};
 use kameo::message::{Context, Message};
 use signal_persona_spirit::{
-    CertaintyChange as CertaintyChangePayload, RecordIdentifier, RecordIdentifierQuery,
-    RecordObservation, RecordSubscription, RecordSummary, RemovalCandidateCollection,
-    Reply as WorkingReply,
+    CertaintyChange as CertaintyChangePayload, RecordIdentifier, RecordObservation, RecordSummary,
+    RemovalCandidateCollection, Reply as WorkingReply,
 };
 use signal_version_handover::{HandoverMarker, MarkerRequest};
 
 use crate::{
     Result, SpiritStore, StoreLocation,
+    observation::{RecordIdentifierObservation, RecordSubscriptionObservation},
     store::{StampedEntry, spirit_contract_version},
 };
 
@@ -50,7 +50,7 @@ pub struct ObserveRecords {
 }
 
 pub struct ObserveRecordIdentifiers {
-    pub query: RecordIdentifierQuery,
+    pub observation: RecordIdentifierObservation,
     pub trace: ActorTrace,
 }
 
@@ -59,7 +59,7 @@ pub struct ObserveTopics {
 }
 
 pub struct ReadRecordSnapshot {
-    pub subscription: RecordSubscription,
+    pub observation: RecordSubscriptionObservation,
     pub trace: ActorTrace,
 }
 
@@ -164,12 +164,12 @@ impl RecordStore {
 
     fn observe_record_identifiers(
         &self,
-        query: RecordIdentifierQuery,
+        observation: RecordIdentifierObservation,
         mut trace: ActorTrace,
     ) -> Result<PipelineReply> {
         trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReceived);
         trace.record(TraceNode::SEMA_READER, TraceAction::MessageReceived);
-        let reply = self.store.observe_record_identifiers(query)?;
+        let reply = self.store.observe_record_identifiers(observation)?;
         trace.record(TraceNode::SEMA_READER, TraceAction::RecordsRead);
         trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReplied);
         Ok(PipelineReply::new(reply, trace))
@@ -186,14 +186,15 @@ impl RecordStore {
 
     fn read_record_snapshot(
         &self,
-        subscription: RecordSubscription,
+        observation: RecordSubscriptionObservation,
         mut trace: ActorTrace,
     ) -> Result<RecordSnapshot> {
         trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReceived);
         trace.record(TraceNode::SEMA_READER, TraceAction::MessageReceived);
-        let records = self
-            .store
-            .summaries_for_topic(subscription.topic.as_ref())?;
+        let records = self.store.summaries_for_topic(
+            observation.subscription.topic.as_ref(),
+            observation.privacy_selection,
+        )?;
         trace.record(TraceNode::SEMA_READER, TraceAction::RecordsRead);
         trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReplied);
         Ok(RecordSnapshot { records, trace })
@@ -292,7 +293,7 @@ impl Message<ObserveRecordIdentifiers> for RecordStore {
         message: ObserveRecordIdentifiers,
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        self.observe_record_identifiers(message.query, message.trace)
+        self.observe_record_identifiers(message.observation, message.trace)
     }
 }
 
@@ -316,7 +317,7 @@ impl Message<ReadRecordSnapshot> for RecordStore {
         message: ReadRecordSnapshot,
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        self.read_record_snapshot(message.subscription, message.trace)
+        self.read_record_snapshot(message.observation, message.trace)
     }
 }
 

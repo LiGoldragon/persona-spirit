@@ -2,7 +2,7 @@ use signal_frame::{Reply, SubReply};
 use signal_persona_spirit::{Operation as WorkingOperation, Reply as WorkingReply};
 
 use super::trace::ActorTrace;
-use crate::{Error, Result};
+use crate::{Error, Result, error::RequestRejectionReason};
 
 #[derive(Debug, kameo::Reply)]
 pub struct DecodedRequest {
@@ -92,7 +92,9 @@ impl FramePipelineReply {
                 got: format!("{} operation replies", per_operation.len()),
             }),
             Reply::Rejected { reason } => Err(Error::RequestRejected {
-                reason: reason.to_string(),
+                reason: RequestRejectionReason::External {
+                    message: reason.to_string(),
+                },
             }),
         }
     }

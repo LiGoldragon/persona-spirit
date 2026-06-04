@@ -30,8 +30,8 @@ use signal_frame::{
 };
 use signal_persona_spirit::{
     CertaintySelection, Date, Description, Entry, Frame, FrameBody, Kind, Observation,
-    ObservationMode, Operation as WorkingOperation, PrivacySelection, RecordQuery,
-    Reply as WorkingReply, Statement, StatementText, Time, Topic, TopicSelection, Topics,
+    ObservationMode, Operation as WorkingOperation, PublicRecordQuery, Reply as WorkingReply,
+    Statement, StatementText, Time, Topic, TopicSelection, Topics,
 };
 use signal_sema::Magnitude;
 use signal_version_handover::{
@@ -144,12 +144,11 @@ fn mirrored_stamped_entry_payload(description: &str) -> Vec<u8> {
 }
 
 fn observe_all() -> WorkingOperation {
-    WorkingOperation::Observe(Observation::Records(RecordQuery {
+    WorkingOperation::Observe(Observation::Records(PublicRecordQuery {
         topic_selection: TopicSelection::any(),
         kind: None,
         certainty_selection: CertaintySelection::Any,
         recorded_time_selection: signal_persona_spirit::RecordedTimeSelection::Any,
-        privacy_selection: PrivacySelection::default_observation_privacy(),
         mode: ObservationMode::SummaryOnly,
     }))
 }
@@ -1008,9 +1007,9 @@ fn persona_spirit_upgrade_readiness_freezes_public_writes_until_completion() {
         .expect("write client exits")
         .expect_err("ordinary write is rejected during handover mode");
     assert!(
-        write_error
-            .to_string()
-            .contains("persona-spirit request rejected before execution: receiver-internal"),
+        write_error.to_string().contains(
+            "persona-spirit request rejected before execution: External(receiver-internal"
+        ),
         "unexpected handover-mode write error: {write_error}"
     );
 

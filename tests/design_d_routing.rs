@@ -23,7 +23,7 @@ use persona_spirit::{
 use signal_frame::{Reply, SubReply};
 use signal_persona_origin::EngineIdentifier;
 use signal_persona_spirit::{
-    CertaintySelection, Observation, Operation as SpiritOperation, PrivacySelection, RecordQuery,
+    CertaintySelection, Observation, Operation as SpiritOperation, PublicRecordQuery,
     Reply as SpiritReply, TopicSelection,
 };
 use version_projection::{ComponentName, ContractVersion};
@@ -171,12 +171,11 @@ impl SpiritInstance {
 }
 
 fn observe_records() -> SpiritOperation {
-    SpiritOperation::Observe(Observation::Records(RecordQuery {
+    SpiritOperation::Observe(Observation::Records(PublicRecordQuery {
         topic_selection: TopicSelection::any(),
         kind: None,
         certainty_selection: CertaintySelection::Any,
         recorded_time_selection: signal_persona_spirit::RecordedTimeSelection::Any,
-        privacy_selection: PrivacySelection::default_observation_privacy(),
         mode: signal_persona_spirit::ObservationMode::SummaryOnly,
     }))
 }
