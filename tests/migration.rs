@@ -24,6 +24,8 @@ const V020_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(2);
 const V030_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(3);
 const V040_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(4);
 const RECORDS: TableName = TableName::new("records");
+const MINIMUM_IDENTIFIER_CODE_LENGTH: usize = 4;
+const MAXIMUM_IDENTIFIER_CODE_LENGTH: usize = 7;
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
 struct V010StoredRecord {
@@ -90,6 +92,15 @@ struct OldRecordInput<'a> {
 struct MigrationFixture {
     source: StorePath,
     target: StorePath,
+}
+
+fn assert_short_identifier(identifier: RecordIdentifier) {
+    let code_length = identifier.code().len();
+    assert!(
+        (MINIMUM_IDENTIFIER_CODE_LENGTH..=MAXIMUM_IDENTIFIER_CODE_LENGTH).contains(&code_length),
+        "identifier code should be 4-7 characters: {}",
+        identifier.code()
+    );
 }
 
 impl MigrationFixture {
@@ -203,7 +214,7 @@ fn spirit_migration_preserves_timestamp_and_identifier_order() {
         ))
         .expect("post-migration record accepted");
     assert_ne!(accepted.identifier(), RecordIdentifier::new(3));
-    assert!(accepted.identifier().code().len() >= 4);
+    assert_short_identifier(accepted.identifier());
 }
 
 #[test]
@@ -425,7 +436,7 @@ fn spirit_privacy_migration_projects_v030_records_to_v040() {
         ))
         .expect("post-migration record accepted");
     assert_ne!(accepted.identifier(), RecordIdentifier::new(3));
-    assert!(accepted.identifier().code().len() >= 4);
+    assert_short_identifier(accepted.identifier());
 }
 
 #[test]
@@ -481,8 +492,8 @@ fn spirit_identifier_migration_randomizes_ordinal_identifiers_and_writes_nota_ma
         mapping.rows[0].hash_identifier,
         mapping.rows[1].hash_identifier
     );
-    assert!(mapping.rows[0].hash_identifier.code().len() >= 4);
-    assert!(mapping.rows[1].hash_identifier.code().len() >= 4);
+    assert_short_identifier(mapping.rows[0].hash_identifier);
+    assert_short_identifier(mapping.rows[1].hash_identifier);
 
     let records = target_provenances(&fixture.target);
     assert_eq!(records.len(), 2);

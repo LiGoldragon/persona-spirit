@@ -123,12 +123,14 @@ Contract records stay in `signal-persona-spirit` and
   release. v0.4.1's bridge is `spirit-migrate-0-3-to-0-4`, which projects
   v0.3.0 records into the privacy-aware store with `privacy = Zero`. v0.5.0's
   bridge is `spirit-migrate-0-4-to-0-5`, which rewrites ordinal identifiers to
-  96-bit random identifiers and emits a NOTA hash-to-ordinal mapping table.
+  random lowercase base36 identifiers and emits a NOTA hash-to-ordinal mapping
+  table.
 - `Remove(RecordIdentifier)` retracts one stored intent entry through
   `RecordStore` and returns `RecordRemoved`; the CLI never opens the
   database directly. Removed record identifiers are not reused. `RecordStore`
-  mints opaque random identifiers, retries on live collision, and uses recorded
-  time plus sema first-assert commit order for qualitative recency ties.
+  mints the shortest collision-free lowercase base36 identifier code from four
+  to seven characters, retries on live collision, and uses recorded time plus
+  sema first-assert commit order for qualitative recency ties.
 - Valid but unimplemented requests use `ReplyShaper` and do not touch
   `RecordStore`.
 - Valid but unimplemented CLI requests emit a typed NOTA

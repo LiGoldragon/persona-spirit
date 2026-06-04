@@ -66,6 +66,15 @@ fn identifier_text(identifier: RecordIdentifier) -> String {
     encoder.into_string()
 }
 
+fn assert_short_identifier(identifier: RecordIdentifier) {
+    let code_length = identifier.code().len();
+    assert!(
+        (4..=7).contains(&code_length),
+        "identifier should use a four-to-seven-character code: {}",
+        identifier.code()
+    );
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn persona_spirit_entry_assertion_runs_through_actor_planes() {
     let fixture = SpiritRuntimeFixture::new("entry-path");
@@ -77,7 +86,7 @@ async fn persona_spirit_entry_assertion_runs_through_actor_planes() {
         .expect("entry accepted");
 
     let identifier = accepted_identifier(&reply);
-    assert!(identifier.code().len() >= 4);
+    assert_short_identifier(identifier);
     assert_eq!(
         reply.text(),
         format!("(RecordAccepted {})", identifier_text(identifier))
@@ -705,7 +714,7 @@ async fn persona_spirit_state_statement_uses_classifier_before_store() {
         .expect("statement classified");
 
     let identifier = accepted_identifier(&reply);
-    assert!(identifier.code().len() >= 4);
+    assert_short_identifier(identifier);
     assert_eq!(
         reply.text(),
         format!("(RecordAccepted {})", identifier_text(identifier))

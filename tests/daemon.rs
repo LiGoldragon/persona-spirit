@@ -30,8 +30,8 @@ use signal_frame::{
 };
 use signal_persona_spirit::{
     CertaintySelection, Date, Description, Entry, Frame, FrameBody, Kind, Observation,
-    ObservationMode, Operation as WorkingOperation, PublicRecordQuery, Reply as WorkingReply,
-    Statement, StatementText, Time, Topic, TopicSelection, Topics,
+    ObservationMode, Operation as WorkingOperation, PublicRecordQuery, RecordIdentifier,
+    Reply as WorkingReply, Statement, StatementText, Time, Topic, TopicSelection, Topics,
 };
 use signal_sema::Magnitude;
 use signal_version_handover::{
@@ -40,6 +40,15 @@ use signal_version_handover::{
 };
 use unix_ancillary::UnixStreamExt;
 use version_projection::{ComponentName, ContractVersion, Projected, RecordKind};
+
+fn assert_short_identifier(identifier: RecordIdentifier) {
+    let code_length = identifier.code().len();
+    assert!(
+        (4..=7).contains(&code_length),
+        "identifier should use a four-to-seven-character code: {}",
+        identifier.code()
+    );
+}
 
 #[derive(Debug, Clone)]
 struct DaemonFixture {
@@ -449,7 +458,7 @@ fn persona_spirit_daemon_serves_signal_frames_from_handed_off_file_descriptor() 
     let SubReply::Ok(WorkingReply::RecordAccepted(accepted)) = operations.remove(0) else {
         panic!("expected RecordAccepted handoff operation");
     };
-    assert!(accepted.identifier().code().len() >= 4);
+    assert_short_identifier(accepted.identifier());
 
     daemon.shutdown().expect("daemon shuts down");
 }
@@ -855,7 +864,7 @@ fn persona_spirit_upgrade_completion_requires_accepted_readiness() {
         .join()
         .expect("ordinary client exits")
         .expect("ordinary reply received");
-    assert!(accepted_identifier(&ordinary_reply).code().len() >= 4);
+    assert_short_identifier(accepted_identifier(&ordinary_reply));
 
     daemon.shutdown().expect("daemon shuts down");
 }
@@ -898,7 +907,7 @@ fn persona_spirit_upgrade_readiness_rejects_commit_sequence_drift() {
         .join()
         .expect("ordinary client exits")
         .expect("ordinary reply received");
-    assert!(accepted_identifier(&ordinary_reply).code().len() >= 4);
+    assert_short_identifier(accepted_identifier(&ordinary_reply));
 
     let readiness_client = client.clone();
     let component_for_readiness = component.clone();

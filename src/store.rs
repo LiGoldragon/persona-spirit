@@ -38,6 +38,10 @@ const BACKUP_REMOVAL_CANDIDATE_ARCHIVE_FILE_NAME: &str =
     "persona-spirit-removal-candidate-archive-backup.sema";
 const STORE_ENVIRONMENT_VARIABLE: &str = "PERSONA_SPIRIT_STORE";
 const STATE_ENVIRONMENT_VARIABLE: &str = "PERSONA_STATE_PATH";
+const RECORD_IDENTIFIER_MINIMUM_CODE_LENGTH: usize = 4;
+const RECORD_IDENTIFIER_MAXIMUM_CODE_LENGTH: usize = 7;
+const RECORD_IDENTIFIER_CODE_RADIX: u64 = 36;
+const RANDOM_IDENTIFIER_ATTEMPTS_PER_LENGTH: usize = 128;
 const SHALLOW_RECORD_LIMIT: usize = 5;
 const RECENT_RECORD_LIMIT: usize = 15;
 const DEEP_RECORD_LIMIT: usize = 30;
@@ -68,6 +72,12 @@ struct ArchivedRemovalCandidate {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RecordIdentifierMint {
     used_identifiers: BTreeSet<RecordIdentifier>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RecordIdentifierCodeRange {
+    first_value: u64,
+    value_count: u64,
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -785,15 +795,64 @@ impl RecordIdentifierMint {
     }
 
     fn next_identifier(&self) -> Result<RecordIdentifier> {
-        loop {
-            let mut bytes = [0_u8; 12];
-            getrandom::fill(&mut bytes)
-                .map_err(|error| Error::spirit_store_reason(error.to_string()))?;
-            let identifier = RecordIdentifier::from_bytes(bytes);
-            if !self.used_identifiers.contains(&identifier) {
+        for code_length in
+            RECORD_IDENTIFIER_MINIMUM_CODE_LENGTH..=RECORD_IDENTIFIER_MAXIMUM_CODE_LENGTH
+        {
+            if let Some(identifier) = self.identifier_for_code_length(code_length)? {
                 return Ok(identifier);
             }
         }
+        Err(Error::spirit_store_reason(format!(
+            "no available record identifier code between {RECORD_IDENTIFIER_MINIMUM_CODE_LENGTH} and {RECORD_IDENTIFIER_MAXIMUM_CODE_LENGTH} characters"
+        )))
+    }
+
+    fn identifier_for_code_length(&self, code_length: usize) -> Result<Option<RecordIdentifier>> {
+        let range = RecordIdentifierCodeRange::new(code_length);
+        for _ in 0..RANDOM_IDENTIFIER_ATTEMPTS_PER_LENGTH {
+            let identifier = range.random_identifier()?;
+            if !self.used_identifiers.contains(&identifier) {
+                return Ok(Some(identifier));
+            }
+        }
+        Ok(range.first_available_identifier(&self.used_identifiers))
+    }
+}
+
+impl RecordIdentifierCodeRange {
+    fn new(code_length: usize) -> Self {
+        let first_value = if code_length == RECORD_IDENTIFIER_MINIMUM_CODE_LENGTH {
+            0
+        } else {
+            Self::radix_power(code_length - 1)
+        };
+        let next_length_first_value = Self::radix_power(code_length);
+        Self {
+            first_value,
+            value_count: next_length_first_value - first_value,
+        }
+    }
+
+    fn random_identifier(self) -> Result<RecordIdentifier> {
+        let mut bytes = [0_u8; 8];
+        getrandom::fill(&mut bytes)
+            .map_err(|error| Error::spirit_store_reason(error.to_string()))?;
+        let offset = u64::from_be_bytes(bytes) % self.value_count;
+        Ok(RecordIdentifier::new(self.first_value + offset))
+    }
+
+    fn first_available_identifier(
+        self,
+        used_identifiers: &BTreeSet<RecordIdentifier>,
+    ) -> Option<RecordIdentifier> {
+        let last_value = self.first_value + self.value_count;
+        (self.first_value..last_value)
+            .map(RecordIdentifier::new)
+            .find(|identifier| !used_identifiers.contains(identifier))
+    }
+
+    fn radix_power(exponent: usize) -> u64 {
+        (0..exponent).fold(1, |value, _| value * RECORD_IDENTIFIER_CODE_RADIX)
     }
 }
 
@@ -827,6 +886,16 @@ mod tests {
         fn store(&self) -> SpiritStore {
             SpiritStore::open(&self.location).expect("store opens")
         }
+    }
+
+    fn assert_short_identifier(identifier: RecordIdentifier) {
+        let code_length = identifier.code().len();
+        assert!(
+            (RECORD_IDENTIFIER_MINIMUM_CODE_LENGTH..=RECORD_IDENTIFIER_MAXIMUM_CODE_LENGTH)
+                .contains(&code_length),
+            "identifier code should be 4-7 characters: {}",
+            identifier.code()
+        );
     }
 
     #[test]
@@ -959,7 +1028,7 @@ mod tests {
 
         assert_ne!(accepted.identifier(), imported_identifier);
         assert_ne!(accepted.identifier(), RecordIdentifier::new(1_001));
-        assert!(accepted.identifier().code().len() >= 4);
+        assert_short_identifier(accepted.identifier());
     }
 
     #[test]
@@ -1062,8 +1131,29 @@ mod tests {
             first_after_import.identifier(),
             second_after_import.identifier()
         );
-        assert!(first_after_import.identifier().code().len() >= 4);
-        assert!(second_after_import.identifier().code().len() >= 4);
+        assert_short_identifier(first_after_import.identifier());
+        assert_short_identifier(second_after_import.identifier());
+    }
+
+    #[test]
+    fn spirit_store_mints_short_record_identifier_codes() {
+        let fixture = StoreFixture::new("short-identifier-code");
+        let store = fixture.store();
+        let accepted = store
+            .assert_entry(StampedEntry::new(
+                Entry {
+                    topics: Topics::single(Topic::new("spirit")),
+                    kind: Kind::Decision,
+                    description: Description::new("short identifier"),
+                    certainty: Magnitude::High,
+                    privacy: Magnitude::Zero,
+                },
+                Date::new(2026, 6, 4),
+                Time::new(16, 30, 0),
+            ))
+            .expect("record accepted");
+
+        assert_short_identifier(accepted.identifier());
     }
 
     #[test]

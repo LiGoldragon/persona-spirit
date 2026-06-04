@@ -119,9 +119,11 @@ fn identifier_text(identifier: RecordIdentifier) -> String {
 
 fn assert_record_accepted(reply: &str) -> RecordIdentifier {
     let identifier = accepted_identifier(reply);
+    let code_length = identifier.code().len();
     assert!(
-        identifier.code().len() >= 4,
-        "identifier should use the four-character floor: {identifier:?}"
+        (4..=7).contains(&code_length),
+        "identifier should use a four-to-seven-character code: {}",
+        identifier.code()
     );
     assert_eq!(
         reply,

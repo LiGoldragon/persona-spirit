@@ -87,12 +87,14 @@ requires capturing its full text and provenance first —
 tombstone-before-remove.
 
 Record identifiers are non-reusable opaque random locators. `RecordStore` mints
-96-bit identifiers with the operating-system random source and renders them as
-lowercase base36 with a four-character minimum display/query floor. Removed
-identifiers are not reused because the mint checks existing live identifiers
-and random collision retry is local to the store. Recency never comes from the
-identifier: qualitative `Shallow` / `Recent` / `Deep` / `VeryDeep` selection
-uses recorded time and sema first-assert commit order for same-second ties.
+the shortest available lowercase base36 code from four to seven characters,
+starting at the four-character range and widening only when the shorter range is
+occupied. Removed identifiers are not reused because the mint checks existing
+live identifiers and random collision retry is local to the store. Older long
+identifier codes remain decodable for migration compatibility. Recency never
+comes from the identifier: qualitative `Shallow` / `Recent` / `Deep` /
+`VeryDeep` selection uses recorded time and sema first-assert commit order for
+same-second ties.
 The v0.4-to-v0.5 migration writes a NOTA sidecar mapping new hash identifiers
 to former ordinal identifiers for temporary human/agent lookup.
 
