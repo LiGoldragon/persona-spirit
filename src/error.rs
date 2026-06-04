@@ -5,11 +5,18 @@ use thiserror::Error as ThisError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RequestRejectionReason {
-    RecordNotStored { collection: String, identifier: u64 },
+    RecordNotStored {
+        collection: String,
+        identifier: String,
+    },
     EmptyTopics,
-    DuplicateTopic { topic: String },
+    DuplicateTopic {
+        topic: String,
+    },
     CollectionQueryNotExactZeroPublic,
-    External { message: String },
+    External {
+        message: String,
+    },
 }
 
 #[derive(ThisError, Debug, Clone, PartialEq, Eq)]
@@ -145,6 +152,12 @@ impl Error {
     pub fn spirit_store(error: sema_engine::Error) -> Self {
         Self::SpiritStore {
             reason: error.to_string(),
+        }
+    }
+
+    pub fn spirit_store_reason(reason: impl Into<String>) -> Self {
+        Self::SpiritStore {
+            reason: reason.into(),
         }
     }
 

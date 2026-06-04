@@ -2,6 +2,7 @@ use std::fs;
 use std::process::{Command, Output};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use nota_codec::{Decoder, Encoder, NotaDecode, NotaEncode};
 use persona_spirit::{
     DaemonConfiguration, DaemonRuntime, Error, SocketMode, SocketPath, StorePath,
 };
@@ -9,6 +10,7 @@ use signal_frame::{
     ClientShape, CommandLineDispatch, CommandLineSocket, CommandLineSockets, RequestHead,
     RequestInput, RequestText, SingleArgument, SingleArgumentError,
 };
+use signal_persona_spirit::{RecordIdentifier, Reply as WorkingReply};
 
 #[derive(Debug, Clone)]
 struct StoreFixture {
@@ -94,6 +96,38 @@ impl StoreFixture {
             .expect("daemon served request");
         output
     }
+}
+
+fn accepted_identifier(reply: &str) -> RecordIdentifier {
+    let mut decoder = Decoder::new(reply);
+    let reply = WorkingReply::decode(&mut decoder).expect("reply decodes");
+    let WorkingReply::RecordAccepted(accepted) = reply else {
+        panic!("expected RecordAccepted reply, got {reply:?}");
+    };
+    accepted.identifier()
+}
+
+fn accepted_identifier_text(reply: &str) -> String {
+    identifier_text(accepted_identifier(reply))
+}
+
+fn identifier_text(identifier: RecordIdentifier) -> String {
+    let mut encoder = Encoder::new();
+    identifier.encode(&mut encoder).expect("identifier encodes");
+    encoder.into_string()
+}
+
+fn assert_record_accepted(reply: &str) -> RecordIdentifier {
+    let identifier = accepted_identifier(reply);
+    assert!(
+        identifier.code().len() >= 4,
+        "identifier should use the four-character floor: {identifier:?}"
+    );
+    assert_eq!(
+        reply,
+        format!("(RecordAccepted {})", identifier_text(identifier))
+    );
+    identifier
 }
 
 #[test]
@@ -237,7 +271,7 @@ fn persona_spirit_client_accepts_request_file_path_argument() {
         .reply_text(&request_path.to_string_lossy())
         .expect("file path request persisted");
 
-    assert_eq!(reply, "(RecordAccepted 1)");
+    assert_record_accepted(&reply);
 }
 
 #[test]
@@ -247,7 +281,7 @@ fn persona_spirit_client_classifies_statement_as_provisional_record() {
         .reply_text("(State ([capture this intent]))")
         .expect("statement classified");
 
-    assert_eq!(reply, "(RecordAccepted 1)");
+    assert_record_accepted(&reply);
 }
 
 #[test]
@@ -257,7 +291,7 @@ fn persona_spirit_client_asserts_entry_and_mints_record_identifier() {
         .reply_text("(Record ([workspace] Decision [description only] Maximum))")
         .expect("entry persisted");
 
-    assert_eq!(reply, "(RecordAccepted 1)");
+    assert_record_accepted(&reply);
 }
 
 #[test]
@@ -271,10 +305,7 @@ fn persona_spirit_client_accepts_high_magnitude_and_observes_it_back() {
         .reply_text("(Observe (Records ((Any []) None SummaryOnly)))")
         .expect("records observed");
 
-    assert_eq!(
-        reply,
-        "(RecordsObserved [(1 [workspace] Decision [high description] High Zero)])"
-    );
+    assert!(reply.contains("[workspace] Decision [high description] High Zero"));
 }
 
 #[test]
@@ -309,10 +340,8 @@ fn persona_spirit_client_persists_entries_for_later_summary_observation() {
         .reply_text("(Observe (Records ((Any []) None SummaryOnly)))")
         .expect("records observed");
 
-    assert_eq!(
-        reply,
-        "(RecordsObserved [(1 [workspace] Decision [first description] Maximum Zero) (2 [workspace] Correction [second description] Medium Zero)])"
-    );
+    assert!(reply.contains("[workspace] Decision [first description] Maximum Zero"));
+    assert!(reply.contains("[workspace] Correction [second description] Medium Zero"));
 }
 
 #[test]
@@ -321,22 +350,23 @@ fn persona_spirit_client_observes_records_by_exact_identifier() {
     fixture
         .reply_text("(Record ([workspace] Decision [first description] Maximum))")
         .expect("first entry persisted");
-    fixture
+    let second = fixture
         .reply_text("(Record ([workspace] Correction [second description] Medium))")
         .expect("second entry persisted");
+    let second_identifier = accepted_identifier_text(&second);
 
     let reply = fixture
-        .reply_text("(Observe (RecordIdentifiers ((Exact 2) SummaryOnly)))")
+        .reply_text(&format!(
+            "(Observe (RecordIdentifiers ((Exact {second_identifier}) SummaryOnly)))"
+        ))
         .expect("record identifier observed");
 
-    assert_eq!(
-        reply,
-        "(RecordsObserved [(2 [workspace] Correction [second description] Medium Zero)])"
-    );
+    assert!(reply.contains("[workspace] Correction [second description] Medium Zero"));
+    assert!(!reply.contains("[first description]"));
 }
 
 #[test]
-fn persona_spirit_client_observes_records_by_identifier_range() {
+fn persona_spirit_client_rejects_identifier_range_after_random_identifiers() {
     let fixture = StoreFixture::new("record-identifier-range");
     fixture
         .reply_text("(Record ([workspace] Decision [first description] Maximum))")
@@ -348,50 +378,49 @@ fn persona_spirit_client_observes_records_by_identifier_range() {
         .reply_text("(Record ([workspace] Constraint [third description] High))")
         .expect("third entry persisted");
 
-    let reply = fixture
+    let error = fixture
         .reply_text("(Observe (RecordIdentifiers ((Range (2 3)) SummaryOnly)))")
-        .expect("record identifier range observed");
+        .expect_err("identifier range no longer decodes");
 
-    assert_eq!(
-        reply,
-        "(RecordsObserved [(2 [workspace] Correction [second description] Medium Zero) (3 [workspace] Constraint [third description] High Zero)])"
-    );
+    assert!(error.to_string().contains("unknown variant `Range`"));
 }
 
 #[test]
 fn persona_spirit_client_removes_entry_and_excludes_it_from_observation() {
     let fixture = StoreFixture::new("remove-entry");
-    fixture
+    let first = fixture
         .reply_text("(Record ([workspace] Decision [first description] Maximum))")
         .expect("first entry persisted");
+    let first_identifier = accepted_identifier_text(&first);
     fixture
         .reply_text("(Record ([workspace] Correction [second description] Medium))")
         .expect("second entry persisted");
 
-    let removed = fixture.reply_text("(Remove 1)").expect("entry removed");
+    let removed = fixture
+        .reply_text(&format!("(Remove {first_identifier})"))
+        .expect("entry removed");
     let observed = fixture
         .reply_text("(Observe (Records ((Any []) None SummaryOnly)))")
         .expect("records observed");
 
-    assert_eq!(removed, "(RecordRemoved 1)");
-    assert_eq!(
-        observed,
-        "(RecordsObserved [(2 [workspace] Correction [second description] Medium Zero)])"
-    );
+    assert_eq!(removed, format!("(RecordRemoved {first_identifier})"));
+    assert!(!observed.contains("[first description]"));
+    assert!(observed.contains("[workspace] Correction [second description] Medium Zero"));
 }
 
 #[test]
 fn persona_spirit_client_changes_certainty_to_zero_for_removal_candidate_review() {
     let fixture = StoreFixture::new("change-certainty-zero");
-    fixture
+    let first = fixture
         .reply_text("(Record ([workspace] Decision [first description] Maximum))")
         .expect("first entry persisted");
+    let first_identifier = accepted_identifier_text(&first);
     fixture
         .reply_text("(Record ([workspace] Correction [second description] Medium))")
         .expect("second entry persisted");
 
     let changed = fixture
-        .reply_text("(ChangeCertainty (1 Zero))")
+        .reply_text(&format!("(ChangeCertainty ({first_identifier} Zero))"))
         .expect("certainty changed");
     let candidates = fixture
         .reply_text("(Observe (Records ((Any []) None (Exact Zero) SummaryOnly)))")
@@ -400,15 +429,14 @@ fn persona_spirit_client_changes_certainty_to_zero_for_removal_candidate_review(
         .reply_text("(Observe (Records ((Any []) None (AtLeast Minimum) SummaryOnly)))")
         .expect("active records observed");
 
-    assert_eq!(changed, "(CertaintyChanged (1 Zero))");
     assert_eq!(
-        candidates,
-        "(RecordsObserved [(1 [workspace] Decision [first description] Zero Zero)])"
+        changed,
+        format!("(CertaintyChanged ({first_identifier} Zero))")
     );
-    assert_eq!(
-        active,
-        "(RecordsObserved [(2 [workspace] Correction [second description] Medium Zero)])"
-    );
+    assert!(candidates.contains("[workspace] Decision [first description] Zero Zero"));
+    assert!(!candidates.contains("[second description]"));
+    assert!(active.contains("[workspace] Correction [second description] Medium Zero"));
+    assert!(!active.contains("[first description]"));
 }
 
 #[test]
@@ -422,9 +450,10 @@ fn persona_spirit_client_collects_zero_candidates_to_file_before_removing_them()
             .expect("system clock after epoch")
             .as_nanos()
     ));
-    fixture
+    let candidate = fixture
         .reply_text("(Record ([workspace] Correction [candidate description] Zero))")
         .expect("candidate persisted");
+    let candidate_identifier = accepted_identifier_text(&candidate);
     fixture
         .reply_text("(Record ([workspace] Decision [active description] High))")
         .expect("active record persisted");
@@ -441,10 +470,8 @@ fn persona_spirit_client_collects_zero_candidates_to_file_before_removing_them()
         .reply_text("(Observe (Records ((Any []) None (AtLeast Minimum) SummaryOnly)))")
         .expect("active records observed");
 
-    assert_eq!(
-        collected,
-        "(RemovalCandidatesCollected ([(1 [workspace] Correction [candidate description] Zero Zero)] [1] []))"
-    );
+    assert!(collected.contains("[workspace] Correction [candidate description] Zero Zero"));
+    assert!(collected.contains(&candidate_identifier));
     assert!(
         fs::metadata(&archive_path)
             .expect("archive database metadata readable")
@@ -452,10 +479,7 @@ fn persona_spirit_client_collects_zero_candidates_to_file_before_removing_them()
             > 0
     );
     assert_eq!(candidates, "(RecordsObserved [])");
-    assert_eq!(
-        active,
-        "(RecordsObserved [(2 [workspace] Decision [active description] High Zero)])"
-    );
+    assert!(active.contains("[workspace] Decision [active description] High Zero"));
 }
 
 #[test]
@@ -470,9 +494,10 @@ fn persona_spirit_client_archive_failure_preserves_zero_candidates() {
             .as_nanos()
     ));
     fs::create_dir(&archive_directory).expect("archive failure directory created");
-    fixture
+    let candidate = fixture
         .reply_text("(Record ([workspace] Correction [candidate description] Zero))")
         .expect("candidate persisted");
+    let candidate_identifier = accepted_identifier_text(&candidate);
 
     let request = format!(
         "(CollectRemovalCandidates (((Any []) None (Exact Zero) Any (Exact Zero) SummaryOnly) (ArchiveDatabase (Path [{}]))))",
@@ -487,20 +512,18 @@ fn persona_spirit_client_archive_failure_preserves_zero_candidates() {
 
     assert_eq!(
         collected,
-        "(RemovalCandidatesCollected ([] [] [(1 ArchiveFailed)]))"
+        format!("(RemovalCandidatesCollected ([] [] [({candidate_identifier} ArchiveFailed)]))")
     );
-    assert_eq!(
-        candidates,
-        "(RecordsObserved [(1 [workspace] Correction [candidate description] Zero Zero)])"
-    );
+    assert!(candidates.contains("[workspace] Correction [candidate description] Zero Zero"));
 }
 
 #[test]
 fn persona_spirit_binary_print_target_can_route_collection_reply_to_standard_error() {
     let fixture = StoreFixture::new("collect-print-standard-error");
-    fixture
+    let candidate = fixture
         .reply_text("(Record ([workspace] Correction [candidate description] Zero))")
         .expect("candidate persisted");
+    let candidate_identifier = accepted_identifier_text(&candidate);
 
     let output = fixture.binary_output(
         "(CollectRemovalCandidates (((Any []) None (Exact Zero) Any (Exact Zero) SummaryOnly) (Print StandardError)))",
@@ -511,29 +534,35 @@ fn persona_spirit_binary_print_target_can_route_collection_reply_to_standard_err
 
     assert!(output.status.success());
     assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "");
-    assert_eq!(
-        String::from_utf8_lossy(&output.stderr).trim(),
-        "(RemovalCandidatesCollected ([(1 [workspace] Correction [candidate description] Zero Zero)] [1] []))"
-    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("[workspace] Correction [candidate description] Zero Zero"));
+    assert!(stderr.contains(&candidate_identifier));
     assert_eq!(candidates, "(RecordsObserved [])");
 }
 
 #[test]
 fn persona_spirit_client_does_not_reuse_removed_record_identifier() {
     let fixture = StoreFixture::new("remove-entry-no-reuse");
-    fixture
+    let first = fixture
         .reply_text("(Record ([workspace] Decision [first description] Maximum))")
         .expect("first entry persisted");
-    fixture
+    let first_identifier = accepted_identifier(&first);
+    let second = fixture
         .reply_text("(Record ([workspace] Correction [second description] Medium))")
         .expect("second entry persisted");
-    fixture.reply_text("(Remove 2)").expect("entry removed");
+    let second_identifier = accepted_identifier(&second);
+    fixture
+        .reply_text(&format!("(Remove {})", identifier_text(second_identifier)))
+        .expect("entry removed");
 
     let accepted = fixture
         .reply_text("(Record ([workspace] Principle [third description] High))")
         .expect("third entry persisted");
+    let third_identifier = accepted_identifier(&accepted);
 
-    assert_eq!(accepted, "(RecordAccepted 4)");
+    assert_ne!(third_identifier, first_identifier);
+    assert_ne!(third_identifier, second_identifier);
+    assert_record_accepted(&accepted);
 }
 
 #[test]
@@ -587,10 +616,8 @@ fn persona_spirit_client_opens_record_subscription_with_summary_snapshot() {
         .reply_text("(Unwatch (Records (1)))")
         .expect("record subscription retracted");
 
-    assert_eq!(
-        opened,
-        "(SubscriptionOpened ((Records (1)) (Records [(1 [workspace] Decision [subscription description] Maximum Zero)])))"
-    );
+    assert!(opened.starts_with("(SubscriptionOpened ((Records (1)) (Records ["));
+    assert!(opened.contains("[workspace] Decision [subscription description] Maximum Zero"));
     assert_eq!(retracted, "(SubscriptionRetracted ((Records (1))))");
 }
 
@@ -608,10 +635,8 @@ fn persona_spirit_client_filters_record_observation_by_topic() {
         .reply_text("(Observe (Records ((Partial [naming]) None SummaryOnly)))")
         .expect("records observed");
 
-    assert_eq!(
-        reply,
-        "(RecordsObserved [(2 [naming] Correction [naming description] Maximum Zero)])"
-    );
+    assert!(reply.contains("[naming] Correction [naming description] Maximum Zero"));
+    assert!(!reply.contains("[workspace description]"));
 }
 
 #[test]
@@ -631,10 +656,7 @@ fn persona_spirit_client_filters_record_observation_by_topic_membership() {
         .reply_text("(Observe (Records ((Partial [schema]) None SummaryOnly)))")
         .expect("schema records observed");
 
-    assert_eq!(
-        spirit,
-        "(RecordsObserved [(1 [spirit nota] Correction [quote-free cli shape] Maximum Zero)])"
-    );
+    assert!(spirit.contains("[spirit nota] Correction [quote-free cli shape] Maximum Zero"));
     assert_eq!(spirit, nota);
     assert_eq!(schema, "(RecordsObserved [])");
 }
@@ -662,14 +684,10 @@ fn persona_spirit_client_filters_record_observation_by_partial_and_full_topic_se
         .reply_text("(Observe (Records ((Full [spirit schema]) None SummaryOnly)))")
         .expect("full topic-set miss observed");
 
-    assert_eq!(
-        partial,
-        "(RecordsObserved [(1 [spirit nota] Correction [shared topic set] Maximum Zero) (2 [schema] Principle [schema entry] Maximum Zero)])"
-    );
-    assert_eq!(
-        full_match,
-        "(RecordsObserved [(1 [spirit nota] Correction [shared topic set] Maximum Zero)])"
-    );
+    assert!(partial.contains("[spirit nota] Correction [shared topic set] Maximum Zero"));
+    assert!(partial.contains("[schema] Principle [schema entry] Maximum Zero"));
+    assert!(full_match.contains("[spirit nota] Correction [shared topic set] Maximum Zero"));
+    assert!(!full_match.contains("[schema entry]"));
     assert_eq!(full_miss, "(RecordsObserved [])");
 }
 
@@ -722,10 +740,8 @@ fn persona_spirit_client_filters_record_observation_by_kind() {
         .reply_text("(Observe (Records ((Any []) (Some Principle) SummaryOnly)))")
         .expect("records observed");
 
-    assert_eq!(
-        reply,
-        "(RecordsObserved [(1 [workspace] Principle [workspace principle] Maximum Zero)])"
-    );
+    assert!(reply.contains("[workspace] Principle [workspace principle] Maximum Zero"));
+    assert!(!reply.contains("[naming correction]"));
 }
 
 #[test]
@@ -745,10 +761,9 @@ fn persona_spirit_client_filters_record_observation_by_topic_and_kind() {
         .reply_text("(Observe (Records ((Partial [spirit]) (Some Principle) SummaryOnly)))")
         .expect("records observed");
 
-    assert_eq!(
-        reply,
-        "(RecordsObserved [(1 [spirit] Principle [spirit principle] Maximum Zero)])"
-    );
+    assert!(reply.contains("[spirit] Principle [spirit principle] Maximum Zero"));
+    assert!(!reply.contains("[spirit correction]"));
+    assert!(!reply.contains("[naming principle]"));
 }
 
 #[test]
@@ -777,18 +792,14 @@ fn persona_spirit_client_filters_record_observation_by_certainty() {
         .reply_text("(Observe (Records ((Any []) None (AtLeast High) SummaryOnly)))")
         .expect("high certainty records observed");
 
-    assert_eq!(
-        removal_candidates,
-        "(RecordsObserved [(1 [draft] Decision [zero candidate] Zero Zero)])"
-    );
-    assert_eq!(
-        at_most_low,
-        "(RecordsObserved [(1 [draft] Decision [zero candidate] Zero Zero) (2 [draft] Principle [minimum weak intent] Minimum Zero) (3 [draft] Correction [low confidence] Low Zero)])"
-    );
-    assert_eq!(
-        at_least_high,
-        "(RecordsObserved [(4 [settled] Principle [high confidence] High Zero)])"
-    );
+    assert!(removal_candidates.contains("[draft] Decision [zero candidate] Zero Zero"));
+    assert!(!removal_candidates.contains("[minimum weak intent]"));
+    assert!(at_most_low.contains("[draft] Decision [zero candidate] Zero Zero"));
+    assert!(at_most_low.contains("[draft] Principle [minimum weak intent] Minimum Zero"));
+    assert!(at_most_low.contains("[draft] Correction [low confidence] Low Zero"));
+    assert!(!at_most_low.contains("[high confidence]"));
+    assert!(at_least_high.contains("[settled] Principle [high confidence] High Zero"));
+    assert!(!at_least_high.contains("[low confidence]"));
 }
 
 #[test]
@@ -813,47 +824,41 @@ fn persona_spirit_client_filters_record_observation_by_privacy() {
         )
         .expect("high privacy records observed");
 
-    assert_eq!(
-        default_observation,
-        "(RecordsObserved [(1 [workspace] Decision [open note] Maximum Zero)])"
-    );
-    assert_eq!(
-        all_privacy,
-        "(RecordsObserved [(1 [workspace] Decision [open note] Maximum Zero) (2 [workspace] Decision [private note] Maximum High)])"
-    );
-    assert_eq!(
-        high_privacy,
-        "(RecordsObserved [(2 [workspace] Decision [private note] Maximum High)])"
-    );
+    assert!(default_observation.contains("[workspace] Decision [open note] Maximum Zero"));
+    assert!(!default_observation.contains("[private note]"));
+    assert!(all_privacy.contains("[workspace] Decision [open note] Maximum Zero"));
+    assert!(all_privacy.contains("[workspace] Decision [private note] Maximum High"));
+    assert!(high_privacy.contains("[workspace] Decision [private note] Maximum High"));
+    assert!(!high_privacy.contains("[open note]"));
 }
 
 #[test]
 fn persona_spirit_client_filters_identifier_observation_by_privacy() {
     let fixture = StoreFixture::new("identifier-privacy-filter");
-    fixture
+    let open = fixture
         .reply_text("(Record ([workspace] Decision [open note] Maximum Zero))")
         .expect("open entry persisted");
-    fixture
+    let open_identifier = accepted_identifier_text(&open);
+    let private = fixture
         .reply_text("(Record ([workspace] Decision [private note] Maximum High))")
         .expect("private entry persisted");
+    let private_identifier = accepted_identifier_text(&private);
 
     let default_observation = fixture
-        .reply_text("(Observe (RecordIdentifiers ((Range (1 2)) SummaryOnly)))")
+        .reply_text(&format!(
+            "(Observe (RecordIdentifiers ((Exact {open_identifier}) SummaryOnly)))"
+        ))
         .expect("default identifiers observed");
     let private_observation = fixture
-        .reply_text(
-            "(Observe (PrivateRecordIdentifiers ((AtMost High) ((Range (1 2)) SummaryOnly))))",
-        )
+        .reply_text(&format!(
+            "(Observe (PrivateRecordIdentifiers ((AtMost High) ((Exact {private_identifier}) SummaryOnly))))"
+        ))
         .expect("private identifiers observed");
 
-    assert_eq!(
-        default_observation,
-        "(RecordsObserved [(1 [workspace] Decision [open note] Maximum Zero)])"
-    );
-    assert_eq!(
-        private_observation,
-        "(RecordsObserved [(1 [workspace] Decision [open note] Maximum Zero) (2 [workspace] Decision [private note] Maximum High)])"
-    );
+    assert!(default_observation.contains("[workspace] Decision [open note] Maximum Zero"));
+    assert!(!default_observation.contains("[private note]"));
+    assert!(private_observation.contains("[workspace] Decision [private note] Maximum High"));
+    assert!(!private_observation.contains("[open note]"));
 }
 
 #[test]
@@ -870,10 +875,9 @@ fn persona_spirit_client_hides_private_records_from_public_subscription_snapshot
         .reply_text("(Watch (Records (None SummaryOnly)))")
         .expect("record subscription opened");
 
-    assert_eq!(
-        reply,
-        "(SubscriptionOpened ((Records (1)) (Records [(1 [workspace] Decision [open note] Maximum Zero)])))"
-    );
+    assert!(reply.starts_with("(SubscriptionOpened ((Records (1)) (Records ["));
+    assert!(reply.contains("[workspace] Decision [open note] Maximum Zero"));
+    assert!(!reply.contains("[private note]"));
 }
 
 #[test]
@@ -890,10 +894,9 @@ fn persona_spirit_client_can_open_private_record_subscription_snapshot() {
         .reply_text("(Watch (PrivateRecords ((AtMost High) (None SummaryOnly))))")
         .expect("private record subscription opened");
 
-    assert_eq!(
-        reply,
-        "(SubscriptionOpened ((Records (1)) (Records [(1 [workspace] Decision [open note] Maximum Zero) (2 [workspace] Decision [private note] Maximum High)])))"
-    );
+    assert!(reply.starts_with("(SubscriptionOpened ((Records (1)) (Records ["));
+    assert!(reply.contains("[workspace] Decision [open note] Maximum Zero"));
+    assert!(reply.contains("[workspace] Decision [private note] Maximum High"));
 }
 
 #[test]
@@ -978,9 +981,8 @@ fn persona_spirit_client_returns_provenance_only_when_requested() {
         .reply_text("(Observe (Records ((Any []) None WithProvenance)))")
         .expect("provenance observed");
 
-    assert!(reply.starts_with(
-        "(RecordProvenancesObserved [((1 [workspace] Decision [description only] Maximum Zero) "
-    ));
+    assert!(reply.starts_with("(RecordProvenancesObserved [(("));
+    assert!(reply.contains("[workspace] Decision [description only] Maximum Zero"));
     assert!(reply.ends_with(")])"));
 }
 
@@ -998,10 +1000,8 @@ fn persona_spirit_client_repeated_entries_remain_distinct_records() {
         .reply_text("(Observe (Records ((Partial [naming]) None SummaryOnly)))")
         .expect("records observed");
 
-    assert_eq!(
-        reply,
-        "(RecordsObserved [(1 [naming] Correction [drop ancestor prefixes] Maximum Zero) (2 [naming] Correction [drop ancestor prefixes] Maximum Zero)])"
-    );
+    assert_eq!(reply.matches("[drop ancestor prefixes]").count(), 2);
+    assert!(reply.contains("[naming] Correction [drop ancestor prefixes] Maximum Zero"));
 }
 
 #[test]

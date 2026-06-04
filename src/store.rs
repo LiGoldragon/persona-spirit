@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -25,10 +25,10 @@ use crate::{
     observation::RecordIdentifierObservation,
 };
 
-const SPIRIT_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(4);
+const SPIRIT_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(5);
 const REMOVAL_CANDIDATE_ARCHIVE_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
 const SPIRIT_CONTRACT_VERSION: ContractVersion = ContractVersion::new([
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0,
 ]);
 const RECORDS: TableName = TableName::new("records");
 const REMOVAL_CANDIDATE_ARCHIVE_RECORDS: TableName = TableName::new("removal_candidate_records");
@@ -67,12 +67,7 @@ struct ArchivedRemovalCandidate {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RecordIdentifierMint {
-    next: u64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct RecordIdentifierCommitLog<'entry> {
-    entries: &'entry [CommitLogEntry],
+    used_identifiers: BTreeSet<RecordIdentifier>,
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -258,7 +253,8 @@ impl SpiritStore {
         if let Some(selection) =
             RecentRecordSelection::from_recorded_time_selection(query.recorded_time_selection)
         {
-            selection.retain(&mut records);
+            let commit_order = self.record_commit_order()?;
+            selection.retain(&mut records, &commit_order);
         }
         Ok(records)
     }
@@ -316,32 +312,11 @@ impl SpiritStore {
     }
 
     fn next_identifier(&self) -> Result<RecordIdentifier> {
-        let records = self.all_records()?;
-        let commit_log = self.engine.commit_log().map_err(Error::spirit_store)?;
-        let commit_sequence = self
-            .engine
-            .current_commit_sequence()
-            .map_err(Error::spirit_store)?
-            .value();
-        Ok(
-            RecordIdentifierMint::from_records_commit_log_and_commit_sequence(
-                &records,
-                &commit_log,
-                commit_sequence,
-            )
-            .next_identifier(),
-        )
+        RecordIdentifierMint::from_records(&self.all_records()?).next_identifier()
     }
 
     fn last_record_identifier(&self) -> Result<Option<u64>> {
-        let live_identifier = self
-            .all_records()?
-            .last()
-            .map(|record| record.identifier.value());
-        let logged_identifier =
-            RecordIdentifierCommitLog::new(&self.engine.commit_log().map_err(Error::spirit_store)?)
-                .last_record_identifier();
-        Ok(live_identifier.into_iter().chain(logged_identifier).max())
+        Ok(None)
     }
 
     fn all_records(&self) -> Result<Vec<StoredRecord>> {
@@ -355,6 +330,12 @@ impl SpiritStore {
         Ok(records)
     }
 
+    fn record_commit_order(&self) -> Result<RecordCommitOrder> {
+        Ok(RecordCommitOrder::from_commit_log(
+            &self.engine.commit_log().map_err(Error::spirit_store)?,
+        ))
+    }
+
     fn stored_record(&self, identifier: RecordIdentifier) -> Result<StoredRecord> {
         self.all_records()?
             .into_iter()
@@ -362,7 +343,7 @@ impl SpiritStore {
             .ok_or_else(|| Error::RequestRejected {
                 reason: RequestRejectionReason::RecordNotStored {
                     collection: RECORDS.as_str().to_string(),
-                    identifier: identifier.value(),
+                    identifier: identifier.code(),
                 },
             })
     }
@@ -563,6 +544,11 @@ struct RecentRecordSelection {
     maximum_records: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RecordCommitOrder {
+    first_assert_sequences: BTreeMap<String, u64>,
+}
+
 impl HandoverClock {
     fn read() -> HandoverClockReading {
         let seconds = SystemTime::now()
@@ -632,7 +618,7 @@ impl StoredRecord {
     }
 
     fn key(identifier: RecordIdentifier) -> RecordKey {
-        RecordKey::new(identifier.value().to_string())
+        RecordKey::new(identifier.code())
     }
 
     fn summary(&self) -> RecordSummary {
@@ -679,11 +665,42 @@ impl RecentRecordSelection {
         }
     }
 
-    fn retain(self, records: &mut Vec<StoredRecord>) {
+    fn retain(self, records: &mut Vec<StoredRecord>, commit_order: &RecordCommitOrder) {
         records.sort_by_key(|record| {
-            std::cmp::Reverse((record.recorded_time(), record.identifier.value()))
+            std::cmp::Reverse((record.recorded_time(), commit_order.sequence_for(record)))
         });
         records.truncate(self.maximum_records);
+    }
+}
+
+impl RecordCommitOrder {
+    fn from_commit_log(entries: &[CommitLogEntry]) -> Self {
+        let mut first_assert_sequences = BTreeMap::<String, u64>::new();
+        for entry in entries {
+            for operation in entry.operations().iter() {
+                if operation.operation().as_record_head() != "Assert" {
+                    continue;
+                }
+                if operation.table_name() != RECORDS.as_str() {
+                    continue;
+                }
+                if let Some(key) = operation.key() {
+                    first_assert_sequences
+                        .entry(key.to_owned_string())
+                        .or_insert(entry.commit_sequence().value());
+                }
+            }
+        }
+        Self {
+            first_assert_sequences,
+        }
+    }
+
+    fn sequence_for(&self, record: &StoredRecord) -> u64 {
+        self.first_assert_sequences
+            .get(&StoredRecord::key(record.identifier).to_owned_string())
+            .copied()
+            .unwrap_or(0)
     }
 }
 
@@ -756,49 +773,27 @@ impl EngineRecord for StoredRecord {
 
 impl EngineRecord for ArchivedRemovalCandidate {
     fn record_key(&self) -> RecordKey {
-        RecordKey::new(self.summary.identifier.value().to_string())
+        RecordKey::new(self.summary.identifier.code())
     }
 }
 
 impl RecordIdentifierMint {
-    fn from_records_commit_log_and_commit_sequence(
-        records: &[StoredRecord],
-        commit_log: &[CommitLogEntry],
-        commit_sequence: u64,
-    ) -> Self {
-        let last_record_identifier = records
-            .iter()
-            .map(|record| record.identifier.value())
-            .max()
-            .unwrap_or(0);
-        let last_logged_identifier = RecordIdentifierCommitLog::new(commit_log)
-            .last_record_identifier()
-            .unwrap_or(0);
-        let next = last_record_identifier
-            .max(last_logged_identifier)
-            .max(commit_sequence)
-            + 1;
-        Self { next }
+    fn from_records(records: &[StoredRecord]) -> Self {
+        Self {
+            used_identifiers: records.iter().map(|record| record.identifier).collect(),
+        }
     }
 
-    fn next_identifier(&self) -> RecordIdentifier {
-        RecordIdentifier::new(self.next)
-    }
-}
-
-impl<'entry> RecordIdentifierCommitLog<'entry> {
-    fn new(entries: &'entry [CommitLogEntry]) -> Self {
-        Self { entries }
-    }
-
-    fn last_record_identifier(&self) -> Option<u64> {
-        self.entries
-            .iter()
-            .flat_map(|entry| entry.operations().iter())
-            .filter(|operation| operation.table_name() == RECORDS.as_str())
-            .filter_map(|operation| operation.key())
-            .filter_map(|key| key.as_str().parse::<u64>().ok())
-            .max()
+    fn next_identifier(&self) -> Result<RecordIdentifier> {
+        loop {
+            let mut bytes = [0_u8; 12];
+            getrandom::fill(&mut bytes)
+                .map_err(|error| Error::spirit_store_reason(error.to_string()))?;
+            let identifier = RecordIdentifier::from_bytes(bytes);
+            if !self.used_identifiers.contains(&identifier) {
+                return Ok(identifier);
+            }
+        }
     }
 }
 
@@ -924,7 +919,7 @@ mod tests {
     }
 
     #[test]
-    fn spirit_store_does_not_reset_identifier_high_water_after_imported_record_removal() {
+    fn spirit_store_mints_random_identifier_after_imported_record_removal() {
         let fixture = StoreFixture::new("imported-high-water-removal");
         let store = fixture.store();
         let imported_identifier = RecordIdentifier::new(1_000);
@@ -962,11 +957,13 @@ mod tests {
             ))
             .expect("post-removal record accepted");
 
-        assert_eq!(accepted.identifier(), RecordIdentifier::new(1_001));
+        assert_ne!(accepted.identifier(), imported_identifier);
+        assert_ne!(accepted.identifier(), RecordIdentifier::new(1_001));
+        assert!(accepted.identifier().code().len() >= 4);
     }
 
     #[test]
-    fn spirit_store_handover_marker_keeps_removed_identifier_high_water() {
+    fn spirit_store_handover_marker_has_no_ordinal_identifier_high_water() {
         let fixture = StoreFixture::new("handover-marker-high-water");
         let store = fixture.store();
         let imported_identifier = RecordIdentifier::new(1_000);
@@ -999,11 +996,11 @@ mod tests {
             )
             .expect("handover marker read");
 
-        assert_eq!(marker.last_record_identifier, Some(1_000));
+        assert_eq!(marker.last_record_identifier, None);
     }
 
     #[test]
-    fn spirit_store_does_not_reuse_minted_identifier_after_sparse_migration() {
+    fn spirit_store_does_not_reuse_removed_random_identifier_after_sparse_migration() {
         let fixture = StoreFixture::new("sparse-migration-minted-removal");
         let store = fixture.store();
         store
@@ -1053,14 +1050,20 @@ mod tests {
             ))
             .expect("second post-import record accepted");
 
-        assert_eq!(
+        assert_ne!(
             first_after_import.identifier(),
-            RecordIdentifier::new(1_001)
+            RecordIdentifier::new(1_000)
         );
-        assert_eq!(
+        assert_ne!(
             second_after_import.identifier(),
-            RecordIdentifier::new(1_002)
+            RecordIdentifier::new(1_000)
         );
+        assert_ne!(
+            first_after_import.identifier(),
+            second_after_import.identifier()
+        );
+        assert!(first_after_import.identifier().code().len() >= 4);
+        assert!(second_after_import.identifier().code().len() >= 4);
     }
 
     #[test]
@@ -1236,7 +1239,7 @@ mod tests {
     fn spirit_store_collects_only_exact_zero_candidates_before_removing_them() {
         let fixture = StoreFixture::new("collect-zero-candidates");
         let store = fixture.store();
-        store
+        let first_candidate = store
             .assert_entry(StampedEntry::new(
                 Entry {
                     topics: Topics::single(Topic::new("spirit")),
@@ -1249,7 +1252,7 @@ mod tests {
                 Time::new(9, 0, 0),
             ))
             .expect("first candidate accepted");
-        store
+        let minimum_record = store
             .assert_entry(StampedEntry::new(
                 Entry {
                     topics: Topics::single(Topic::new("spirit")),
@@ -1262,7 +1265,7 @@ mod tests {
                 Time::new(9, 1, 0),
             ))
             .expect("minimum record accepted");
-        store
+        let high_record = store
             .assert_entry(StampedEntry::new(
                 Entry {
                     topics: Topics::single(Topic::new("spirit")),
@@ -1275,7 +1278,7 @@ mod tests {
                 Time::new(9, 2, 0),
             ))
             .expect("high record accepted");
-        store
+        let second_candidate = store
             .assert_entry(StampedEntry::new(
                 Entry {
                     topics: Topics::single(Topic::new("spirit")),
@@ -1305,40 +1308,47 @@ mod tests {
             })
             .expect("remaining records observed");
 
+        let mut removed_identifiers = collected.removed_identifiers().to_vec();
+        removed_identifiers.sort();
+        let mut expected_removed_identifiers =
+            vec![first_candidate.identifier(), second_candidate.identifier()];
+        expected_removed_identifiers.sort();
+        assert_eq!(removed_identifiers, expected_removed_identifiers);
+        let mut archived_descriptions = collected
+            .archived_records()
+            .iter()
+            .map(|record| record.description.as_str())
+            .collect::<Vec<_>>();
+        archived_descriptions.sort();
         assert_eq!(
-            collected.removed_identifiers(),
-            &[RecordIdentifier::new(1), RecordIdentifier::new(4)]
-        );
-        assert_eq!(
-            collected
-                .archived_records()
-                .iter()
-                .map(|record| record.description.as_str())
-                .collect::<Vec<_>>(),
+            archived_descriptions,
             vec!["first candidate", "second candidate"]
         );
         let WorkingReply::RecordsObserved(records) = remaining else {
             panic!("expected summary records");
         };
-        assert_eq!(
-            records
-                .records()
-                .iter()
-                .map(|record| record.identifier)
-                .collect::<Vec<_>>(),
-            vec![RecordIdentifier::new(2), RecordIdentifier::new(3)]
-        );
+        let mut remaining_identifiers = records
+            .records()
+            .iter()
+            .map(|record| record.identifier)
+            .collect::<Vec<_>>();
+        remaining_identifiers.sort();
+        let mut expected_remaining_identifiers =
+            vec![minimum_record.identifier(), high_record.identifier()];
+        expected_remaining_identifiers.sort();
+        assert_eq!(remaining_identifiers, expected_remaining_identifiers);
         let archive = RemovalCandidateArchiveStore::open(
             &fixture.location.default_removal_candidate_archive_path(),
         )
         .expect("default archive opens");
+        let archived_summaries = archive.summaries().expect("archived summaries read");
+        let mut archived_summary_descriptions = archived_summaries
+            .iter()
+            .map(|record| record.description.as_str())
+            .collect::<Vec<_>>();
+        archived_summary_descriptions.sort();
         assert_eq!(
-            archive
-                .summaries()
-                .expect("archived summaries read")
-                .iter()
-                .map(|record| record.description.as_str())
-                .collect::<Vec<_>>(),
+            archived_summary_descriptions,
             vec!["first candidate", "second candidate"]
         );
     }
@@ -1347,7 +1357,7 @@ mod tests {
     fn spirit_store_print_target_collects_without_archive_database() {
         let fixture = StoreFixture::new("print-zero-candidates");
         let store = fixture.store();
-        store
+        let accepted = store
             .assert_entry(StampedEntry::new(
                 Entry {
                     topics: Topics::single(Topic::new("spirit")),
@@ -1378,7 +1388,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["printed candidate"]
         );
-        assert_eq!(collected.removed_identifiers(), &[RecordIdentifier::new(1)]);
+        assert_eq!(collected.removed_identifiers(), &[accepted.identifier()]);
         assert!(
             !fixture
                 .location
@@ -1395,7 +1405,7 @@ mod tests {
     fn spirit_store_rejects_non_zero_collection_query_without_retracting() {
         let fixture = StoreFixture::new("reject-broad-collection");
         let store = fixture.store();
-        store
+        let accepted = store
             .assert_entry(StampedEntry::new(
                 Entry {
                     topics: Topics::single(Topic::new("spirit")),
@@ -1438,14 +1448,14 @@ mod tests {
             panic!("expected summary records");
         };
         assert_eq!(records.records().len(), 1);
-        assert_eq!(records.records()[0].identifier, RecordIdentifier::new(1));
+        assert_eq!(records.records()[0].identifier, accepted.identifier());
     }
 
     #[test]
     fn spirit_store_rejects_private_collection_query_without_retracting() {
         let fixture = StoreFixture::new("reject-private-collection");
         let store = fixture.store();
-        store
+        let accepted = store
             .assert_entry(StampedEntry::new(
                 Entry {
                     topics: Topics::single(Topic::new("spirit")),
@@ -1495,14 +1505,14 @@ mod tests {
             panic!("expected summary records");
         };
         assert_eq!(records.records().len(), 1);
-        assert_eq!(records.records()[0].identifier, RecordIdentifier::new(1));
+        assert_eq!(records.records()[0].identifier, accepted.identifier());
     }
 
     #[test]
     fn spirit_store_archive_file_failure_preserves_candidates() {
         let fixture = StoreFixture::new("archive-failure");
         let store = fixture.store();
-        store
+        let accepted = store
             .assert_entry(StampedEntry::new(
                 Entry {
                     topics: Topics::single(Topic::new("spirit")),
@@ -1548,6 +1558,6 @@ mod tests {
             panic!("expected summary records");
         };
         assert_eq!(records.records().len(), 1);
-        assert_eq!(records.records()[0].identifier, RecordIdentifier::new(1));
+        assert_eq!(records.records()[0].identifier, accepted.identifier());
     }
 }

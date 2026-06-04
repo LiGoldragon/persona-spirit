@@ -86,11 +86,15 @@ ARCHITECTURE §"Deletion durability"). Removing an intent record therefore
 requires capturing its full text and provenance first —
 tombstone-before-remove.
 
-Record identifiers are non-reusable numeric locators. `RecordStore` mints the
-next identifier above the maximum identifier in existing rows, the sema-engine
-commit log for the records table, and the current commit sequence. This keeps
-references stable even after hard removal of the newest record or a migrated
-high-numbered record.
+Record identifiers are non-reusable opaque random locators. `RecordStore` mints
+96-bit identifiers with the operating-system random source and renders them as
+lowercase base36 with a four-character minimum display/query floor. Removed
+identifiers are not reused because the mint checks existing live identifiers
+and random collision retry is local to the store. Recency never comes from the
+identifier: qualitative `Shallow` / `Recent` / `Deep` / `VeryDeep` selection
+uses recorded time and sema first-assert commit order for same-second ties.
+The v0.4-to-v0.5 migration writes a NOTA sidecar mapping new hash identifiers
+to former ordinal identifiers for temporary human/agent lookup.
 
 ## Actor topology
 
@@ -430,10 +434,10 @@ work today against the hand-written types.
 | Repeated similar entries remain distinct records. | `persona_spirit_client_repeated_entries_remain_distinct_records` stores two matching descriptions. |
 | Record observations use the read plane and not the write plane. | `persona_spirit_record_observation_uses_read_plane_without_write_plane` checks `SemaReader` without `SemaWriter`. |
 | Record observations filter by topic selection, kind, certainty, recorded time, and privacy inside the daemon store read path. | `persona_spirit_client_filters_record_observation_by_topic`, `persona_spirit_client_filters_record_observation_by_topic_membership`, `persona_spirit_client_filters_record_observation_by_partial_and_full_topic_sets`, `persona_spirit_client_filters_record_observation_by_kind`, `persona_spirit_client_filters_record_observation_by_topic_and_kind`, `persona_spirit_client_filters_record_observation_by_certainty`, `persona_spirit_client_filters_record_observation_by_privacy`, `persona_spirit_client_filters_identifier_observation_by_privacy`, `persona_spirit_client_hides_private_records_from_topic_counts`, `record_query_filters_by_recorded_time_range_after_topic_match`, `recent_record_query_keeps_newest_records_after_other_filters`, and `qualitative_depth_queries_keep_newest_records_at_larger_depths` store multiple records and expect only matching descriptions/provenance. Public observations are exact-`Zero` privacy by type; elevated records require explicit private query variants. Removal-candidate review is the exact-`Zero` certainty query; exact `Minimum` remains weak but real intent. Qualitative recency depths (`Shallow`, `Recent`, `Deep`, `VeryDeep`) are applied after topic/kind/certainty/privacy matching and keep the newest matching records at the requested depth. |
-| Record observations can select exact identifiers and inclusive identifier ranges. | `persona_spirit_client_observes_records_by_exact_identifier` and `persona_spirit_client_observes_records_by_identifier_range` use `Observation::RecordIdentifiers`. |
+| Record observations can select exact identifiers; identifier ranges are rejected because random identifiers carry no ordering semantics. | `persona_spirit_client_observes_records_by_exact_identifier` uses `Observation::RecordIdentifiers`; `persona_spirit_client_rejects_identifier_range_after_random_identifiers` proves old range-shaped requests no longer decode. |
 | Record certainty changes use the write plane and project to Sema `Mutate`. | `persona_spirit_client_changes_certainty_to_zero_for_removal_candidate_review`, `persona_spirit_certainty_change_uses_write_plane`, and `spirit_certainty_change_projects_to_mutated_observation` check `ChangeCertainty`, `CertaintyChanged`, exact-`Zero` review visibility, `RecordMutated`, and `SemaOperation::Mutate`. |
-| Record removal uses the write plane, leaves later observations clean, and does not reuse removed identifiers. | `persona_spirit_record_removal_uses_write_plane`, `spirit_record_removal_projects_to_retracted_observation`, `persona_spirit_client_removes_entry_and_excludes_it_from_observation`, and `persona_spirit_client_does_not_reuse_removed_record_identifier` check `Remove`, `RecordRemoved`, `SemaOperation::Retract`, and monotonic identifier minting. |
-| Production store schema changes require an explicit historical migration before default cutover. | `spirit_privacy_migration_projects_v030_records_to_v040` writes a schema-3 v0.3.0 source database, runs the v0.3→v0.4 migration, and observes schema-4 current records with `privacy = Zero`; `spirit_privacy_migration_binary_reads_one_nota_argument_and_writes_completed_reply` proves the exposed migration binary is a one-argument component-shaped tool returning typed NOTA. |
+| Record removal uses the write plane, leaves later observations clean, and does not reuse removed identifiers. | `persona_spirit_record_removal_uses_write_plane`, `spirit_record_removal_projects_to_retracted_observation`, `persona_spirit_client_removes_entry_and_excludes_it_from_observation`, and `persona_spirit_client_does_not_reuse_removed_record_identifier` check `Remove`, `RecordRemoved`, `SemaOperation::Retract`, and random identifier non-reuse. |
+| Production store schema changes require an explicit historical migration before default cutover. | `spirit_privacy_migration_projects_v030_records_to_v040` writes a schema-3 v0.3.0 source database, runs the v0.3→v0.4 migration, and observes schema-4 current records with `privacy = Zero`; `spirit_identifier_migration_randomizes_ordinal_identifiers_and_writes_nota_mapping_table` writes a schema-4 source database, runs the v0.4→v0.5 random-identifier migration, observes schema-5 records, and verifies the hash-to-ordinal NOTA sidecar; the migration binary tests prove both exposed migration binaries are one-argument component-shaped tools returning typed NOTA. |
 | Topic catalog observations list each topic with a membership count without reading every entry's provenance. | `persona_spirit_client_lists_topics_with_entry_counts`, `persona_spirit_client_counts_topic_memberships`, `persona_spirit_topic_catalog_observation_uses_read_plane_without_write_plane`, and `persona_spirit_daemon_serves_topic_catalog_through_signal_frames` store multiple topics and expect deterministic counts through the daemon read plane. |
 | Psyche-state observations use a working-state plane, not record storage. | `persona_spirit_state_observation_uses_state_plane` checks `StatePlane` without `RecordStore`. |
 | Pending-question observations use the working-state plane. | `persona_spirit_question_observation_uses_state_plane` and `persona_spirit_client_observes_empty_pending_questions` check the empty raw state. |
@@ -540,7 +544,7 @@ Implemented now:
 - sema-engine backed `Remove` operation returning `RecordRemoved`;
 - `Observe(Records(...))` description and provenance queries, filterable by
   topic selection and kind;
-- `Observe(RecordIdentifiers(...))` exact-identifier and inclusive-range queries;
+- `Observe(RecordIdentifiers(...))` exact-identifier queries;
 - `Observe(Topics)` topic catalog queries with per-topic membership counts;
 - `Observe(State(...))` with default absent psyche state;
 - `Observe(Questions(...))` with an empty pending-question set;

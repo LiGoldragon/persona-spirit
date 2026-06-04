@@ -65,6 +65,13 @@ fn assert_runtime_projection_trace(trace: &persona_spirit::ActorTrace) {
     ));
 }
 
+fn accepted_identifier(reply: WorkingReply) -> RecordIdentifier {
+    let WorkingReply::RecordAccepted(accepted) = reply else {
+        panic!("expected RecordAccepted reply, got {reply:?}");
+    };
+    accepted.identifier()
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn spirit_record_assertion_projects_to_asserted_observation() {
     let fixture = RuntimeFixture::new("record-assertion");
@@ -141,13 +148,14 @@ async fn spirit_record_query_projects_to_matched_observation() {
 async fn spirit_record_identifier_query_projects_to_matched_observation() {
     let fixture = RuntimeFixture::new("record-identifier-query");
     let runtime = fixture.runtime().await;
-    runtime
+    let accepted = runtime
         .submit_request(WorkingOperation::Record(entry("matched projection")))
         .await
         .expect("record accepted");
+    let identifier = accepted_identifier(accepted.into_reply());
     let request =
         WorkingOperation::Observe(Observation::RecordIdentifiers(RecordIdentifierQuery::new(
-            RecordIdentifierSelection::Exact(RecordIdentifier::new(1)),
+            RecordIdentifierSelection::Exact(identifier),
             ObservationMode::SummaryOnly,
         )));
     let runtime_reply = runtime
@@ -169,11 +177,12 @@ async fn spirit_record_identifier_query_projects_to_matched_observation() {
 async fn spirit_record_removal_projects_to_retracted_observation() {
     let fixture = RuntimeFixture::new("record-removal");
     let runtime = fixture.runtime().await;
-    runtime
+    let accepted = runtime
         .submit_request(WorkingOperation::Record(entry("removed projection")))
         .await
         .expect("record accepted");
-    let request = WorkingOperation::Remove(RecordIdentifier::new(1));
+    let identifier = accepted_identifier(accepted.into_reply());
+    let request = WorkingOperation::Remove(identifier);
     let runtime_reply = runtime
         .submit_request(request.clone())
         .await
@@ -193,12 +202,13 @@ async fn spirit_record_removal_projects_to_retracted_observation() {
 async fn spirit_certainty_change_projects_to_mutated_observation() {
     let fixture = RuntimeFixture::new("certainty-change");
     let runtime = fixture.runtime().await;
-    runtime
+    let accepted = runtime
         .submit_request(WorkingOperation::Record(entry("changed projection")))
         .await
         .expect("record accepted");
+    let identifier = accepted_identifier(accepted.into_reply());
     let request = WorkingOperation::ChangeCertainty(CertaintyChange {
-        identifier: RecordIdentifier::new(1),
+        identifier,
         certainty: Magnitude::Zero,
     });
     let runtime_reply = runtime

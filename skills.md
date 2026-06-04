@@ -104,7 +104,8 @@ Contract records stay in `signal-persona-spirit` and
   observations: public `Watch(Records ...)` is exact `Zero`, while
   `Watch(PrivateRecords ...)` must carry an explicit `PrivacySelection`.
 - `Observation::RecordIdentifiers` queries return descriptions or provenance
-  for an exact `RecordIdentifier` or inclusive `RecordIdentifierRange`.
+  for an exact `RecordIdentifier`. Identifier ranges are absent because random
+  identifiers are not ordinal and do not carry recency.
 - `ChangeCertainty(CertaintyChange)` mutates one stored intent entry's
   certainty through `RecordStore` and returns `CertaintyChanged`; setting
   certainty to `Zero` makes the record visible to removal-candidate review.
@@ -118,16 +119,16 @@ Contract records stay in `signal-persona-spirit` and
 - Any release that changes persisted `SpiritStore` row shape must bump
   `SPIRIT_SCHEMA_VERSION`, keep the prior production row shape readable in
   `src/migration.rs`, expose a one-argument migration binary, and prove the
-  bridge with tests before Home may point the unsuffixed `spirit` wrapper at
-  that release. v0.4.1's required bridge is
-  `spirit-migrate-0-3-to-0-4`, which projects v0.3.0 records into the
-  privacy-aware store with `privacy = Zero`.
+  bridge with tests before Home may point the unsuffixed `spirit` wrapper at a
+  release. v0.4.1's bridge is `spirit-migrate-0-3-to-0-4`, which projects
+  v0.3.0 records into the privacy-aware store with `privacy = Zero`. v0.5.0's
+  bridge is `spirit-migrate-0-4-to-0-5`, which rewrites ordinal identifiers to
+  96-bit random identifiers and emits a NOTA hash-to-ordinal mapping table.
 - `Remove(RecordIdentifier)` retracts one stored intent entry through
   `RecordStore` and returns `RecordRemoved`; the CLI never opens the
   database directly. Removed record identifiers are not reused. `RecordStore`
-  mints above the maximum identifier witnessed in existing rows, sema's commit
-  log, and the current commit sequence so migration and hard-removal history
-  do not collapse the next identifier.
+  mints opaque random identifiers, retries on live collision, and uses recorded
+  time plus sema first-assert commit order for qualitative recency ties.
 - Valid but unimplemented requests use `ReplyShaper` and do not touch
   `RecordStore`.
 - Valid but unimplemented CLI requests emit a typed NOTA

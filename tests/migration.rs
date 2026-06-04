@@ -2,8 +2,10 @@ use std::fs;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use nota_codec::{Decoder, NotaDecode};
 use persona_spirit::{
-    MigrationConfiguration, SpiritStore, StoreLocation, StorePath, store::StampedEntry,
+    MigrationConfiguration, SpiritStore, StoreLocation, StorePath,
+    migration::IdentifierMigrationTable, store::StampedEntry,
 };
 use sema::SchemaVersion;
 use sema_engine::{
@@ -20,6 +22,7 @@ use signal_sema::Magnitude;
 const V010_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
 const V020_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(2);
 const V030_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(3);
+const V040_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(4);
 const RECORDS: TableName = TableName::new("records");
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -59,6 +62,15 @@ struct V030StampedEntry {
     entry: v030::Entry,
     date: Date,
     time: Time,
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+struct V040RecordIdentifier(u64);
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+struct V040StoredRecord {
+    identifier: V040RecordIdentifier,
+    entry: StampedEntry,
 }
 
 #[derive(Debug, Clone)]
@@ -190,7 +202,8 @@ fn spirit_migration_preserves_timestamp_and_identifier_order() {
             Time::new(12, 45, 3),
         ))
         .expect("post-migration record accepted");
-    assert_eq!(accepted.identifier(), RecordIdentifier::new(3));
+    assert_ne!(accepted.identifier(), RecordIdentifier::new(3));
+    assert!(accepted.identifier().code().len() >= 4);
 }
 
 #[test]
@@ -411,7 +424,117 @@ fn spirit_privacy_migration_projects_v030_records_to_v040() {
             Time::new(12, 37, 0),
         ))
         .expect("post-migration record accepted");
-    assert_eq!(accepted.identifier(), RecordIdentifier::new(3));
+    assert_ne!(accepted.identifier(), RecordIdentifier::new(3));
+    assert!(accepted.identifier().code().len() >= 4);
+}
+
+#[test]
+fn spirit_identifier_migration_randomizes_ordinal_identifiers_and_writes_nota_mapping_table() {
+    let fixture = MigrationFixture::new("v040-v050");
+    write_v040_source(
+        &fixture.source,
+        vec![
+            V040StoredRecord {
+                identifier: V040RecordIdentifier(1),
+                entry: StampedEntry::new(
+                    Entry {
+                        topics: Topics::single(Topic::new("identity")),
+                        kind: Kind::Decision,
+                        description: Description::new("first ordinal"),
+                        certainty: Magnitude::Maximum,
+                        privacy: Magnitude::Zero,
+                    },
+                    Date::new(2026, 6, 4),
+                    Time::new(13, 0, 0),
+                ),
+            },
+            V040StoredRecord {
+                identifier: V040RecordIdentifier(2),
+                entry: StampedEntry::new(
+                    Entry {
+                        topics: Topics::single(Topic::new("identity")),
+                        kind: Kind::Correction,
+                        description: Description::new("second ordinal"),
+                        certainty: Magnitude::High,
+                        privacy: Magnitude::Zero,
+                    },
+                    Date::new(2026, 6, 4),
+                    Time::new(13, 1, 0),
+                ),
+            },
+        ],
+    );
+
+    let outcome = fixture
+        .configuration()
+        .migrate_v040_to_v050()
+        .expect("identifier migration succeeds");
+
+    assert_eq!(outcome.records(), 2);
+    let mapping = read_identifier_mapping_table(&fixture.target);
+    assert_eq!(mapping.rows.len(), 2);
+    assert_eq!(mapping.rows[0].ordinal_identifier, 1);
+    assert_eq!(mapping.rows[1].ordinal_identifier, 2);
+    assert_ne!(mapping.rows[0].hash_identifier, RecordIdentifier::new(1));
+    assert_ne!(mapping.rows[1].hash_identifier, RecordIdentifier::new(2));
+    assert_ne!(
+        mapping.rows[0].hash_identifier,
+        mapping.rows[1].hash_identifier
+    );
+    assert!(mapping.rows[0].hash_identifier.code().len() >= 4);
+    assert!(mapping.rows[1].hash_identifier.code().len() >= 4);
+
+    let records = target_provenances(&fixture.target);
+    assert_eq!(records.len(), 2);
+    let first = records
+        .iter()
+        .find(|record| record.summary.description == Description::new("first ordinal"))
+        .expect("first record survives");
+    let second = records
+        .iter()
+        .find(|record| record.summary.description == Description::new("second ordinal"))
+        .expect("second record survives");
+    assert_eq!(first.summary.identifier, mapping.rows[0].hash_identifier);
+    assert_eq!(second.summary.identifier, mapping.rows[1].hash_identifier);
+}
+
+#[test]
+fn spirit_identifier_migration_binary_reads_one_nota_argument_and_writes_completed_reply() {
+    let fixture = MigrationFixture::new("v040-v050-binary");
+    write_v040_source(
+        &fixture.source,
+        vec![V040StoredRecord {
+            identifier: V040RecordIdentifier(7),
+            entry: StampedEntry::new(
+                Entry {
+                    topics: Topics::single(Topic::new("identity")),
+                    kind: Kind::Decision,
+                    description: Description::new("binary identifier migration"),
+                    certainty: Magnitude::Maximum,
+                    privacy: Magnitude::Zero,
+                },
+                Date::new(2026, 6, 4),
+                Time::new(13, 5, 0),
+            ),
+        }],
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_spirit-migrate-0-4-to-0-5"))
+        .arg(fixture.configuration_text())
+        .output()
+        .expect("identifier migration binary runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "(MigrationCompleted 1)"
+    );
+    let mapping = read_identifier_mapping_table(&fixture.target);
+    assert_eq!(mapping.rows[0].ordinal_identifier, 7);
 }
 
 #[test]
@@ -584,6 +707,19 @@ fn write_v030_source(path: &StorePath, records: Vec<V030StoredRecord>) {
     }
 }
 
+fn write_v040_source(path: &StorePath, records: Vec<V040StoredRecord>) {
+    let mut engine = Engine::open(EngineOpen::new(path.as_path(), V040_SCHEMA_VERSION))
+        .expect("v0.4 engine opens");
+    let table = engine
+        .register_table(TableDescriptor::new(RECORDS))
+        .expect("v0.4 records table registers");
+    for record in records {
+        engine
+            .assert(Assertion::new(table, record))
+            .expect("v0.4 record writes");
+    }
+}
+
 fn old_record(input: OldRecordInput<'_>) -> V010StoredRecord {
     V010StoredRecord {
         identifier: RecordIdentifier::new(input.identifier),
@@ -622,6 +758,23 @@ fn target_provenances(target: &StorePath) -> Vec<signal_persona_spirit::RecordPr
     }
 }
 
+fn read_identifier_mapping_table(target: &StorePath) -> IdentifierMigrationTable {
+    let text = fs::read_to_string(identifier_mapping_table_path(target)).expect("mapping reads");
+    let mut decoder = Decoder::new(&text);
+    IdentifierMigrationTable::decode(&mut decoder).expect("mapping decodes")
+}
+
+fn identifier_mapping_table_path(target: &StorePath) -> std::path::PathBuf {
+    let mut path = target.as_path().to_path_buf();
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| format!("{name}.identifier-migration.nota"))
+        .unwrap_or_else(|| "spirit.identifier-migration.nota".to_string());
+    path.set_file_name(file_name);
+    path
+}
+
 impl EngineRecord for V010StoredRecord {
     fn record_key(&self) -> RecordKey {
         RecordKey::new(self.identifier.value().to_string())
@@ -637,5 +790,11 @@ impl EngineRecord for V020StoredRecord {
 impl EngineRecord for V030StoredRecord {
     fn record_key(&self) -> RecordKey {
         RecordKey::new(self.identifier.value().to_string())
+    }
+}
+
+impl EngineRecord for V040StoredRecord {
+    fn record_key(&self) -> RecordKey {
+        RecordKey::new(self.identifier.0.to_string())
     }
 }

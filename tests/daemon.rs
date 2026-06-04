@@ -131,6 +131,13 @@ fn entry(description: &str) -> Entry {
     }
 }
 
+fn accepted_identifier(reply: &WorkingReply) -> signal_persona_spirit::RecordIdentifier {
+    let WorkingReply::RecordAccepted(accepted) = reply else {
+        panic!("expected RecordAccepted reply, got {reply:?}");
+    };
+    accepted.identifier()
+}
+
 fn mirrored_stamped_entry_payload(description: &str) -> Vec<u8> {
     let entry = StampedEntry::new(
         entry(description),
@@ -360,19 +367,14 @@ fn persona_spirit_daemon_serves_signal_frames_through_actor_root() {
     let accepted = client
         .submit(WorkingOperation::Record(entry("daemon accepted")))
         .expect("entry accepted through signal frame");
-    assert_eq!(
-        accepted,
-        WorkingReply::RecordAccepted(signal_persona_spirit::RecordAccepted::new(
-            signal_persona_spirit::RecordIdentifier::new(1)
-        ))
-    );
+    let identifier = accepted_identifier(&accepted);
 
     let observed = client.submit(observe_all()).expect("records observed");
     assert_eq!(
         observed,
         WorkingReply::RecordsObserved(signal_persona_spirit::RecordsObserved::new(vec![
             signal_persona_spirit::RecordSummary {
-                identifier: signal_persona_spirit::RecordIdentifier::new(1),
+                identifier,
                 topics: Topics::single(Topic::new("workspace")),
                 kind: Kind::Decision,
                 description: Description::new("daemon accepted"),
@@ -439,14 +441,15 @@ fn persona_spirit_daemon_serves_signal_frames_from_handed_off_file_descriptor() 
         .expect("daemon serves handed-off stream");
     let reply = client_handle.join().expect("client exits");
     assert_eq!(served.reply(), &reply);
-    assert_eq!(
-        reply,
-        Reply::committed(NonEmpty::single(SubReply::Ok(
-            WorkingReply::RecordAccepted(signal_persona_spirit::RecordAccepted::new(
-                signal_persona_spirit::RecordIdentifier::new(1)
-            ))
-        )))
-    );
+    let Reply::Accepted { per_operation, .. } = reply else {
+        panic!("expected accepted reply from handoff client");
+    };
+    let mut operations = per_operation.into_vec();
+    assert_eq!(operations.len(), 1);
+    let SubReply::Ok(WorkingReply::RecordAccepted(accepted)) = operations.remove(0) else {
+        panic!("expected RecordAccepted handoff operation");
+    };
+    assert!(accepted.identifier().code().len() >= 4);
 
     daemon.shutdown().expect("daemon shuts down");
 }
@@ -565,19 +568,14 @@ fn persona_spirit_daemon_classifies_state_frames_through_actor_root() {
             text: StatementText::new("daemon raw intent"),
         }))
         .expect("statement accepted through signal frame");
-    assert_eq!(
-        accepted,
-        WorkingReply::RecordAccepted(signal_persona_spirit::RecordAccepted::new(
-            signal_persona_spirit::RecordIdentifier::new(1)
-        ))
-    );
+    let identifier = accepted_identifier(&accepted);
 
     let observed = client.submit(observe_all()).expect("records observed");
     assert_eq!(
         observed,
         WorkingReply::RecordsObserved(signal_persona_spirit::RecordsObserved::new(vec![
             signal_persona_spirit::RecordSummary {
-                identifier: signal_persona_spirit::RecordIdentifier::new(1),
+                identifier,
                 topics: Topics::single(Topic::new("unclassified")),
                 kind: Kind::Clarification,
                 description: Description::new("daemon raw intent"),
@@ -857,12 +855,7 @@ fn persona_spirit_upgrade_completion_requires_accepted_readiness() {
         .join()
         .expect("ordinary client exits")
         .expect("ordinary reply received");
-    assert_eq!(
-        ordinary_reply,
-        WorkingReply::RecordAccepted(signal_persona_spirit::RecordAccepted::new(
-            signal_persona_spirit::RecordIdentifier::new(1)
-        ))
-    );
+    assert!(accepted_identifier(&ordinary_reply).code().len() >= 4);
 
     daemon.shutdown().expect("daemon shuts down");
 }
@@ -905,12 +898,7 @@ fn persona_spirit_upgrade_readiness_rejects_commit_sequence_drift() {
         .join()
         .expect("ordinary client exits")
         .expect("ordinary reply received");
-    assert_eq!(
-        ordinary_reply,
-        WorkingReply::RecordAccepted(signal_persona_spirit::RecordAccepted::new(
-            signal_persona_spirit::RecordIdentifier::new(1)
-        ))
-    );
+    assert!(accepted_identifier(&ordinary_reply).code().len() >= 4);
 
     let readiness_client = client.clone();
     let component_for_readiness = component.clone();
@@ -1293,7 +1281,7 @@ fn persona_spirit_upgrade_mirror_applies_stamped_entry_after_completion() {
     };
     assert_eq!(marker.commit_sequence, 1);
     assert_eq!(marker.write_counter, 1);
-    assert_eq!(marker.last_record_identifier, Some(1));
+    assert_eq!(marker.last_record_identifier, None);
     assert!(
         !fixture.ordinary_socket.as_path().exists(),
         "ordinary socket remains closed while mirror uses private upgrade socket"
@@ -1566,7 +1554,7 @@ fn persona_spirit_client_can_send_nota_request_to_running_daemon() {
     );
     let reply = client.reply_text(argument).expect("client sends to daemon");
 
-    assert_eq!(reply, "(RecordAccepted 1)");
+    assert!(reply.starts_with("(RecordAccepted "));
     handle
         .join()
         .expect("daemon thread exits")
@@ -1607,9 +1595,10 @@ fn spirit_binary_can_send_request_file_to_running_daemon() {
         "spirit stderr: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout).trim(),
-        "(RecordAccepted 1)"
+    assert!(
+        String::from_utf8_lossy(&output.stdout)
+            .trim()
+            .starts_with("(RecordAccepted ")
     );
 }
 

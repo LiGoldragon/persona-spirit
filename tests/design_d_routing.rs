@@ -109,16 +109,19 @@ fn spawn_spirit(public_socket: PathBuf, request: &'static str) -> thread::JoinHa
     })
 }
 
-fn assert_spirit_output(output: Output, expected_stdout: &str) {
+fn assert_spirit_output_contains(output: Output, fragments: &[&str]) {
     assert!(
         output.status.success(),
         "spirit stderr: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout).trim(),
-        expected_stdout
-    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for fragment in fragments {
+        assert!(
+            stdout.contains(fragment),
+            "stdout did not contain {fragment:?}: {stdout}"
+        );
+    }
 }
 
 struct SpiritInstance {
@@ -261,9 +264,9 @@ fn persona_spirit_cli_reaches_daemon_through_persona_handoff_router() {
     runtime
         .block_on(router.handoff_one(&version))
         .expect("Persona hands record client descriptor to Spirit");
-    assert_spirit_output(
+    assert_spirit_output_contains(
         record_output.join().expect("record client exits"),
-        "(RecordAccepted 1)",
+        &["(RecordAccepted "],
     );
 
     let observe_output = spawn_spirit(
@@ -273,9 +276,9 @@ fn persona_spirit_cli_reaches_daemon_through_persona_handoff_router() {
     runtime
         .block_on(router.handoff_one(&version))
         .expect("Persona hands observe client descriptor to Spirit");
-    assert_spirit_output(
+    assert_spirit_output_contains(
         observe_output.join().expect("observe client exits"),
-        "(RecordsObserved [(1 [workspace] Decision [design d route] Maximum Zero)])",
+        &["[workspace] Decision [design d route] Maximum Zero"],
     );
 
     let served = daemon_thread
@@ -306,9 +309,9 @@ fn persona_handoff_router_routes_new_connections_after_selector_flip_and_old_con
         current.ordinary_socket.as_path().to_path_buf(),
         "(Record ([workspace] Decision [selector seed] Maximum))",
     );
-    assert_spirit_output(
+    assert_spirit_output_contains(
         seed_output.join().expect("seed client exits"),
-        "(RecordAccepted 1)",
+        &["(RecordAccepted "],
     );
     seed_thread
         .join()
@@ -390,9 +393,9 @@ fn persona_handoff_router_routes_new_connections_after_selector_flip_and_old_con
     runtime
         .block_on(router.handoff_one_from_manager_store(&active_version_reader))
         .expect("Persona routes steady-state client to current version");
-    assert_spirit_output(
+    assert_spirit_output_contains(
         steady_output.join().expect("steady-state client exits"),
-        "(RecordsObserved [(1 [workspace] Decision [selector seed] Maximum Zero)])",
+        &["[workspace] Decision [selector seed] Maximum Zero"],
     );
 
     let mut old_stream =
@@ -433,9 +436,9 @@ fn persona_handoff_router_routes_new_connections_after_selector_flip_and_old_con
     runtime
         .block_on(router.handoff_one_from_manager_store(&active_version_reader))
         .expect("Persona routes new client to next version after selector flip");
-    assert_spirit_output(
+    assert_spirit_output_contains(
         new_output.join().expect("new client exits"),
-        "(RecordsObserved [(1 [workspace] Decision [selector seed] Maximum Zero)])",
+        &["[workspace] Decision [selector seed] Maximum Zero"],
     );
 
     let (current_handoffs, current_upgrades) = current_thread

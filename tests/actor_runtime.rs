@@ -1,6 +1,7 @@
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use nota_codec::{Decoder, Encoder, NotaDecode, NotaEncode};
 use owner_signal_persona_spirit::{
     BootstrapPolicy, BootstrapPolicyReloaded, Drain, DrainedAndStopped, Generation, IdentityName,
     IdentityRegistered, IdentityRetired, Operation as OwnerOperation, Registration,
@@ -11,7 +12,7 @@ use persona_spirit::{
 };
 use signal_frame::{Caller, ProcessIdentifier, Request};
 use signal_persona_spirit::{
-    ObserverFilter, Operation as WorkingOperation, Reply as WorkingReply,
+    ObserverFilter, Operation as WorkingOperation, RecordIdentifier, Reply as WorkingReply,
     RequestUnimplemented as SpiritRequestUnimplemented,
     UnimplementedReason as SpiritUnimplementedReason,
 };
@@ -50,6 +51,21 @@ impl SpiritRuntimeFixture {
     }
 }
 
+fn accepted_identifier(reply: &persona_spirit::RootTextReply) -> RecordIdentifier {
+    let mut decoder = Decoder::new(reply.text());
+    let reply = WorkingReply::decode(&mut decoder).expect("reply decodes");
+    let WorkingReply::RecordAccepted(accepted) = reply else {
+        panic!("expected RecordAccepted reply, got {reply:?}");
+    };
+    accepted.identifier()
+}
+
+fn identifier_text(identifier: RecordIdentifier) -> String {
+    let mut encoder = Encoder::new();
+    identifier.encode(&mut encoder).expect("identifier encodes");
+    encoder.into_string()
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn persona_spirit_entry_assertion_runs_through_actor_planes() {
     let fixture = SpiritRuntimeFixture::new("entry-path");
@@ -60,7 +76,12 @@ async fn persona_spirit_entry_assertion_runs_through_actor_planes() {
         .await
         .expect("entry accepted");
 
-    assert_eq!(reply.text(), "(RecordAccepted 1)");
+    let identifier = accepted_identifier(&reply);
+    assert!(identifier.code().len() >= 4);
+    assert_eq!(
+        reply.text(),
+        format!("(RecordAccepted {})", identifier_text(identifier))
+    );
     assert!(reply.trace().contains_ordered(&[
         TraceNode::SPIRIT_ROOT,
         TraceNode::INGRESS_PHASE,
@@ -163,10 +184,11 @@ async fn persona_spirit_record_observation_uses_read_plane_without_write_plane()
     let fixture = SpiritRuntimeFixture::new("read-plane");
     let runtime = fixture.runtime().await;
 
-    runtime
+    let accepted = runtime
         .submit_text("(Record ([workspace] Decision description Maximum))")
         .await
         .expect("entry accepted");
+    let identifier = accepted_identifier(&accepted);
     let reply = runtime
         .submit_text("(Observe (Records ((Any []) None SummaryOnly)))")
         .await
@@ -174,7 +196,10 @@ async fn persona_spirit_record_observation_uses_read_plane_without_write_plane()
 
     assert_eq!(
         reply.text(),
-        "(RecordsObserved [(1 [workspace] Decision description Maximum Zero)])"
+        format!(
+            "(RecordsObserved [({} [workspace] Decision description Maximum Zero)])",
+            identifier_text(identifier)
+        )
     );
     assert!(
         reply
@@ -191,12 +216,13 @@ async fn persona_spirit_record_removal_uses_write_plane() {
     let fixture = SpiritRuntimeFixture::new("record-removal-write-plane");
     let runtime = fixture.runtime().await;
 
-    runtime
+    let accepted = runtime
         .submit_text("(Record ([workspace] Decision description Maximum))")
         .await
         .expect("entry accepted");
+    let identifier = accepted_identifier(&accepted);
     let reply = runtime
-        .submit_text("(Remove 1)")
+        .submit_text(&format!("(Remove {})", identifier_text(identifier)))
         .await
         .expect("entry removed");
     let observed = runtime
@@ -204,7 +230,10 @@ async fn persona_spirit_record_removal_uses_write_plane() {
         .await
         .expect("records observed");
 
-    assert_eq!(reply.text(), "(RecordRemoved 1)");
+    assert_eq!(
+        reply.text(),
+        format!("(RecordRemoved {})", identifier_text(identifier))
+    );
     assert!(
         reply
             .trace()
@@ -220,12 +249,16 @@ async fn persona_spirit_certainty_change_uses_write_plane() {
     let fixture = SpiritRuntimeFixture::new("certainty-change-write-plane");
     let runtime = fixture.runtime().await;
 
-    runtime
+    let accepted = runtime
         .submit_text("(Record ([workspace] Decision description Maximum))")
         .await
         .expect("entry accepted");
+    let identifier = accepted_identifier(&accepted);
     let reply = runtime
-        .submit_text("(ChangeCertainty (1 Zero))")
+        .submit_text(&format!(
+            "(ChangeCertainty ({} Zero))",
+            identifier_text(identifier)
+        ))
         .await
         .expect("certainty changed");
     let observed = runtime
@@ -233,7 +266,10 @@ async fn persona_spirit_certainty_change_uses_write_plane() {
         .await
         .expect("records observed");
 
-    assert_eq!(reply.text(), "(CertaintyChanged (1 Zero))");
+    assert_eq!(
+        reply.text(),
+        format!("(CertaintyChanged ({} Zero))", identifier_text(identifier))
+    );
     assert!(
         reply
             .trace()
@@ -241,7 +277,10 @@ async fn persona_spirit_certainty_change_uses_write_plane() {
     );
     assert_eq!(
         observed.text(),
-        "(RecordsObserved [(1 [workspace] Decision description Zero Zero)])"
+        format!(
+            "(RecordsObserved [({} [workspace] Decision description Zero Zero)])",
+            identifier_text(identifier)
+        )
     );
 
     runtime.stop().await.expect("runtime stops");
@@ -260,14 +299,16 @@ async fn persona_spirit_collect_removal_candidates_archives_before_retracting() 
             .as_nanos()
     ));
 
-    runtime
+    let candidate = runtime
         .submit_text("(Record ([workspace] Correction [candidate description] Zero))")
         .await
         .expect("candidate accepted");
-    runtime
+    let candidate_identifier = accepted_identifier(&candidate);
+    let active_record = runtime
         .submit_text("(Record ([workspace] Decision [active description] High))")
         .await
         .expect("active record accepted");
+    let active_identifier = accepted_identifier(&active_record);
     let request = format!(
         "(CollectRemovalCandidates (((Any []) None (Exact Zero) Any (Exact Zero) SummaryOnly) (ArchiveDatabase (Path [{}]))))",
         archive_path.to_string_lossy()
@@ -287,7 +328,11 @@ async fn persona_spirit_collect_removal_candidates_archives_before_retracting() 
 
     assert_eq!(
         reply.text(),
-        "(RemovalCandidatesCollected ([(1 [workspace] Correction [candidate description] Zero Zero)] [1] []))"
+        format!(
+            "(RemovalCandidatesCollected ([({} [workspace] Correction [candidate description] Zero Zero)] [{}] []))",
+            identifier_text(candidate_identifier),
+            identifier_text(candidate_identifier)
+        )
     );
     assert!(
         fs::metadata(&archive_path)
@@ -298,7 +343,10 @@ async fn persona_spirit_collect_removal_candidates_archives_before_retracting() 
     assert_eq!(candidates.text(), "(RecordsObserved [])");
     assert_eq!(
         active.text(),
-        "(RecordsObserved [(2 [workspace] Decision [active description] High Zero)])"
+        format!(
+            "(RecordsObserved [({} [workspace] Decision [active description] High Zero)])",
+            identifier_text(active_identifier)
+        )
     );
     assert!(reply.trace().contains_ordered(&[
         TraceNode::DISPATCH_PHASE,
@@ -453,10 +501,11 @@ async fn persona_spirit_record_subscription_uses_read_plane_then_subscription_pl
     let fixture = SpiritRuntimeFixture::new("record-subscription");
     let runtime = fixture.runtime().await;
 
-    runtime
+    let accepted = runtime
         .submit_text("(Record ([workspace] Decision [subscription path] Maximum))")
         .await
         .expect("entry accepted");
+    let identifier = accepted_identifier(&accepted);
     let reply = runtime
         .submit_text("(Watch (Records (None SummaryOnly)))")
         .await
@@ -464,7 +513,10 @@ async fn persona_spirit_record_subscription_uses_read_plane_then_subscription_pl
 
     assert_eq!(
         reply.text(),
-        "(SubscriptionOpened ((Records (1)) (Records [(1 [workspace] Decision [subscription path] Maximum Zero)])))"
+        format!(
+            "(SubscriptionOpened ((Records (1)) (Records [({} [workspace] Decision [subscription path] Maximum Zero)])))",
+            identifier_text(identifier)
+        )
     );
     assert!(reply.trace().contains_ordered(&[
         TraceNode::RECORD_STORE,
@@ -652,7 +704,12 @@ async fn persona_spirit_state_statement_uses_classifier_before_store() {
         .await
         .expect("statement classified");
 
-    assert_eq!(reply.text(), "(RecordAccepted 1)");
+    let identifier = accepted_identifier(&reply);
+    assert!(identifier.code().len() >= 4);
+    assert_eq!(
+        reply.text(),
+        format!("(RecordAccepted {})", identifier_text(identifier))
+    );
     assert!(reply.trace().contains_ordered(&[
         TraceNode::DISPATCH_PHASE,
         TraceNode::CLASSIFIER_PLANE,
@@ -674,10 +731,11 @@ async fn persona_spirit_shutdown_releases_store_for_restart() {
     let fixture = SpiritRuntimeFixture::new("restart");
     let first_runtime = fixture.runtime().await;
 
-    first_runtime
+    let accepted = first_runtime
         .submit_text("(Record ([workspace] Decision [restart survives] Maximum))")
         .await
         .expect("entry accepted");
+    let identifier = accepted_identifier(&accepted);
     first_runtime.stop().await.expect("first runtime stops");
 
     let second_runtime = fixture.runtime().await;
@@ -688,7 +746,10 @@ async fn persona_spirit_shutdown_releases_store_for_restart() {
 
     assert_eq!(
         reply.text(),
-        "(RecordsObserved [(1 [workspace] Decision [restart survives] Maximum Zero)])"
+        format!(
+            "(RecordsObserved [({} [workspace] Decision [restart survives] Maximum Zero)])",
+            identifier_text(identifier)
+        )
     );
 
     second_runtime.stop().await.expect("second runtime stops");
