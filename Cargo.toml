@@ -1,6 +1,6 @@
 [package]
 name         = "persona-spirit"
-version      = "0.5.1"
+version      = "0.5.2"
 edition      = "2024"
 rust-version = "1.89"
 license      = "MIT OR Apache-2.0"
@@ -39,6 +39,10 @@ path = "src/bin/spirit-migrate-0-3-to-0-4.rs"
 [[bin]]
 name = "spirit-migrate-0-4-to-0-5"
 path = "src/bin/spirit-migrate-0-4-to-0-5.rs"
+
+[[bin]]
+name = "spirit-migrate-0-5-to-0-5-2"
+path = "src/bin/spirit-migrate-0-5-to-0-5-2.rs"
 
 [dependencies]
 kameo                       = { git = "https://github.com/LiGoldragon/kameo", branch = "persona-lifecycle-terminal-outcome", default-features = false, features = ["macros", "tracing"] }

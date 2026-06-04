@@ -91,12 +91,16 @@ the shortest available lowercase base36 code from four to seven characters,
 starting at the four-character range and widening only when the shorter range is
 occupied. Removed identifiers are not reused because the mint checks existing
 live identifiers and random collision retry is local to the store. Older long
-identifier codes remain decodable for migration compatibility. Recency never
-comes from the identifier: qualitative `Shallow` / `Recent` / `Deep` /
-`VeryDeep` selection uses recorded time and sema first-assert commit order for
-same-second ties.
+identifier codes remain decodable for migration compatibility, but production
+cutover must not keep rendering them as the normal visible surface: v0.5.2
+preserves already-short identifiers and remints copied long identifiers into
+short codes. Recency never comes from the identifier: qualitative `Shallow` /
+`Recent` / `Deep` / `VeryDeep` selection uses recorded time and sema
+first-assert commit order for same-second ties.
 The v0.4-to-v0.5 migration writes a NOTA sidecar mapping new hash identifiers
 to former ordinal identifiers for temporary human/agent lookup.
+The v0.5-to-v0.5.2 migration writes a NOTA sidecar mapping previous random
+identifiers to current short identifiers.
 
 ## Actor topology
 
@@ -439,7 +443,7 @@ work today against the hand-written types.
 | Record observations can select exact identifiers; identifier ranges are rejected because random identifiers carry no ordering semantics. | `persona_spirit_client_observes_records_by_exact_identifier` uses `Observation::RecordIdentifiers`; `persona_spirit_client_rejects_identifier_range_after_random_identifiers` proves old range-shaped requests no longer decode. |
 | Record certainty changes use the write plane and project to Sema `Mutate`. | `persona_spirit_client_changes_certainty_to_zero_for_removal_candidate_review`, `persona_spirit_certainty_change_uses_write_plane`, and `spirit_certainty_change_projects_to_mutated_observation` check `ChangeCertainty`, `CertaintyChanged`, exact-`Zero` review visibility, `RecordMutated`, and `SemaOperation::Mutate`. |
 | Record removal uses the write plane, leaves later observations clean, and does not reuse removed identifiers. | `persona_spirit_record_removal_uses_write_plane`, `spirit_record_removal_projects_to_retracted_observation`, `persona_spirit_client_removes_entry_and_excludes_it_from_observation`, and `persona_spirit_client_does_not_reuse_removed_record_identifier` check `Remove`, `RecordRemoved`, `SemaOperation::Retract`, and random identifier non-reuse. |
-| Production store schema changes require an explicit historical migration before default cutover. | `spirit_privacy_migration_projects_v030_records_to_v040` writes a schema-3 v0.3.0 source database, runs the v0.3→v0.4 migration, and observes schema-4 current records with `privacy = Zero`; `spirit_identifier_migration_randomizes_ordinal_identifiers_and_writes_nota_mapping_table` writes a schema-4 source database, runs the v0.4→v0.5 random-identifier migration, observes schema-5 records, and verifies the hash-to-ordinal NOTA sidecar; the migration binary tests prove both exposed migration binaries are one-argument component-shaped tools returning typed NOTA. |
+| Production store schema changes require an explicit historical migration before default cutover. | `spirit_privacy_migration_projects_v030_records_to_v040` writes a schema-3 v0.3.0 source database, runs the v0.3→v0.4 migration, and observes schema-4 current records with `privacy = Zero`; `spirit_identifier_migration_randomizes_ordinal_identifiers_and_writes_nota_mapping_table` writes a schema-4 source database, runs the v0.4→v0.5 random-identifier migration, observes schema-5 records, and verifies the hash-to-ordinal NOTA sidecar; `spirit_short_identifier_migration_preserves_short_ids_and_remints_long_ids` writes a schema-5 source database, preserves already-short identifiers, remints copied long identifiers into short codes, and verifies the previous-to-current NOTA sidecar; the migration binary tests prove all exposed migration binaries are one-argument component-shaped tools returning typed NOTA. |
 | Topic catalog observations list each topic with a membership count without reading every entry's provenance. | `persona_spirit_client_lists_topics_with_entry_counts`, `persona_spirit_client_counts_topic_memberships`, `persona_spirit_topic_catalog_observation_uses_read_plane_without_write_plane`, and `persona_spirit_daemon_serves_topic_catalog_through_signal_frames` store multiple topics and expect deterministic counts through the daemon read plane. |
 | Psyche-state observations use a working-state plane, not record storage. | `persona_spirit_state_observation_uses_state_plane` checks `StatePlane` without `RecordStore`. |
 | Pending-question observations use the working-state plane. | `persona_spirit_question_observation_uses_state_plane` and `persona_spirit_client_observes_empty_pending_questions` check the empty raw state. |

@@ -5,7 +5,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use nota_codec::{Decoder, NotaDecode};
 use persona_spirit::{
     MigrationConfiguration, SpiritStore, StoreLocation, StorePath,
-    migration::IdentifierMigrationTable, store::StampedEntry,
+    migration::{IdentifierMigrationTable, ShortIdentifierMigrationTable},
+    store::StampedEntry,
 };
 use sema::SchemaVersion;
 use sema_engine::{
@@ -23,6 +24,7 @@ const V010_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
 const V020_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(2);
 const V030_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(3);
 const V040_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(4);
+const V050_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(5);
 const RECORDS: TableName = TableName::new("records");
 const MINIMUM_IDENTIFIER_CODE_LENGTH: usize = 4;
 const MAXIMUM_IDENTIFIER_CODE_LENGTH: usize = 7;
@@ -72,6 +74,12 @@ struct V040RecordIdentifier(u64);
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
 struct V040StoredRecord {
     identifier: V040RecordIdentifier,
+    entry: StampedEntry,
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+struct V050StoredRecord {
+    identifier: RecordIdentifier,
     entry: StampedEntry,
 }
 
@@ -549,6 +557,119 @@ fn spirit_identifier_migration_binary_reads_one_nota_argument_and_writes_complet
 }
 
 #[test]
+fn spirit_short_identifier_migration_preserves_short_ids_and_remints_long_ids() {
+    let fixture = MigrationFixture::new("v050-v052");
+    let existing_short_identifier = RecordIdentifier::from_code("abcd").expect("short id decodes");
+    let existing_long_identifier =
+        RecordIdentifier::from_code("20fzn9o0573n21mgujm").expect("long id decodes");
+    write_v050_source(
+        &fixture.source,
+        vec![
+            V050StoredRecord {
+                identifier: existing_short_identifier,
+                entry: StampedEntry::new(
+                    Entry {
+                        topics: Topics::single(Topic::new("identity")),
+                        kind: Kind::Decision,
+                        description: Description::new("already short"),
+                        certainty: Magnitude::High,
+                        privacy: Magnitude::Zero,
+                    },
+                    Date::new(2026, 6, 4),
+                    Time::new(17, 30, 0),
+                ),
+            },
+            V050StoredRecord {
+                identifier: existing_long_identifier,
+                entry: StampedEntry::new(
+                    Entry {
+                        topics: Topics::single(Topic::new("identity")),
+                        kind: Kind::Constraint,
+                        description: Description::new("still long"),
+                        certainty: Magnitude::High,
+                        privacy: Magnitude::Zero,
+                    },
+                    Date::new(2026, 6, 4),
+                    Time::new(17, 31, 0),
+                ),
+            },
+        ],
+    );
+
+    let outcome = fixture
+        .configuration()
+        .migrate_v050_to_v052()
+        .expect("short identifier migration succeeds");
+
+    assert_eq!(outcome.records(), 2);
+    let mapping = read_short_identifier_mapping_table(&fixture.target);
+    assert_eq!(mapping.rows.len(), 2);
+    let short_mapping = mapping
+        .rows
+        .iter()
+        .find(|row| row.previous_identifier == existing_short_identifier)
+        .expect("short mapping exists");
+    assert_eq!(
+        short_mapping.current_identifier, existing_short_identifier,
+        "already-short identifiers should remain stable"
+    );
+    let long_mapping = mapping
+        .rows
+        .iter()
+        .find(|row| row.previous_identifier == existing_long_identifier)
+        .expect("long mapping exists");
+    assert_ne!(long_mapping.current_identifier, existing_long_identifier);
+    assert_short_identifier(long_mapping.current_identifier);
+
+    let records = target_provenances(&fixture.target);
+    assert_eq!(records.len(), 2);
+    for record in records {
+        assert_short_identifier(record.summary.identifier);
+    }
+}
+
+#[test]
+fn spirit_short_identifier_migration_binary_reads_one_nota_argument_and_writes_completed_reply() {
+    let fixture = MigrationFixture::new("v050-v052-binary");
+    write_v050_source(
+        &fixture.source,
+        vec![V050StoredRecord {
+            identifier: RecordIdentifier::from_code("5y4b9i6swapgd4yswt4")
+                .expect("long id decodes"),
+            entry: StampedEntry::new(
+                Entry {
+                    topics: Topics::single(Topic::new("identity")),
+                    kind: Kind::Decision,
+                    description: Description::new("binary short identifier migration"),
+                    certainty: Magnitude::High,
+                    privacy: Magnitude::Zero,
+                },
+                Date::new(2026, 6, 4),
+                Time::new(17, 35, 0),
+            ),
+        }],
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_spirit-migrate-0-5-to-0-5-2"))
+        .arg(fixture.configuration_text())
+        .output()
+        .expect("migration binary runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "(MigrationCompleted 1)"
+    );
+    let mapping = read_short_identifier_mapping_table(&fixture.target);
+    assert_eq!(mapping.rows.len(), 1);
+    assert_short_identifier(mapping.rows[0].current_identifier);
+}
+
+#[test]
 fn spirit_privacy_migration_binary_reads_one_nota_argument_and_writes_completed_reply() {
     let fixture = MigrationFixture::new("v030-v040-binary");
     write_v030_source(
@@ -731,6 +852,19 @@ fn write_v040_source(path: &StorePath, records: Vec<V040StoredRecord>) {
     }
 }
 
+fn write_v050_source(path: &StorePath, records: Vec<V050StoredRecord>) {
+    let mut engine = Engine::open(EngineOpen::new(path.as_path(), V050_SCHEMA_VERSION))
+        .expect("v0.5 engine opens");
+    let table = engine
+        .register_table(TableDescriptor::new(RECORDS))
+        .expect("v0.5 records table registers");
+    for record in records {
+        engine
+            .assert(Assertion::new(table, record))
+            .expect("v0.5 record writes");
+    }
+}
+
 fn old_record(input: OldRecordInput<'_>) -> V010StoredRecord {
     V010StoredRecord {
         identifier: RecordIdentifier::new(input.identifier),
@@ -775,6 +909,13 @@ fn read_identifier_mapping_table(target: &StorePath) -> IdentifierMigrationTable
     IdentifierMigrationTable::decode(&mut decoder).expect("mapping decodes")
 }
 
+fn read_short_identifier_mapping_table(target: &StorePath) -> ShortIdentifierMigrationTable {
+    let text =
+        fs::read_to_string(short_identifier_mapping_table_path(target)).expect("mapping reads");
+    let mut decoder = Decoder::new(&text);
+    ShortIdentifierMigrationTable::decode(&mut decoder).expect("mapping decodes")
+}
+
 fn identifier_mapping_table_path(target: &StorePath) -> std::path::PathBuf {
     let mut path = target.as_path().to_path_buf();
     let file_name = path
@@ -782,6 +923,17 @@ fn identifier_mapping_table_path(target: &StorePath) -> std::path::PathBuf {
         .and_then(|name| name.to_str())
         .map(|name| format!("{name}.identifier-migration.nota"))
         .unwrap_or_else(|| "spirit.identifier-migration.nota".to_string());
+    path.set_file_name(file_name);
+    path
+}
+
+fn short_identifier_mapping_table_path(target: &StorePath) -> std::path::PathBuf {
+    let mut path = target.as_path().to_path_buf();
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| format!("{name}.short-identifier-migration.nota"))
+        .unwrap_or_else(|| "spirit.short-identifier-migration.nota".to_string());
     path.set_file_name(file_name);
     path
 }
@@ -807,5 +959,11 @@ impl EngineRecord for V030StoredRecord {
 impl EngineRecord for V040StoredRecord {
     fn record_key(&self) -> RecordKey {
         RecordKey::new(self.identifier.0.to_string())
+    }
+}
+
+impl EngineRecord for V050StoredRecord {
+    fn record_key(&self) -> RecordKey {
+        RecordKey::new(self.identifier.code())
     }
 }
