@@ -857,6 +857,46 @@ fn persona_spirit_client_filters_identifier_observation_by_privacy() {
 }
 
 #[test]
+fn persona_spirit_client_hides_private_records_from_public_subscription_snapshot() {
+    let fixture = StoreFixture::new("subscription-privacy-default");
+    fixture
+        .reply_text("(Record ([workspace] Decision [open note] Maximum Zero))")
+        .expect("open entry persisted");
+    fixture
+        .reply_text("(Record ([workspace] Decision [private note] Maximum High))")
+        .expect("private entry persisted");
+
+    let reply = fixture
+        .reply_text("(Watch (Records (None SummaryOnly)))")
+        .expect("record subscription opened");
+
+    assert_eq!(
+        reply,
+        "(SubscriptionOpened ((Records (1)) (Records [(1 [workspace] Decision [open note] Maximum Zero)])))"
+    );
+}
+
+#[test]
+fn persona_spirit_client_can_open_private_record_subscription_snapshot() {
+    let fixture = StoreFixture::new("subscription-privacy-explicit");
+    fixture
+        .reply_text("(Record ([workspace] Decision [open note] Maximum Zero))")
+        .expect("open entry persisted");
+    fixture
+        .reply_text("(Record ([workspace] Decision [private note] Maximum High))")
+        .expect("private entry persisted");
+
+    let reply = fixture
+        .reply_text("(Watch (PrivateRecords ((AtMost High) (None SummaryOnly))))")
+        .expect("private record subscription opened");
+
+    assert_eq!(
+        reply,
+        "(SubscriptionOpened ((Records (1)) (Records [(1 [workspace] Decision [open note] Maximum Zero) (2 [workspace] Decision [private note] Maximum High)])))"
+    );
+}
+
+#[test]
 fn persona_spirit_client_lists_topics_with_entry_counts() {
     let fixture = StoreFixture::new("topic-counts");
     fixture
