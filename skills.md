@@ -100,6 +100,9 @@ Contract records stay in `signal-persona-spirit` and
   Qualitative recency depths (`Shallow`, `Recent`, `Deep`, `VeryDeep`) are
   applied after topic/kind/certainty matching and keep the newest matching
   records at the requested depth.
+- Record subscription snapshots use the same privacy discipline as record
+  observations: public `Watch(Records ...)` is exact `Zero`, while
+  `Watch(PrivateRecords ...)` must carry an explicit `PrivacySelection`.
 - `Observation::RecordIdentifiers` queries return descriptions or provenance
   for an exact `RecordIdentifier` or inclusive `RecordIdentifierRange`.
 - `ChangeCertainty(CertaintyChange)` mutates one stored intent entry's
