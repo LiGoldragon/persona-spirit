@@ -67,6 +67,17 @@ audience. `RecordStore` applies privacy selection in the read path, and
 the default observation selection is exact `Zero` so elevated records do
 not appear unless a caller explicitly widens the privacy selector.
 
+Any production release that changes the persisted row shape must advance
+the sema-engine store schema version and expose an explicit migration
+binary from the prior production shape before the unsuffixed `spirit`
+wrapper can point at that release. v0.4.1 is the privacy-storage cutover:
+it reads a v0.3.0 schema-3 database through the historical
+`signal_persona_spirit::migration::v030` entry shape, projects every
+record to the current entry shape with `privacy = Zero`, and writes a
+fresh schema-4 database. Starting a new versioned daemon with an empty
+database is acceptable only as an explicit side-by-side test surface; it
+is not a valid default production cutover.
+
 Record removal is **irreversible**. The `Remove` operation Retracts the
 record from the sema-engine database; redb's copy-on-write page reuse then
 overwrites the freed bytes as the daemon keeps writing, so a removed intent
@@ -416,6 +427,7 @@ work today against the hand-written types.
 | Record observations can select exact identifiers and inclusive identifier ranges. | `persona_spirit_client_observes_records_by_exact_identifier` and `persona_spirit_client_observes_records_by_identifier_range` use `Observation::RecordIdentifiers`. |
 | Record certainty changes use the write plane and project to Sema `Mutate`. | `persona_spirit_client_changes_certainty_to_zero_for_removal_candidate_review`, `persona_spirit_certainty_change_uses_write_plane`, and `spirit_certainty_change_projects_to_mutated_observation` check `ChangeCertainty`, `CertaintyChanged`, exact-`Zero` review visibility, `RecordMutated`, and `SemaOperation::Mutate`. |
 | Record removal uses the write plane, leaves later observations clean, and does not reuse removed identifiers. | `persona_spirit_record_removal_uses_write_plane`, `spirit_record_removal_projects_to_retracted_observation`, `persona_spirit_client_removes_entry_and_excludes_it_from_observation`, and `persona_spirit_client_does_not_reuse_removed_record_identifier` check `Remove`, `RecordRemoved`, `SemaOperation::Retract`, and monotonic identifier minting. |
+| Production store schema changes require an explicit historical migration before default cutover. | `spirit_privacy_migration_projects_v030_records_to_v040` writes a schema-3 v0.3.0 source database, runs the v0.3→v0.4 migration, and observes schema-4 current records with `privacy = Zero`; `spirit_privacy_migration_binary_reads_one_nota_argument_and_writes_completed_reply` proves the exposed migration binary is a one-argument component-shaped tool returning typed NOTA. |
 | Topic catalog observations list each topic with a membership count without reading every entry's provenance. | `persona_spirit_client_lists_topics_with_entry_counts`, `persona_spirit_client_counts_topic_memberships`, `persona_spirit_topic_catalog_observation_uses_read_plane_without_write_plane`, and `persona_spirit_daemon_serves_topic_catalog_through_signal_frames` store multiple topics and expect deterministic counts through the daemon read plane. |
 | Psyche-state observations use a working-state plane, not record storage. | `persona_spirit_state_observation_uses_state_plane` checks `StatePlane` without `RecordStore`. |
 | Pending-question observations use the working-state plane. | `persona_spirit_question_observation_uses_state_plane` and `persona_spirit_client_observes_empty_pending_questions` check the empty raw state. |
@@ -461,6 +473,7 @@ src/lib.rs                         — module entry
 src/daemon.rs                      — daemon configuration, bootstrap-policy source selection, socket binding, ordinary/owner/upgrade frame codecs, Design D handoff-control receive path, signal clients
 src/error.rs                       — typed error
 src/observation.rs                 — Spirit-local Command/Effect to payloadless signal-sema observation projection
+src/migration.rs                   — explicit prior-version database migration bridges
 src/store.rs                       — sema-engine backed entry store and record queries
 src/actors/root.rs                 — Kameo root and blocking actor-runtime helper
 src/actors/ingress.rs              — text ingress phase
@@ -478,10 +491,12 @@ src/actors/trace.rs                — actor-path witness values
 src/actors/pipeline.rs             — typed in-process pipeline carriers
 src/bin/spirit.rs                  — one-line `signal_frame::signal_cli!` thin CLI binary
 src/bin/persona-spirit-daemon.rs   — daemon binary
+src/bin/spirit-migrate-0-3-to-0-4.rs — one-argument v0.3.0 store to v0.4.x privacy-store migration binary
 bootstrap-policy.nota              — first policy seed
 tests/boundary.rs                  — argument-boundary witnesses
 tests/actor_runtime.rs             — actor-path and architectural-truth witnesses
 tests/daemon.rs                    — socket, signal-frame, and daemon-boundary witnesses
+tests/migration.rs                 — store migration and migration-binary witnesses
 tests/sema_projection.rs           — command/effect projection to SemaObservation through the real actor runtime
 ```
 

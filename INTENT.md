@@ -315,6 +315,23 @@ topics, and non-exact-zero public collection queries. Foreign boundary
 errors are wrapped explicitly as external rejections rather than
 pretending they are Spirit store reasons.
 
+## v0.4.1 store migration discipline — privacy without intent loss
+
+The v0.4.0 wire shape added privacy to records, which also changed the
+stored `Entry` row shape. A production default cutover must not switch
+the unsuffixed `spirit` command to an empty side-by-side database while
+the populated v0.3.0 database remains behind another versioned wrapper.
+v0.4.1 is the first privacy-storage cutover release: it advances the
+sema-engine schema marker, keeps the historical v0.3.0 row shape in a
+contract-owned migration module, and exposes
+`spirit-migrate-0-3-to-0-4` so profile activation can project existing
+records into the current privacy-aware store with `privacy = Zero`.
+
+The invariant generalises: schema-changing storage releases need both a
+store schema bump and a tested prior-version bridge before they become
+the default production Spirit surface. Side-by-side empty databases are
+test surfaces, not production defaults.
+
 ## Daemon configuration — 9-field positional argument
 
 The daemon binary takes one NOTA argument: a positional 9-field

@@ -25,7 +25,7 @@ use crate::{
     observation::RecordIdentifierObservation,
 };
 
-const SPIRIT_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(3);
+const SPIRIT_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(4);
 const REMOVAL_CANDIDATE_ARCHIVE_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
 const SPIRIT_CONTRACT_VERSION: ContractVersion = ContractVersion::new([
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0,

@@ -13,11 +13,13 @@ use signal_persona_spirit::{
     CertaintySelection, Date, Description, Entry, Kind, ObservationMode, PrivacySelection,
     RecordIdentifier, RecordObservation, RecordQuery, RecordedTimeSelection, Reply as WorkingReply,
     Time, Topic, TopicSelection, Topics,
-    migration::{v010, v020},
+    migration::{v010, v020, v030},
 };
 use signal_sema::Magnitude;
 
 const V010_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
+const V020_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(2);
+const V030_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(3);
 const RECORDS: TableName = TableName::new("records");
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -42,6 +44,19 @@ struct V020StoredRecord {
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
 struct V020StampedEntry {
     entry: v020::Entry,
+    date: Date,
+    time: Time,
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+struct V030StoredRecord {
+    identifier: RecordIdentifier,
+    entry: V030StampedEntry,
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+struct V030StampedEntry {
+    entry: v030::Entry,
     date: Date,
     time: Time,
 }
@@ -317,6 +332,127 @@ fn spirit_next_migration_binary_reads_one_nota_argument_and_writes_completed_rep
 }
 
 #[test]
+fn spirit_privacy_migration_projects_v030_records_to_v040() {
+    let fixture = MigrationFixture::new("v030-v040");
+    write_v030_source(
+        &fixture.source,
+        vec![
+            V030StoredRecord {
+                identifier: RecordIdentifier::new(1),
+                entry: V030StampedEntry {
+                    entry: v030::Entry {
+                        topics: v030::Topics::new(vec![
+                            v030::Topic::new("spirit"),
+                            v030::Topic::new("privacy"),
+                        ]),
+                        kind: v030::Kind::Constraint,
+                        description: v030::Description::new("privacy defaults open"),
+                        certainty: Magnitude::Maximum,
+                    },
+                    date: Date::new(2026, 6, 4),
+                    time: Time::new(12, 35, 0),
+                },
+            },
+            V030StoredRecord {
+                identifier: RecordIdentifier::new(2),
+                entry: V030StampedEntry {
+                    entry: v030::Entry {
+                        topics: v030::Topics::single(v030::Topic::new("archive")),
+                        kind: v030::Kind::Decision,
+                        description: v030::Description::new("second survives"),
+                        certainty: Magnitude::High,
+                    },
+                    date: Date::new(2026, 6, 4),
+                    time: Time::new(12, 36, 0),
+                },
+            },
+        ],
+    );
+
+    let outcome = fixture
+        .configuration()
+        .migrate_v030_to_v040()
+        .expect("migration succeeds");
+
+    assert_eq!(outcome.records(), 2);
+    let records = target_provenances(&fixture.target);
+    assert_eq!(records[0].summary.identifier, RecordIdentifier::new(1));
+    assert_eq!(records[0].summary.topics.as_slice().len(), 2);
+    assert_eq!(
+        records[0].summary.topics.as_slice()[0],
+        Topic::new("spirit")
+    );
+    assert_eq!(
+        records[0].summary.topics.as_slice()[1],
+        Topic::new("privacy")
+    );
+    assert_eq!(records[0].summary.kind, Kind::Constraint);
+    assert_eq!(
+        records[0].summary.description,
+        Description::new("privacy defaults open")
+    );
+    assert_eq!(records[0].summary.certainty, Magnitude::Maximum);
+    assert_eq!(records[0].summary.privacy, Magnitude::Zero);
+    assert_eq!(records[1].summary.identifier, RecordIdentifier::new(2));
+    assert_eq!(records[1].summary.privacy, Magnitude::Zero);
+
+    let target =
+        SpiritStore::open(&StoreLocation::new(fixture.target.as_path())).expect("target reopens");
+    let accepted = target
+        .assert_entry(StampedEntry::new(
+            Entry {
+                topics: Topics::single(Topic::new("post-migration")),
+                kind: Kind::Clarification,
+                description: Description::new("post privacy migration"),
+                certainty: Magnitude::High,
+                privacy: Magnitude::High,
+            },
+            Date::new(2026, 6, 4),
+            Time::new(12, 37, 0),
+        ))
+        .expect("post-migration record accepted");
+    assert_eq!(accepted.identifier(), RecordIdentifier::new(3));
+}
+
+#[test]
+fn spirit_privacy_migration_binary_reads_one_nota_argument_and_writes_completed_reply() {
+    let fixture = MigrationFixture::new("v030-v040-binary");
+    write_v030_source(
+        &fixture.source,
+        vec![V030StoredRecord {
+            identifier: RecordIdentifier::new(1),
+            entry: V030StampedEntry {
+                entry: v030::Entry {
+                    topics: v030::Topics::single(v030::Topic::new("spirit")),
+                    kind: v030::Kind::Decision,
+                    description: v030::Description::new("binary privacy"),
+                    certainty: Magnitude::Maximum,
+                },
+                date: Date::new(2026, 6, 4),
+                time: Time::new(12, 40, 0),
+            },
+        }],
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_spirit-migrate-0-3-to-0-4"))
+        .arg(fixture.configuration_text())
+        .output()
+        .expect("migration binary runs");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "(MigrationCompleted 1)"
+    );
+    let records = target_provenances(&fixture.target);
+    assert_eq!(records[0].summary.privacy, Magnitude::Zero);
+}
+
+#[test]
 fn spirit_migration_binary_reads_one_nota_argument_and_writes_completed_reply() {
     let fixture = MigrationFixture::new("binary");
     write_v010_source(
@@ -423,7 +559,7 @@ fn write_v010_source(path: &StorePath, records: Vec<V010StoredRecord>) {
 }
 
 fn write_v020_source(path: &StorePath, records: Vec<V020StoredRecord>) {
-    let mut engine = Engine::open(EngineOpen::new(path.as_path(), SchemaVersion::new(2)))
+    let mut engine = Engine::open(EngineOpen::new(path.as_path(), V020_SCHEMA_VERSION))
         .expect("v0.2 engine opens");
     let table = engine
         .register_table(TableDescriptor::new(RECORDS))
@@ -432,6 +568,19 @@ fn write_v020_source(path: &StorePath, records: Vec<V020StoredRecord>) {
         engine
             .assert(Assertion::new(table, record))
             .expect("v0.2 record writes");
+    }
+}
+
+fn write_v030_source(path: &StorePath, records: Vec<V030StoredRecord>) {
+    let mut engine = Engine::open(EngineOpen::new(path.as_path(), V030_SCHEMA_VERSION))
+        .expect("v0.3 engine opens");
+    let table = engine
+        .register_table(TableDescriptor::new(RECORDS))
+        .expect("v0.3 records table registers");
+    for record in records {
+        engine
+            .assert(Assertion::new(table, record))
+            .expect("v0.3 record writes");
     }
 }
 
@@ -480,6 +629,12 @@ impl EngineRecord for V010StoredRecord {
 }
 
 impl EngineRecord for V020StoredRecord {
+    fn record_key(&self) -> RecordKey {
+        RecordKey::new(self.identifier.value().to_string())
+    }
+}
+
+impl EngineRecord for V030StoredRecord {
     fn record_key(&self) -> RecordKey {
         RecordKey::new(self.identifier.value().to_string())
     }

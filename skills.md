@@ -115,6 +115,13 @@ Contract records stay in `signal-persona-spirit` and
   retracting when archive database output fails. `OutputTarget::Print`
   writes no archive database; the typed `RemovalCandidatesCollected` reply is
   the capture material rendered by the CLI to the requested stream.
+- Any release that changes persisted `SpiritStore` row shape must bump
+  `SPIRIT_SCHEMA_VERSION`, keep the prior production row shape readable in
+  `src/migration.rs`, expose a one-argument migration binary, and prove the
+  bridge with tests before Home may point the unsuffixed `spirit` wrapper at
+  that release. v0.4.1's required bridge is
+  `spirit-migrate-0-3-to-0-4`, which projects v0.3.0 records into the
+  privacy-aware store with `privacy = Zero`.
 - `Remove(RecordIdentifier)` retracts one stored intent entry through
   `RecordStore` and returns `RecordRemoved`; the CLI never opens the
   database directly. Removed record identifiers are not reused.

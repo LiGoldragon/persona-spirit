@@ -7,7 +7,7 @@ use sema_engine::{
 };
 use signal_persona_spirit::{
     Date, Entry, RecordIdentifier, Time,
-    migration::{V010ToV011, V020ToV030, v010, v020},
+    migration::{V010ToV011, V020ToV030, V030ToV040, v010, v020, v030},
 };
 use version_projection::VersionProjection;
 
@@ -18,6 +18,7 @@ use crate::{
 
 const V010_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
 const V020_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(2);
+const V030_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(3);
 const RECORDS: TableName = TableName::new("records");
 
 #[derive(Debug, Clone, PartialEq, Eq, NotaRecord)]
@@ -62,6 +63,19 @@ struct V020StampedEntry {
     time: Time,
 }
 
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+struct V030StoredRecord {
+    identifier: RecordIdentifier,
+    entry: V030StampedEntry,
+}
+
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
+struct V030StampedEntry {
+    entry: v030::Entry,
+    date: Date,
+    time: Time,
+}
+
 impl MigrationConfiguration {
     pub fn new(source: StorePath, target: StorePath) -> Self {
         Self { source, target }
@@ -91,6 +105,10 @@ impl MigrationConfiguration {
 
     pub fn migrate_v020_to_next(self) -> Result<MigrationOutcome> {
         migrate_v020_to_next(&self.source, &self.target)
+    }
+
+    pub fn migrate_v030_to_v040(self) -> Result<MigrationOutcome> {
+        migrate_v030_to_v040(&self.source, &self.target)
     }
 }
 
@@ -148,6 +166,23 @@ pub fn migrate_v020_to_next(source: &StorePath, target: &StorePath) -> Result<Mi
     Ok(MigrationOutcome::new(migrated))
 }
 
+pub fn migrate_v030_to_v040(source: &StorePath, target: &StorePath) -> Result<MigrationOutcome> {
+    let source_records = V030Store::open(source)?.all_records()?;
+    let target_store = SpiritStore::open(&StoreLocation::new(target.as_path()))?;
+    if !target_store.is_empty()? {
+        return Err(Error::migration(
+            "target v0.4 database must be empty before privacy migration",
+        ));
+    }
+
+    let mut migrated = 0;
+    for record in source_records {
+        target_store.import_migrated_record(record.identifier, record.project()?)?;
+        migrated += 1;
+    }
+    Ok(MigrationOutcome::new(migrated))
+}
+
 impl NotaEncode for MigrationCompleted {
     fn encode(&self, encoder: &mut Encoder) -> nota_codec::Result<()> {
         encoder.start_record("MigrationCompleted")?;
@@ -164,6 +199,11 @@ struct V010Store {
 struct V020Store {
     engine: Engine,
     records: sema_engine::TableReference<V020StoredRecord>,
+}
+
+struct V030Store {
+    engine: Engine,
+    records: sema_engine::TableReference<V030StoredRecord>,
 }
 
 impl V010Store {
@@ -210,6 +250,28 @@ impl V020Store {
     }
 }
 
+impl V030Store {
+    fn open(path: &StorePath) -> Result<Self> {
+        let mut engine = Engine::open(EngineOpen::new(path.as_path(), V030_SCHEMA_VERSION))
+            .map_err(Error::spirit_store)?;
+        let records = engine
+            .register_table(TableDescriptor::new(RECORDS))
+            .map_err(Error::spirit_store)?;
+        Ok(Self { engine, records })
+    }
+
+    fn all_records(&self) -> Result<Vec<V030StoredRecord>> {
+        let mut records = self
+            .engine
+            .match_records(QueryPlan::all(self.records))
+            .map_err(Error::spirit_store)?
+            .records()
+            .to_vec();
+        records.sort_by_key(|record| record.identifier.value());
+        Ok(records)
+    }
+}
+
 impl V010StoredRecord {
     fn project(self) -> Result<StampedEntry> {
         Ok(StampedEntry::new(
@@ -232,6 +294,17 @@ impl V020StoredRecord {
     }
 }
 
+impl V030StoredRecord {
+    fn project(self) -> Result<StampedEntry> {
+        Ok(StampedEntry::new(
+            <V030ToV040 as VersionProjection<v030::Entry, Entry>>::project(self.entry.entry)
+                .map_err(|error| Error::migration(error.to_string()))?,
+            self.entry.date,
+            self.entry.time,
+        ))
+    }
+}
+
 impl EngineRecord for V010StoredRecord {
     fn record_key(&self) -> RecordKey {
         RecordKey::new(self.identifier.value().to_string())
@@ -239,6 +312,12 @@ impl EngineRecord for V010StoredRecord {
 }
 
 impl EngineRecord for V020StoredRecord {
+    fn record_key(&self) -> RecordKey {
+        RecordKey::new(self.identifier.value().to_string())
+    }
+}
+
+impl EngineRecord for V030StoredRecord {
     fn record_key(&self) -> RecordKey {
         RecordKey::new(self.identifier.value().to_string())
     }
