@@ -1,3 +1,4 @@
+use kameo::error::{Infallible, SendError};
 use signal_frame::{
     BatchErrorClassification, BatchFailureReason, CommitStatus, RetryClassification,
 };
@@ -145,6 +146,12 @@ impl From<signal_frame::SingleArgumentError> for Error {
                 Self::FlagArgument { program, argument }
             }
         }
+    }
+}
+
+impl<Message> From<SendError<Message, Infallible>> for Error {
+    fn from(error: SendError<Message, Infallible>) -> Self {
+        Self::actor_runtime(error.to_string())
     }
 }
 

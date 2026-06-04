@@ -278,8 +278,7 @@ impl SpiritCommandExecutor {
         let stamped = self
             .clock
             .ask(clock::StampEntry { entry, trace })
-            .await
-            .map_err(Self::clock_send_error)?;
+            .await?;
         self.trace.replace(stamped.trace);
         Ok(stamped.entry)
     }
@@ -349,8 +348,7 @@ impl SpiritCommandExecutor {
         let classified = self
             .classifier
             .ask(classifier::ClassifyStatement { statement, trace })
-            .await
-            .map_err(Self::classifier_send_error)?;
+            .await?;
         self.trace.replace(classified.trace);
         self.capture_entry(classified.entry).await
     }
@@ -399,8 +397,7 @@ impl SpiritCommandExecutor {
         let pipeline = self
             .state
             .ask(state::ObserveState { trace })
-            .await
-            .map_err(Self::state_send_error)?;
+            .await?;
         let (reply, trace) = pipeline.into_parts();
         self.trace.replace(trace);
         Ok(reply)
@@ -411,8 +408,7 @@ impl SpiritCommandExecutor {
         let pipeline = self
             .state
             .ask(state::ObserveQuestions { trace })
-            .await
-            .map_err(Self::state_send_error)?;
+            .await?;
         let (reply, trace) = pipeline.into_parts();
         self.trace.replace(trace);
         Ok(reply)
@@ -423,8 +419,7 @@ impl SpiritCommandExecutor {
         let snapshot = self
             .state
             .ask(state::ReadStateSnapshot { trace })
-            .await
-            .map_err(Self::state_send_error)?;
+            .await?;
         self.trace.replace(snapshot.trace.clone());
         let pipeline = self
             .subscription
@@ -432,8 +427,7 @@ impl SpiritCommandExecutor {
                 snapshot: snapshot.state,
                 trace: snapshot.trace,
             })
-            .await
-            .map_err(Self::subscription_send_error)?;
+            .await?;
         let (reply, trace) = pipeline.into_parts();
         self.trace.replace(trace);
         Ok(reply)
@@ -460,8 +454,7 @@ impl SpiritCommandExecutor {
                 snapshot: snapshot.records,
                 trace: snapshot.trace,
             })
-            .await
-            .map_err(Self::subscription_send_error)?;
+            .await?;
         let (reply, trace) = pipeline.into_parts();
         self.trace.replace(trace);
         Ok(reply)
@@ -475,8 +468,7 @@ impl SpiritCommandExecutor {
         let pipeline = self
             .subscription
             .ask(subscription::RetractStateSubscription { token, trace })
-            .await
-            .map_err(Self::subscription_send_error)?;
+            .await?;
         let (reply, trace) = pipeline.into_parts();
         self.trace.replace(trace);
         Ok(reply)
@@ -490,8 +482,7 @@ impl SpiritCommandExecutor {
         let pipeline = self
             .subscription
             .ask(subscription::RetractRecordSubscription { token, trace })
-            .await
-            .map_err(Self::subscription_send_error)?;
+            .await?;
         let (reply, trace) = pipeline.into_parts();
         self.trace.replace(trace);
         Ok(reply)
@@ -502,8 +493,7 @@ impl SpiritCommandExecutor {
         let pipeline = self
             .reply
             .ask(reply::ShapeUnimplemented { operation, trace })
-            .await
-            .map_err(Self::reply_send_error)?;
+            .await?;
         let (reply, trace) = pipeline.into_parts();
         self.trace.replace(trace);
         Ok(reply)
@@ -514,26 +504,6 @@ impl SpiritCommandExecutor {
             SendError::HandlerError(error) => error,
             other => Error::actor_runtime(other.to_string()),
         }
-    }
-
-    fn state_send_error<Message>(error: SendError<Message, Infallible>) -> Error {
-        Error::actor_runtime(error.to_string())
-    }
-
-    fn classifier_send_error<Message>(error: SendError<Message, Infallible>) -> Error {
-        Error::actor_runtime(error.to_string())
-    }
-
-    fn clock_send_error<Message>(error: SendError<Message, Infallible>) -> Error {
-        Error::actor_runtime(error.to_string())
-    }
-
-    fn subscription_send_error<Message>(error: SendError<Message, Infallible>) -> Error {
-        Error::actor_runtime(error.to_string())
-    }
-
-    fn reply_send_error<Message>(error: SendError<Message, Infallible>) -> Error {
-        Error::actor_runtime(error.to_string())
     }
 }
 
