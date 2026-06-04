@@ -67,21 +67,37 @@ impl ClockSource {
 
 impl ClockReading {
     fn from_unix_seconds(seconds: u64) -> Self {
+        let instant = CivilInstant::from_unix_seconds(seconds);
+        Self {
+            date: instant.date.into(),
+            time: instant.time.into(),
+        }
+    }
+}
+
+/// A wall-clock instant expressed in proleptic-Gregorian civil fields.
+/// Owns the single Unix-instant → civil conversion (the Howard Hinnant
+/// days-from-civil algorithm plus the seconds-of-day split) so every
+/// component that stamps records reads one algorithm rather than a copy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CivilInstant {
+    pub date: CivilDate,
+    pub time: CivilTime,
+}
+
+impl CivilInstant {
+    pub fn from_unix_seconds(seconds: u64) -> Self {
         let days = (seconds / 86_400) as i64;
         let seconds_of_day = seconds % 86_400;
-        let (year, month, day) = CivilDate::from_unix_days(days).into_parts();
-        let hour = (seconds_of_day / 3_600) as u8;
-        let minute = ((seconds_of_day % 3_600) / 60) as u8;
-        let second = (seconds_of_day % 60) as u8;
         Self {
-            date: Date::new(year as u16, month as u8, day as u8),
-            time: Time::new(hour, minute, second),
+            date: CivilDate::from_unix_days(days),
+            time: CivilTime::from_seconds_of_day(seconds_of_day),
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct CivilDate {
+pub struct CivilDate {
     year: i32,
     month: u32,
     day: u32,
@@ -113,8 +129,57 @@ impl CivilDate {
         }
     }
 
-    fn into_parts(self) -> (i32, u32, u32) {
-        (self.year, self.month, self.day)
+    pub fn year(self) -> i32 {
+        self.year
+    }
+
+    pub fn month(self) -> u32 {
+        self.month
+    }
+
+    pub fn day(self) -> u32 {
+        self.day
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CivilTime {
+    hour: u8,
+    minute: u8,
+    second: u8,
+}
+
+impl CivilTime {
+    fn from_seconds_of_day(seconds_of_day: u64) -> Self {
+        Self {
+            hour: (seconds_of_day / 3_600) as u8,
+            minute: ((seconds_of_day % 3_600) / 60) as u8,
+            second: (seconds_of_day % 60) as u8,
+        }
+    }
+
+    pub fn hour(self) -> u8 {
+        self.hour
+    }
+
+    pub fn minute(self) -> u8 {
+        self.minute
+    }
+
+    pub fn second(self) -> u8 {
+        self.second
+    }
+}
+
+impl From<CivilDate> for Date {
+    fn from(date: CivilDate) -> Self {
+        Self::new(date.year as u16, date.month as u8, date.day as u8)
+    }
+}
+
+impl From<CivilTime> for Time {
+    fn from(time: CivilTime) -> Self {
+        Self::new(time.hour, time.minute, time.second)
     }
 }
 

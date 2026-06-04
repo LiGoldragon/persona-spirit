@@ -19,9 +19,12 @@ use signal_persona_spirit::{
     RemovalCandidatesCollected, Reply as WorkingReply, SkippedRemovalCandidate, Time, Topic,
     TopicCount, TopicSelection, Topics, TopicsObserved,
 };
-use signal_version_handover::{HandoverMarker, MarkerRequest};
+use signal_version_handover::{
+    Date as HandoverDate, HandoverMarker, MarkerRequest, Time as HandoverTime,
+};
 use version_projection::{ComponentName, ContractVersion, Projected};
 
+use crate::actors::clock::{CivilDate, CivilInstant, CivilTime};
 use crate::{Result, error::Error};
 
 const SPIRIT_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(3);
@@ -244,7 +247,7 @@ impl SpiritStore {
         request: MarkerRequest,
         schema_hash: ContractVersion,
     ) -> Result<HandoverMarker> {
-        let reading = HandoverClock::read();
+        let reading = HandoverClockReading::from_now();
         let commit_sequence = self
             .engine
             .current_commit_sequence()
@@ -424,11 +427,9 @@ pub const fn spirit_contract_version() -> ContractVersion {
     SPIRIT_CONTRACT_VERSION
 }
 
-struct HandoverClock;
-
 struct HandoverClockReading {
-    date: signal_version_handover::Date,
-    time: signal_version_handover::Time,
+    date: HandoverDate,
+    time: HandoverTime,
 }
 
 struct RecordFilter<'query> {
@@ -444,66 +445,29 @@ struct RecentRecordSelection {
     maximum_records: usize,
 }
 
-impl HandoverClock {
-    fn read() -> HandoverClockReading {
+impl HandoverClockReading {
+    fn from_now() -> Self {
         let seconds = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|duration| duration.as_secs())
             .unwrap_or(0);
-        HandoverClockReading::from_unix_seconds(seconds)
-    }
-}
-
-impl HandoverClockReading {
-    fn from_unix_seconds(seconds: u64) -> Self {
-        let days = (seconds / 86_400) as i64;
-        let seconds_of_day = seconds % 86_400;
-        let (year, month, day) = HandoverCivilDate::from_unix_days(days).into_parts();
+        let instant = CivilInstant::from_unix_seconds(seconds);
         Self {
-            date: signal_version_handover::Date::new(year as u16, month as u8, day as u8),
-            time: signal_version_handover::Time::new(
-                (seconds_of_day / 3_600) as u8,
-                ((seconds_of_day % 3_600) / 60) as u8,
-                (seconds_of_day % 60) as u8,
-            ),
+            date: instant.date.into(),
+            time: instant.time.into(),
         }
     }
 }
 
-struct HandoverCivilDate {
-    year: i32,
-    month: u32,
-    day: u32,
+impl From<CivilDate> for HandoverDate {
+    fn from(date: CivilDate) -> Self {
+        Self::new(date.year() as u16, date.month() as u8, date.day() as u8)
+    }
 }
 
-impl HandoverCivilDate {
-    fn from_unix_days(days: i64) -> Self {
-        let zero_based_days = days + 719_468;
-        let era = if zero_based_days >= 0 {
-            zero_based_days
-        } else {
-            zero_based_days - 146_096
-        } / 146_097;
-        let day_of_era = zero_based_days - era * 146_097;
-        let year_of_era =
-            (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
-        let mut year = year_of_era + era * 400;
-        let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-        let month_parameter = (5 * day_of_year + 2) / 153;
-        let day = day_of_year - (153 * month_parameter + 2) / 5 + 1;
-        let month = month_parameter + if month_parameter < 10 { 3 } else { -9 };
-        if month <= 2 {
-            year += 1;
-        }
-        Self {
-            year: year as i32,
-            month: month as u32,
-            day: day as u32,
-        }
-    }
-
-    fn into_parts(self) -> (i32, u32, u32) {
-        (self.year, self.month, self.day)
+impl From<CivilTime> for HandoverTime {
+    fn from(time: CivilTime) -> Self {
+        Self::new(time.hour(), time.minute(), time.second())
     }
 }
 
