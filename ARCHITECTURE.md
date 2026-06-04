@@ -86,6 +86,12 @@ ARCHITECTURE §"Deletion durability"). Removing an intent record therefore
 requires capturing its full text and provenance first —
 tombstone-before-remove.
 
+Record identifiers are non-reusable numeric locators. `RecordStore` mints the
+next identifier above the maximum identifier in existing rows, the sema-engine
+commit log for the records table, and the current commit sequence. This keeps
+references stable even after hard removal of the newest record or a migrated
+high-numbered record.
+
 ## Actor topology
 
 The daemon keeps the Kameo actor tree alive behind three domain Unix sockets

@@ -124,7 +124,10 @@ Contract records stay in `signal-persona-spirit` and
   privacy-aware store with `privacy = Zero`.
 - `Remove(RecordIdentifier)` retracts one stored intent entry through
   `RecordStore` and returns `RecordRemoved`; the CLI never opens the
-  database directly. Removed record identifiers are not reused.
+  database directly. Removed record identifiers are not reused. `RecordStore`
+  mints above the maximum identifier witnessed in existing rows, sema's commit
+  log, and the current commit sequence so migration and hard-removal history
+  do not collapse the next identifier.
 - Valid but unimplemented requests use `ReplyShaper` and do not touch
   `RecordStore`.
 - Valid but unimplemented CLI requests emit a typed NOTA

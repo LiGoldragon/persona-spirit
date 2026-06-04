@@ -4,8 +4,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use sema::SchemaVersion;
 use sema_engine::{
-    Assertion, Engine, EngineOpen, EngineRecord, Mutation, QueryPlan, RecordKey, Retraction,
-    TableDescriptor, TableName, TableReference,
+    Assertion, CommitLogEntry, Engine, EngineOpen, EngineRecord, Mutation, QueryPlan, RecordKey,
+    Retraction, TableDescriptor, TableName, TableReference,
 };
 use signal_persona_spirit::{
     ArchiveDatabaseTarget, Certainty, CertaintyChange, CertaintyChanged, CertaintySelection, Date,
@@ -68,6 +68,11 @@ struct ArchivedRemovalCandidate {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RecordIdentifierMint {
     next: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RecordIdentifierCommitLog<'entry> {
+    entries: &'entry [CommitLogEntry],
 }
 
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -312,22 +317,31 @@ impl SpiritStore {
 
     fn next_identifier(&self) -> Result<RecordIdentifier> {
         let records = self.all_records()?;
+        let commit_log = self.engine.commit_log().map_err(Error::spirit_store)?;
         let commit_sequence = self
             .engine
             .current_commit_sequence()
             .map_err(Error::spirit_store)?
             .value();
         Ok(
-            RecordIdentifierMint::from_records_and_commit_sequence(&records, commit_sequence)
-                .next_identifier(),
+            RecordIdentifierMint::from_records_commit_log_and_commit_sequence(
+                &records,
+                &commit_log,
+                commit_sequence,
+            )
+            .next_identifier(),
         )
     }
 
     fn last_record_identifier(&self) -> Result<Option<u64>> {
-        Ok(self
+        let live_identifier = self
             .all_records()?
             .last()
-            .map(|record| record.identifier.value()))
+            .map(|record| record.identifier.value());
+        let logged_identifier =
+            RecordIdentifierCommitLog::new(&self.engine.commit_log().map_err(Error::spirit_store)?)
+                .last_record_identifier();
+        Ok(live_identifier.into_iter().chain(logged_identifier).max())
     }
 
     fn all_records(&self) -> Result<Vec<StoredRecord>> {
@@ -747,18 +761,44 @@ impl EngineRecord for ArchivedRemovalCandidate {
 }
 
 impl RecordIdentifierMint {
-    fn from_records_and_commit_sequence(records: &[StoredRecord], commit_sequence: u64) -> Self {
+    fn from_records_commit_log_and_commit_sequence(
+        records: &[StoredRecord],
+        commit_log: &[CommitLogEntry],
+        commit_sequence: u64,
+    ) -> Self {
         let last_record_identifier = records
             .iter()
             .map(|record| record.identifier.value())
             .max()
             .unwrap_or(0);
-        let next = last_record_identifier.max(commit_sequence) + 1;
+        let last_logged_identifier = RecordIdentifierCommitLog::new(commit_log)
+            .last_record_identifier()
+            .unwrap_or(0);
+        let next = last_record_identifier
+            .max(last_logged_identifier)
+            .max(commit_sequence)
+            + 1;
         Self { next }
     }
 
     fn next_identifier(&self) -> RecordIdentifier {
         RecordIdentifier::new(self.next)
+    }
+}
+
+impl<'entry> RecordIdentifierCommitLog<'entry> {
+    fn new(entries: &'entry [CommitLogEntry]) -> Self {
+        Self { entries }
+    }
+
+    fn last_record_identifier(&self) -> Option<u64> {
+        self.entries
+            .iter()
+            .flat_map(|entry| entry.operations().iter())
+            .filter(|operation| operation.table_name() == RECORDS.as_str())
+            .filter_map(|operation| operation.key())
+            .filter_map(|key| key.as_str().parse::<u64>().ok())
+            .max()
     }
 }
 
@@ -881,6 +921,146 @@ mod tests {
         let records = records.into_records();
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].summary.description, Description::new("inside"));
+    }
+
+    #[test]
+    fn spirit_store_does_not_reset_identifier_high_water_after_imported_record_removal() {
+        let fixture = StoreFixture::new("imported-high-water-removal");
+        let store = fixture.store();
+        let imported_identifier = RecordIdentifier::new(1_000);
+        store
+            .import_migrated_record(
+                imported_identifier,
+                StampedEntry::new(
+                    Entry {
+                        topics: Topics::single(Topic::new("spirit")),
+                        kind: Kind::Decision,
+                        description: Description::new("imported high identifier"),
+                        certainty: Magnitude::Maximum,
+                        privacy: Magnitude::Zero,
+                    },
+                    Date::new(2026, 6, 4),
+                    Time::new(9, 0, 0),
+                ),
+            )
+            .expect("high identifier imported");
+        store
+            .remove_entry(imported_identifier)
+            .expect("high identifier removed");
+
+        let accepted = store
+            .assert_entry(StampedEntry::new(
+                Entry {
+                    topics: Topics::single(Topic::new("spirit")),
+                    kind: Kind::Principle,
+                    description: Description::new("after high removal"),
+                    certainty: Magnitude::High,
+                    privacy: Magnitude::Zero,
+                },
+                Date::new(2026, 6, 4),
+                Time::new(9, 1, 0),
+            ))
+            .expect("post-removal record accepted");
+
+        assert_eq!(accepted.identifier(), RecordIdentifier::new(1_001));
+    }
+
+    #[test]
+    fn spirit_store_handover_marker_keeps_removed_identifier_high_water() {
+        let fixture = StoreFixture::new("handover-marker-high-water");
+        let store = fixture.store();
+        let imported_identifier = RecordIdentifier::new(1_000);
+        store
+            .import_migrated_record(
+                imported_identifier,
+                StampedEntry::new(
+                    Entry {
+                        topics: Topics::single(Topic::new("spirit")),
+                        kind: Kind::Decision,
+                        description: Description::new("imported high identifier"),
+                        certainty: Magnitude::Maximum,
+                        privacy: Magnitude::Zero,
+                    },
+                    Date::new(2026, 6, 4),
+                    Time::new(9, 0, 0),
+                ),
+            )
+            .expect("high identifier imported");
+        store
+            .remove_entry(imported_identifier)
+            .expect("high identifier removed");
+
+        let marker = store
+            .handover_marker(
+                MarkerRequest {
+                    component: ComponentName::new("persona-spirit"),
+                },
+                spirit_contract_version(),
+            )
+            .expect("handover marker read");
+
+        assert_eq!(marker.last_record_identifier, Some(1_000));
+    }
+
+    #[test]
+    fn spirit_store_does_not_reuse_minted_identifier_after_sparse_migration() {
+        let fixture = StoreFixture::new("sparse-migration-minted-removal");
+        let store = fixture.store();
+        store
+            .import_migrated_record(
+                RecordIdentifier::new(1_000),
+                StampedEntry::new(
+                    Entry {
+                        topics: Topics::single(Topic::new("spirit")),
+                        kind: Kind::Decision,
+                        description: Description::new("imported high identifier"),
+                        certainty: Magnitude::Maximum,
+                        privacy: Magnitude::Zero,
+                    },
+                    Date::new(2026, 6, 4),
+                    Time::new(9, 0, 0),
+                ),
+            )
+            .expect("high identifier imported");
+        let first_after_import = store
+            .assert_entry(StampedEntry::new(
+                Entry {
+                    topics: Topics::single(Topic::new("spirit")),
+                    kind: Kind::Principle,
+                    description: Description::new("first after import"),
+                    certainty: Magnitude::High,
+                    privacy: Magnitude::Zero,
+                },
+                Date::new(2026, 6, 4),
+                Time::new(9, 1, 0),
+            ))
+            .expect("first post-import record accepted");
+        store
+            .remove_entry(first_after_import.identifier())
+            .expect("minted high identifier removed");
+
+        let second_after_import = store
+            .assert_entry(StampedEntry::new(
+                Entry {
+                    topics: Topics::single(Topic::new("spirit")),
+                    kind: Kind::Correction,
+                    description: Description::new("second after import"),
+                    certainty: Magnitude::Medium,
+                    privacy: Magnitude::Zero,
+                },
+                Date::new(2026, 6, 4),
+                Time::new(9, 2, 0),
+            ))
+            .expect("second post-import record accepted");
+
+        assert_eq!(
+            first_after_import.identifier(),
+            RecordIdentifier::new(1_001)
+        );
+        assert_eq!(
+            second_after_import.identifier(),
+            RecordIdentifier::new(1_002)
+        );
     }
 
     #[test]
