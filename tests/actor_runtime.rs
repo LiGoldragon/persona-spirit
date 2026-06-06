@@ -296,6 +296,48 @@ async fn persona_spirit_certainty_change_uses_write_plane() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn persona_spirit_record_change_uses_write_plane_and_preserves_identifier() {
+    let fixture = SpiritRuntimeFixture::new("record-change-write-plane");
+    let runtime = fixture.runtime().await;
+
+    let accepted = runtime
+        .submit_text("(Record ([workspace] Decision [original] Maximum))")
+        .await
+        .expect("entry accepted");
+    let identifier = accepted_identifier(&accepted);
+    let reply = runtime
+        .submit_text(&format!(
+            "(ChangeRecord ({} ([workspace message] Correction [replacement] High Zero)))",
+            identifier_text(identifier)
+        ))
+        .await
+        .expect("record changed");
+    let observed = runtime
+        .submit_text("(Observe (Records ((Partial [message]) None Any SummaryOnly)))")
+        .await
+        .expect("records observed");
+
+    assert_eq!(
+        reply.text(),
+        format!("(RecordMutationApplied {})", identifier_text(identifier))
+    );
+    assert!(
+        reply
+            .trace()
+            .contains_action(TraceNode::SEMA_WRITER, TraceAction::RecordMutated)
+    );
+    assert_eq!(
+        observed.text(),
+        format!(
+            "(RecordsObserved [({} [workspace message] Correction replacement High Zero)])",
+            identifier_text(identifier)
+        )
+    );
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn persona_spirit_collect_removal_candidates_archives_before_retracting() {
     let fixture = SpiritRuntimeFixture::new("collect-removal-candidates");
     let runtime = fixture.runtime().await;

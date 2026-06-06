@@ -118,6 +118,7 @@ impl UnimplementedPolicy {
             | OperationKind::Unwatch
             | OperationKind::Remove
             | OperationKind::ChangeCertainty
+            | OperationKind::ChangeRecord
             | OperationKind::CollectRemovalCandidates
             | OperationKind::Tap
             | OperationKind::Untap => self.not_built,

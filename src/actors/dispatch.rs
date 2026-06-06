@@ -242,6 +242,7 @@ impl SpiritCommandExecutor {
             Command::AssertEntry(entry) => self.capture_entry(entry).await?,
             Command::RemoveRecord(identifier) => self.remove_entry(identifier).await?,
             Command::ChangeCertainty(change) => self.change_certainty(change).await?,
+            Command::ChangeRecord(change) => self.change_record(change).await?,
             Command::CollectRemovalCandidates(collection) => {
                 self.collect_removal_candidates(collection).await?
             }
@@ -321,6 +322,21 @@ impl SpiritCommandExecutor {
         let pipeline = self
             .store
             .ask(store::ChangeCertainty { change, trace })
+            .await
+            .map_err(Self::store_send_error)?;
+        let (reply, trace) = pipeline.into_parts();
+        self.trace.replace(trace);
+        Ok(reply)
+    }
+
+    async fn change_record(
+        &self,
+        change: signal_persona_spirit::RecordChange,
+    ) -> Result<WorkingReply> {
+        let trace = self.trace.snapshot();
+        let pipeline = self
+            .store
+            .ask(store::ChangeRecord { change, trace })
             .await
             .map_err(Self::store_send_error)?;
         let (reply, trace) = pipeline.into_parts();

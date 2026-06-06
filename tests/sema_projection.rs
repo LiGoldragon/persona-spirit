@@ -5,9 +5,10 @@ use signal_frame::SubscriptionTokenInner;
 use signal_persona_spirit::{
     CertaintyChange, CertaintySelection, Description, Entry, Kind, Observation, ObservationMode,
     ObserverFilter, ObserverSubscriptionToken, Operation as WorkingOperation, PublicRecordQuery,
-    RecordIdentifier, RecordIdentifierQuery, RecordIdentifierSelection, RecordedTimeSelection,
-    RemovalCandidateCollection, Reply as WorkingReply, StateSubscriptionToken, Statement,
-    StatementText, Subscription, SubscriptionToken, Topic, TopicSelection, Topics,
+    RecordChange, RecordIdentifier, RecordIdentifierQuery, RecordIdentifierSelection,
+    RecordedTimeSelection, RemovalCandidateCollection, Reply as WorkingReply,
+    StateSubscriptionToken, Statement, StatementText, Subscription, SubscriptionToken, Topic,
+    TopicSelection, Topics,
 };
 use signal_sema::{Magnitude, SemaObservation, SemaOperation, SemaOutcome};
 
@@ -215,6 +216,40 @@ async fn spirit_certainty_change_projects_to_mutated_observation() {
         .submit_request(request.clone())
         .await
         .expect("certainty changed");
+    assert_runtime_projection_trace(runtime_reply.trace());
+    let reply = runtime_reply.into_reply();
+
+    assert_eq!(
+        observation_for(request, reply),
+        SemaObservation::new(SemaOperation::Mutate, SemaOutcome::Mutated)
+    );
+
+    runtime.stop().await.expect("runtime stops");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn spirit_record_change_projects_to_mutated_observation() {
+    let fixture = RuntimeFixture::new("record-change");
+    let runtime = fixture.runtime().await;
+    let accepted = runtime
+        .submit_request(WorkingOperation::Record(entry("record change projection")))
+        .await
+        .expect("record accepted");
+    let identifier = accepted_identifier(accepted.into_reply());
+    let request = WorkingOperation::ChangeRecord(RecordChange {
+        record_identifier: identifier,
+        entry: Entry {
+            topics: Topics::single(Topic::new("message")),
+            kind: Kind::Correction,
+            description: Description::new("record changed projection"),
+            certainty: Magnitude::High,
+            privacy: Magnitude::Zero,
+        },
+    });
+    let runtime_reply = runtime
+        .submit_request(request.clone())
+        .await
+        .expect("record changed");
     assert_runtime_projection_trace(runtime_reply.trace());
     let reply = runtime_reply.into_reply();
 

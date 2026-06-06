@@ -9,12 +9,12 @@ use sema_engine::{
 };
 use signal_persona_spirit::{
     ArchiveDatabaseTarget, Certainty, CertaintyChange, CertaintyChanged, CertaintySelection, Date,
-    Entry, Kind, ObservationMode, OutputTarget, PrivacySelection, RecordAccepted, RecordIdentifier,
-    RecordObservation, RecordProvenance, RecordProvenancesObserved, RecordQuery, RecordRemoved,
-    RecordSummary, RecordedTime, RecordedTimeSelection, RecordsObserved,
-    RemovalCandidateCollection, RemovalCandidateSkipReason, RemovalCandidatesCollected,
-    Reply as WorkingReply, SkippedRemovalCandidate, Time, Topic, TopicCount, TopicSelection,
-    Topics, TopicsObserved,
+    Entry, Kind, ObservationMode, OutputTarget, PrivacySelection, RecordAccepted, RecordChange,
+    RecordIdentifier, RecordMutationApplied, RecordObservation, RecordProvenance,
+    RecordProvenancesObserved, RecordQuery, RecordRemoved, RecordSummary, RecordedTime,
+    RecordedTimeSelection, RecordsObserved, RemovalCandidateCollection, RemovalCandidateSkipReason,
+    RemovalCandidatesCollected, Reply as WorkingReply, SkippedRemovalCandidate, Time, Topic,
+    TopicCount, TopicSelection, Topics, TopicsObserved,
 };
 use signal_version_handover::{HandoverMarker, MarkerRequest};
 use version_projection::{ComponentName, ContractVersion, Projected};
@@ -165,6 +165,16 @@ impl SpiritStore {
             identifier: change.identifier,
             certainty: change.certainty,
         })
+    }
+
+    pub fn change_record(&self, change: RecordChange) -> Result<RecordMutationApplied> {
+        let identifier = change.identifier();
+        Self::validate_topics(&change.entry.topics)?;
+        let stored = self.stored_record(identifier)?.with_entry(change.entry);
+        self.engine
+            .mutate(Mutation::new(self.records, stored))
+            .map_err(Error::spirit_store)?;
+        Ok(RecordMutationApplied::new(identifier))
     }
 
     pub fn collect_removal_candidates(
@@ -658,6 +668,11 @@ impl StoredRecord {
         self.entry.change_certainty(certainty);
         self
     }
+
+    fn with_entry(mut self, entry: Entry) -> Self {
+        self.entry.change_entry(entry);
+        self
+    }
 }
 
 impl RecentRecordSelection {
@@ -765,6 +780,10 @@ impl StampedEntry {
     fn change_certainty(&mut self, certainty: Certainty) {
         self.entry.certainty = certainty;
     }
+
+    fn change_entry(&mut self, entry: Entry) {
+        self.entry = entry;
+    }
 }
 
 impl Projected for StampedEntry {
@@ -859,7 +878,8 @@ impl RecordIdentifierCodeRange {
 #[cfg(test)]
 mod tests {
     use signal_persona_spirit::{
-        Description, Kind, OutputTarget, RecordedTimeRange, RemovalCandidateCollection,
+        Description, Kind, OutputTarget, RecordChange, RecordedTimeRange,
+        RemovalCandidateCollection,
     };
     use signal_sema::Magnitude;
 
@@ -915,6 +935,71 @@ mod tests {
         assert_eq!(stamped.entry, entry);
         assert_eq!(stamped.date, date);
         assert_eq!(stamped.time, time);
+    }
+
+    #[test]
+    fn change_record_replaces_entry_under_same_identifier_and_preserves_provenance() {
+        let fixture = StoreFixture::new("change-record");
+        let store = fixture.store();
+        let accepted = store
+            .assert_entry(StampedEntry::new(
+                Entry {
+                    topics: Topics::single(Topic::new("workspace")),
+                    kind: Kind::Decision,
+                    description: Description::new("original"),
+                    certainty: Magnitude::Maximum,
+                    privacy: Magnitude::Zero,
+                },
+                Date::new(2026, 6, 6),
+                Time::new(12, 0, 0),
+            ))
+            .expect("record accepted");
+        let identifier = accepted.identifier();
+
+        let applied = store
+            .change_record(RecordChange {
+                record_identifier: identifier,
+                entry: Entry {
+                    topics: Topics::single(Topic::new("message")),
+                    kind: Kind::Correction,
+                    description: Description::new("replacement"),
+                    certainty: Magnitude::High,
+                    privacy: Magnitude::Zero,
+                },
+            })
+            .expect("record changed");
+        let observed = store
+            .observe_records(RecordObservation {
+                query: RecordQuery {
+                    topic_selection: TopicSelection::partial(vec![Topic::new("message")]),
+                    kind: None,
+                    certainty_selection: CertaintySelection::Any,
+                    recorded_time_selection: RecordedTimeSelection::Any,
+                    privacy_selection: PrivacySelection::default_observation_privacy(),
+                    mode: ObservationMode::WithProvenance,
+                },
+            })
+            .expect("record observed");
+
+        assert_eq!(applied.identifier(), identifier);
+        let WorkingReply::RecordProvenancesObserved(records) = observed else {
+            panic!("expected provenances");
+        };
+        let records = records.into_records();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].summary.identifier, identifier);
+        assert_eq!(
+            records[0].summary.topics,
+            Topics::single(Topic::new("message"))
+        );
+        assert_eq!(records[0].summary.kind, Kind::Correction);
+        assert_eq!(
+            records[0].summary.description,
+            Description::new("replacement")
+        );
+        assert_eq!(records[0].summary.certainty, Magnitude::High);
+        assert_eq!(records[0].date, Date::new(2026, 6, 6));
+        assert_eq!(records[0].time, Time::new(12, 0, 0));
     }
 
     #[test]

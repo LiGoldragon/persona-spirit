@@ -442,6 +442,33 @@ fn persona_spirit_client_changes_certainty_to_zero_for_removal_candidate_review(
 }
 
 #[test]
+fn persona_spirit_client_changes_record_entry_without_changing_identifier() {
+    let fixture = StoreFixture::new("change-record-entry");
+    let first = fixture
+        .reply_text("(Record ([workspace] Decision [first description] Maximum))")
+        .expect("first entry persisted");
+    let first_identifier = accepted_identifier_text(&first);
+
+    let changed = fixture
+        .reply_text(&format!(
+            "(ChangeRecord ({first_identifier} ([message routing] Correction [edited description] High Zero)))"
+        ))
+        .expect("record changed");
+    let observed = fixture
+        .reply_text("(Observe (Records ((Partial [routing]) None Any SummaryOnly)))")
+        .expect("records observed");
+
+    assert_eq!(
+        changed,
+        format!("(RecordMutationApplied {first_identifier})")
+    );
+    assert!(observed.contains(&format!(
+        "{first_identifier} [message routing] Correction [edited description] High Zero"
+    )));
+    assert!(!observed.contains("[first description]"));
+}
+
+#[test]
 fn persona_spirit_client_collects_zero_candidates_to_file_before_removing_them() {
     let fixture = StoreFixture::new("collect-zero-candidates");
     let mut archive_path = std::env::temp_dir();

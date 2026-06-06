@@ -82,6 +82,10 @@ removal candidates. The explicit collection path archives compact record
 summaries before retraction through a database target or a typed print
 target; archive database failure leaves candidates in the hot store and
 reports skipped candidates rather than hiding loss behind a bulk delete.
+Existing records can also be corrected in place. `ChangeRecord` replaces
+the user-authored entry fields under the same daemon-minted identifier and
+keeps daemon-owned provenance, so record correction does not require a
+remove-and-recreate cycle.
 
 ## Restatement is signal by repetition
 

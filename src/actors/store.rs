@@ -1,8 +1,9 @@
 use kameo::actor::{Actor, ActorRef};
 use kameo::message::{Context, Message};
 use signal_persona_spirit::{
-    CertaintyChange as CertaintyChangePayload, RecordIdentifier, RecordObservation, RecordSummary,
-    RemovalCandidateCollection, Reply as WorkingReply,
+    CertaintyChange as CertaintyChangePayload, RecordChange as RecordChangePayload,
+    RecordIdentifier, RecordObservation, RecordSummary, RemovalCandidateCollection,
+    Reply as WorkingReply,
 };
 use signal_version_handover::{HandoverMarker, MarkerRequest};
 
@@ -36,6 +37,11 @@ pub struct RemoveEntry {
 
 pub struct ChangeCertainty {
     pub change: CertaintyChangePayload,
+    pub trace: ActorTrace,
+}
+
+pub struct ChangeRecord {
+    pub change: RecordChangePayload,
     pub trace: ActorTrace,
 }
 
@@ -125,6 +131,22 @@ impl RecordStore {
         trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReplied);
         Ok(PipelineReply::new(
             WorkingReply::CertaintyChanged(changed),
+            trace,
+        ))
+    }
+
+    fn change_record(
+        &self,
+        change: RecordChangePayload,
+        mut trace: ActorTrace,
+    ) -> Result<PipelineReply> {
+        trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReceived);
+        trace.record(TraceNode::SEMA_WRITER, TraceAction::MessageReceived);
+        let changed = self.store.change_record(change)?;
+        trace.record(TraceNode::SEMA_WRITER, TraceAction::RecordMutated);
+        trace.record(TraceNode::RECORD_STORE, TraceAction::MessageReplied);
+        Ok(PipelineReply::new(
+            WorkingReply::RecordMutationApplied(changed),
             trace,
         ))
     }
@@ -258,6 +280,18 @@ impl Message<ChangeCertainty> for RecordStore {
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.change_certainty(message.change, message.trace)
+    }
+}
+
+impl Message<ChangeRecord> for RecordStore {
+    type Reply = Result<PipelineReply>;
+
+    async fn handle(
+        &mut self,
+        message: ChangeRecord,
+        _context: &mut Context<Self, Self::Reply>,
+    ) -> Self::Reply {
+        self.change_record(message.change, message.trace)
     }
 }
 
