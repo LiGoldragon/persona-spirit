@@ -3,12 +3,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use persona_spirit::{Command, Effect, SpiritActorRuntime, StoreLocation};
 use signal_frame::SubscriptionTokenInner;
 use signal_persona_spirit::{
-    CertaintyChange, CertaintySelection, Description, Entry, Kind, Observation, ObservationMode,
-    ObserverFilter, ObserverSubscriptionToken, Operation as WorkingOperation, PublicRecordQuery,
-    RecordChange, RecordIdentifier, RecordIdentifierQuery, RecordIdentifierSelection,
-    RecordedTimeSelection, RemovalCandidateCollection, Reply as WorkingReply,
-    StateSubscriptionToken, Statement, StatementText, Subscription, SubscriptionToken, Topic,
-    TopicSelection, Topics,
+    CertaintyChange, CertaintySelection, Description, EffectEmitted, EffectOutcome, Entry, Kind,
+    Observation, ObservationMode, ObserverFilter, ObserverSubscriptionToken,
+    Operation as WorkingOperation, OperationKind, PublicRecordQuery, RecordAccepted, RecordChange,
+    RecordIdentifier, RecordIdentifierQuery, RecordIdentifierSelection, RecordedTimeSelection,
+    RemovalCandidateCollection, Reply as WorkingReply, StateSubscriptionToken, Statement,
+    StatementText, Subscription, SubscriptionToken, Topic, TopicSelection, Topics,
 };
 use signal_sema::{Magnitude, SemaObservation, SemaOperation, SemaOutcome};
 
@@ -55,6 +55,15 @@ fn observation_for(request: WorkingOperation, reply: WorkingReply) -> SemaObserv
     effect.sema_observation_for(&command)
 }
 
+fn effect_event_for(request: WorkingOperation, reply: WorkingReply) -> EffectEmitted {
+    let command = Command::from_request(request).expect("ordinary request projects to command");
+    let effect = Effect::from_reply(reply);
+    EffectEmitted {
+        operation: command.operation_kind(),
+        outcome: effect.outcome(),
+    }
+}
+
 fn assert_runtime_projection_trace(trace: &persona_spirit::ActorTrace) {
     assert!(trace.contains_action(
         persona_spirit::TraceNode::SIGNAL_EXECUTOR,
@@ -71,6 +80,20 @@ fn accepted_identifier(reply: WorkingReply) -> RecordIdentifier {
         panic!("expected RecordAccepted reply, got {reply:?}");
     };
     accepted.identifier()
+}
+
+#[test]
+fn spirit_public_observer_effect_uses_contract_owned_outcome() {
+    let request = WorkingOperation::Record(entry("public event projection"));
+    let reply = WorkingReply::RecordAccepted(RecordAccepted::new(RecordIdentifier::new(1)));
+
+    assert_eq!(
+        effect_event_for(request, reply),
+        EffectEmitted {
+            operation: OperationKind::Record,
+            outcome: EffectOutcome::RecordCaptured,
+        }
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

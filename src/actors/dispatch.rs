@@ -596,7 +596,8 @@ impl ObserverChannel<WorkingOperation, CommandEffect<Command, Effect>> for Spiri
 
     fn publish_effect_emitted(&self, effect: &CommandEffect<Command, Effect>) {
         let _event = EffectEmitted {
-            observation: effect.sema_observation(),
+            operation: effect.command().operation_kind(),
+            outcome: effect.effect().outcome(),
         };
         self.trace
             .record(TraceNode::SEMA_OBSERVER, TraceAction::ObservationProjected);

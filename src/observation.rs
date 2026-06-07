@@ -5,10 +5,11 @@
 //! receives only payloadless classification labels.
 
 use signal_persona_spirit::{
-    CertaintyChange, CertaintyChanged, Observation, ObserverFilter, ObserverSubscriptionOpened,
-    ObserverSubscriptionToken, Operation as WorkingOperation, PrivacySelection, QuestionsObserved,
-    RecordAccepted, RecordChange, RecordIdentifier, RecordIdentifierQuery, RecordMutationApplied,
-    RecordObservation, RecordProvenancesObserved, RecordQuery, RecordRemoved, RecordSubscription,
+    CertaintyChange, CertaintyChanged, EffectOutcome, Observation, ObserverFilter,
+    ObserverSubscriptionOpened, ObserverSubscriptionToken, Operation as WorkingOperation,
+    OperationKind, PrivacySelection, QuestionsObserved, RecordAccepted, RecordChange,
+    RecordIdentifier, RecordIdentifierQuery, RecordMutationApplied, RecordObservation,
+    RecordProvenancesObserved, RecordQuery, RecordRemoved, RecordSubscription,
     RecordSubscriptionToken, RecordsObserved, RemovalCandidateCollection,
     RemovalCandidatesCollected, Reply as WorkingReply, RequestUnimplemented, StateObserved,
     StateSubscriptionToken, Statement, Subscription, SubscriptionOpened, SubscriptionRetracted,
@@ -100,6 +101,28 @@ impl RecordSubscriptionObservation {
 }
 
 impl Command {
+    pub fn operation_kind(&self) -> OperationKind {
+        match self {
+            Self::ClassifyStatement(_) => OperationKind::State,
+            Self::AssertEntry(_) => OperationKind::Record,
+            Self::RemoveRecord(_) => OperationKind::Remove,
+            Self::ChangeCertainty(_) => OperationKind::ChangeCertainty,
+            Self::ChangeRecord(_) => OperationKind::ChangeRecord,
+            Self::CollectRemovalCandidates(_) => OperationKind::CollectRemovalCandidates,
+            Self::ReadRecords(_)
+            | Self::ReadRecordIdentifiers(_)
+            | Self::ReadTopics
+            | Self::ReadState
+            | Self::ReadQuestions => OperationKind::Observe,
+            Self::OpenStateSubscription | Self::OpenRecordSubscription(_) => OperationKind::Watch,
+            Self::CloseStateSubscription(_) | Self::CloseRecordSubscription(_) => {
+                OperationKind::Unwatch
+            }
+            Self::OpenObserverSubscription(_) => OperationKind::Tap,
+            Self::CloseObserverSubscription(_) => OperationKind::Untap,
+        }
+    }
+
     pub fn from_request(request: WorkingOperation) -> Option<Self> {
         match request {
             WorkingOperation::State(statement) => Some(Self::ClassifyStatement(statement)),
@@ -149,6 +172,26 @@ impl Command {
 }
 
 impl Effect {
+    pub fn outcome(&self) -> EffectOutcome {
+        match self {
+            Self::RecordAccepted(_) => EffectOutcome::RecordCaptured,
+            Self::RecordRemoved(_) => EffectOutcome::RecordRemoved,
+            Self::CertaintyChanged(_) => EffectOutcome::CertaintyChanged,
+            Self::RecordMutationApplied(_) => EffectOutcome::RecordChanged,
+            Self::RemovalCandidatesCollected(_) => EffectOutcome::RemovalCandidatesCollected,
+            Self::StateObserved(_)
+            | Self::RecordsObserved(_)
+            | Self::RecordProvenancesObserved(_)
+            | Self::TopicsObserved(_)
+            | Self::QuestionsObserved(_) => EffectOutcome::Observed,
+            Self::SubscriptionOpened(_) | Self::ObserverSubscriptionOpened(_) => {
+                EffectOutcome::StreamOpened
+            }
+            Self::SubscriptionRetracted(_) => EffectOutcome::StreamClosed,
+            Self::RequestUnimplemented(_) => EffectOutcome::NoChange,
+        }
+    }
+
     pub fn from_reply(reply: WorkingReply) -> Self {
         match reply {
             WorkingReply::RecordAccepted(payload) => Self::RecordAccepted(payload),
