@@ -32,7 +32,7 @@ const SPIRIT_CONTRACT_VERSION: ContractVersion = ContractVersion::new([
 ]);
 const RECORDS: TableName = TableName::new("records");
 const REMOVAL_CANDIDATE_ARCHIVE_RECORDS: TableName = TableName::new("removal_candidate_records");
-const DEFAULT_STORE_PATH: &str = "/tmp/persona-spirit.redb";
+const DEFAULT_STORE_PATH: &str = "/tmp/persona-spirit.sema";
 const DEFAULT_REMOVAL_CANDIDATE_ARCHIVE_FILE_NAME: &str = "removal-candidate-archive.sema";
 const BACKUP_REMOVAL_CANDIDATE_ARCHIVE_FILE_NAME: &str =
     "persona-spirit-removal-candidate-archive-backup.sema";
@@ -897,7 +897,7 @@ mod tests {
                 .expect("system clock after epoch")
                 .as_nanos();
             let mut path = std::env::temp_dir();
-            path.push(format!("persona-spirit-store-{test_name}-{nanos}.redb"));
+            path.push(format!("persona-spirit-store-{test_name}-{nanos}.sema"));
             Self {
                 location: StoreLocation::new(path),
             }

@@ -25,7 +25,7 @@ impl RuntimeFixture {
             .as_nanos();
         let mut path = std::env::temp_dir();
         path.push(format!(
-            "persona-spirit-sema-projection-{test_name}-{nanos}.redb"
+            "persona-spirit-sema-projection-{test_name}-{nanos}.sema"
         ));
         Self {
             location: StoreLocation::new(path),

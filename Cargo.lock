@@ -502,15 +502,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nota-box"
-version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/nota.git?branch=main#8c23f39a2bd31a9ae1f366af1f7943bde4ef0ab3"
-dependencies = [
- "nota-codec",
- "thiserror",
-]
-
-[[package]]
 name = "nota-codec"
 version = "0.1.0"
 source = "git+https://github.com/LiGoldragon/nota-codec.git?branch=main#f761421c383121a04df761a444a3778d1c0b137d"
@@ -559,7 +550,7 @@ dependencies = [
 [[package]]
 name = "owner-signal-persona-spirit"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/owner-signal-persona-spirit.git?branch=main#cf932a619e1f6f3afc80cb62b6c0da6460e1c1f0"
+source = "git+https://github.com/LiGoldragon/owner-signal-persona-spirit.git?branch=main#334e0b0aadc58a221a9aaa6e2686d75ea7506701"
 dependencies = [
  "nota-codec",
  "rkyv",
@@ -822,7 +813,7 @@ dependencies = [
 [[package]]
 name = "sema"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/sema.git#4ea561bc53f6aa38fb71a7570665d57191fce0ea"
+source = "git+https://github.com/LiGoldragon/sema.git#09f2a423ecaaa9984d913e6f009aa346280a29bd"
 dependencies = [
  "redb",
  "rkyv",
@@ -832,12 +823,12 @@ dependencies = [
 [[package]]
 name = "sema-engine"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/sema-engine.git?branch=main#e0a7153c8476ece889c9d251c73fb55471d8e011"
+source = "git+https://github.com/LiGoldragon/sema-engine.git?branch=main#f6f0e03dc039c1f7731974245afa536a62db8d8c"
 dependencies = [
  "rkyv",
  "sema",
- "signal-core",
- "signal-sema 0.1.0 (git+https://github.com/LiGoldragon/signal-sema.git)",
+ "signal-frame",
+ "signal-sema 0.1.0 (git+https://github.com/LiGoldragon/signal-sema.git?branch=main)",
  "thiserror",
 ]
 
@@ -904,7 +895,7 @@ dependencies = [
 [[package]]
 name = "signal-core"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-core.git#5f8a825cbd3619b6af93f06ac7e6a76a4b5de123"
+source = "git+https://github.com/LiGoldragon/signal-core.git#3f10055aa281aa3e5c8c38312f961516e4470ad3"
 dependencies = [
  "nota-codec",
  "rkyv",
@@ -915,7 +906,7 @@ dependencies = [
 [[package]]
 name = "signal-core-macros"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-core.git#5f8a825cbd3619b6af93f06ac7e6a76a4b5de123"
+source = "git+https://github.com/LiGoldragon/signal-core.git#3f10055aa281aa3e5c8c38312f961516e4470ad3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -925,7 +916,7 @@ dependencies = [
 [[package]]
 name = "signal-engine-management"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-engine-management.git?branch=main#14d2436e8c29bc000f8b505df0611ae9538d7309"
+source = "git+https://github.com/LiGoldragon/signal-engine-management.git?branch=main#6eeff7968a95c8806a919af13d0b879b729d540d"
 dependencies = [
  "nota-codec",
  "rkyv",
@@ -936,7 +927,7 @@ dependencies = [
 [[package]]
 name = "signal-executor"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-executor.git?branch=main#7b0ca56a7b0ce5d7c5c53fe36a2acc5d9df090e2"
+source = "git+https://github.com/LiGoldragon/signal-executor.git?branch=main#3830f51c91c6e3ba4a577e9ad70d40d9318907f4"
 dependencies = [
  "rkyv",
  "signal-frame",
@@ -1064,7 +1055,7 @@ dependencies = [
 [[package]]
 name = "signal-persona-origin"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-origin.git?branch=main#12bab3206a3034bf9e508c1064e749daa9340615"
+source = "git+https://github.com/LiGoldragon/signal-persona-origin.git?branch=main#837a6c6d2bac56974dbd13c47496a2d0d93b701d"
 dependencies = [
  "nota-codec",
  "rkyv",
@@ -1097,9 +1088,8 @@ dependencies = [
 [[package]]
 name = "signal-persona-spirit"
 version = "0.5.0"
-source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#941aff154cc50d00def1fa5c5be8b16ae7e12f6c"
+source = "git+https://github.com/LiGoldragon/signal-persona-spirit.git?branch=main#1a179fa212ae502b5deb38255bdd5e6cefeede8c"
 dependencies = [
- "nota-box",
  "nota-codec",
  "rkyv",
  "signal-frame",
@@ -1149,7 +1139,7 @@ dependencies = [
 [[package]]
 name = "signal-sema"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-sema.git#1604cceb787389274127df7e3a273c164db61feb"
+source = "git+https://github.com/LiGoldragon/signal-sema.git#c132e9a06431617055bad2a9bae7bbecdeacd4b0"
 dependencies = [
  "nota-codec",
  "rkyv",
@@ -1159,7 +1149,7 @@ dependencies = [
 [[package]]
 name = "signal-version-handover"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-version-handover.git?branch=main#f1a1473b554cb63fbe77efc16fb8be7fd5bc2b33"
+source = "git+https://github.com/LiGoldragon/signal-version-handover.git?branch=main#c9b32809cc26f15e91785ce889e17606d945154d"
 dependencies = [
  "nota-codec",
  "rkyv",

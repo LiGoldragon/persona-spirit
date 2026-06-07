@@ -80,7 +80,7 @@ impl DaemonFixture {
         let mut handoff_control_socket = std::env::temp_dir();
         handoff_control_socket.push(format!("{stem}-handoff.sock"));
         let mut store = std::env::temp_dir();
-        store.push(format!("{stem}.redb"));
+        store.push(format!("{stem}.sema"));
         Self {
             ordinary_socket: SocketPath::new(socket.to_string_lossy().into_owned()),
             owner_socket: SocketPath::new(owner_socket.to_string_lossy().into_owned()),

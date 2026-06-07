@@ -49,7 +49,7 @@ impl RouteFixture {
             owner_socket: socket_path(&root, "w.sock"),
             upgrade_socket: socket_path(&root, "u.sock"),
             store: StorePath::new(
-                root.join("persona-spirit.redb")
+                root.join("persona-spirit.sema")
                     .to_string_lossy()
                     .into_owned(),
             ),
@@ -139,7 +139,7 @@ impl SpiritInstance {
             ordinary_socket: socket_path(&root, "spirit.sock"),
             owner_socket: socket_path(&root, "owner.sock"),
             upgrade_socket: socket_path(&root, "upgrade.sock"),
-            store: StorePath::new(root.join("spirit.redb").to_string_lossy().into_owned()),
+            store: StorePath::new(root.join("spirit.sema").to_string_lossy().into_owned()),
         }
     }
 
@@ -356,7 +356,7 @@ fn persona_handoff_router_routes_new_connections_after_selector_flip_and_old_con
     let engine = EngineIdentifier::new("selector-flip-engine");
     let store = runtime
         .block_on(async {
-            ManagerStore::start(ManagerStoreLocation::new(root.join("manager.redb")))
+            ManagerStore::start(ManagerStoreLocation::new(root.join("manager.sema")))
         })
         .expect("manager store starts");
     let manager = runtime

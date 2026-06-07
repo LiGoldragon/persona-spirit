@@ -118,9 +118,9 @@ impl MigrationFixture {
             .expect("system clock after epoch")
             .as_nanos();
         let mut source = std::env::temp_dir();
-        source.push(format!("persona-spirit-{test_name}-{nanos}-v010.redb"));
+        source.push(format!("persona-spirit-{test_name}-{nanos}-v010.sema"));
         let mut target = std::env::temp_dir();
-        target.push(format!("persona-spirit-{test_name}-{nanos}-v020.redb"));
+        target.push(format!("persona-spirit-{test_name}-{nanos}-v020.sema"));
         Self {
             source: StorePath::new(source.to_string_lossy().into_owned()),
             target: StorePath::new(target.to_string_lossy().into_owned()),

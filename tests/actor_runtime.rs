@@ -29,7 +29,7 @@ impl SpiritRuntimeFixture {
             .expect("system clock after epoch")
             .as_nanos();
         let mut path = std::env::temp_dir();
-        path.push(format!("persona-spirit-actor-{test_name}-{nanos}.redb"));
+        path.push(format!("persona-spirit-actor-{test_name}-{nanos}.sema"));
         Self {
             location: StoreLocation::new(path),
         }

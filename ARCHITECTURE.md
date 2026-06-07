@@ -35,7 +35,7 @@ Spirit is spawned last because it depends on the components it commands.
 
 ## State
 
-`persona-spirit` owns one sema-engine database: `persona-spirit.redb`.
+`persona-spirit` owns one sema-engine database: `persona-spirit.sema`.
 
 Policy state is seeded once from `bootstrap-policy.nota` unless
 `DaemonConfiguration` names an explicit bootstrap-policy path. It is then
@@ -269,7 +269,7 @@ signal-frame/schema-rust  ─ RustComposer
 
 persona-spirit  ─ daemon
    │
-   ├─ spirit-storage.schema          (redb tables + VersionMarker)
+   ├─ spirit-storage.schema          (sema-engine tables + VersionMarker)
    ├─ spirit-recorder.schema         (ACTION + RESPONSE + EffectTable)
    ├─ spirit-observer.schema         (subscription fan-out)
    ├─ spirit-supervisor.schema       (cross-actor coordinator)

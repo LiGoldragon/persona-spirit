@@ -179,7 +179,7 @@ valid but unhandleable.
 ## One rkyv byte layout; two homes
 
 The rkyv binary encoding lives in a single byte layout that survives
-BOTH the database (sema body at rest in redb) and the wire (signal
+BOTH the database (sema-engine body at rest) and the wire (signal
 movement between clients over sockets). Same bytes, two homes. NOTA
 is the text-readable projection emitted at CLI read time or for
 human inspection. This closes the schema-signal-sema trio at the
@@ -239,7 +239,7 @@ authoring branch, and the unsuffixed `spirit` symlink points at the
 current production target. Each versioned daemon has its own
 segregated state directory under
 `~/.local/state/persona-spirit/<version>/`, its own sockets, and
-its own redb database — versioned daemons never share files.
+its own sema database — versioned daemons never share files.
 
 This is the workspace's next/main/previous vocabulary applied at
 the deployment layer: *what is being authored IS next*; *the
@@ -340,7 +340,7 @@ test surfaces, not production defaults.
 
 The daemon binary takes one NOTA argument: a positional 9-field
 record naming three Unix sockets (ordinary, owner, upgrade), one
-redb database path, one magnitude limit, and four `None`-slot
+sema database path, one magnitude limit, and four `None`-slot
 extension points reserved for future configuration fields. The
 CriomOS-home module is what authors this tuple per release; the
 daemon's `ExecStart` line is the canonical witness. Future
