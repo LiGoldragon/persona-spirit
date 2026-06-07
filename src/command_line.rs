@@ -76,7 +76,7 @@ impl CommandLine {
                 let request = RequestText::<Operation>::new(text).decode_request()?;
                 Ok(RequestOutputStream::from_working_request(&request).into_stream())
             }
-            CommandLineSocket::Owner => Ok(OutputStream::StandardOutput),
+            CommandLineSocket::Meta => Ok(OutputStream::StandardOutput),
         }
     }
 }

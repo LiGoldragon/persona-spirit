@@ -1,22 +1,22 @@
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
-use std::sync::Arc;
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use owner_signal_version_handover::{
-    AttemptHandover, ForceFlip, ForceReason, Operation as OwnerOperation, Reply as OwnerReply,
-    SocketPath as OwnerSocketPath, Version as OwnerVersion, VersionEndpoint, VersionLabel,
+use meta_signal_upgrade::{
+    ForceFlip as SelectorForceFlip, ForceReason as SelectorForceReason, SelectorVersion,
+    VersionLabel as SelectorVersionLabel,
 };
 use persona::engine::SocketMode as PersonaSocketMode;
-use persona::manager::{EngineManager, HandleOwnerVersionHandover};
-use persona::manager_store::{ManagerStore, ManagerStoreLocation};
+use persona::engine_event::{
+    EngineEventBody, EngineEventDraft, EngineEventDraftInput, EngineEventSource,
+};
+use persona::manager_store::{AppendEngineEvent, ManagerStore, ManagerStoreLocation};
 use persona::transport::{
     ComponentHandoffEndpoint, ComponentHandoffRouter, ManagerStoreActiveVersionReader,
 };
-use persona::unit::ManualUnitController;
-use persona::upgrade::Version as PersonaVersion;
+use persona::upgrade::{ActiveVersionChanged, Version as PersonaVersion};
 use persona_spirit::{
     DaemonConfiguration, DaemonRuntime, ServedExchange, SocketMode, SocketPath, StorePath, ordinary,
 };
@@ -26,7 +26,11 @@ use signal_persona_spirit::{
     CertaintySelection, Observation, Operation as SpiritOperation, PublicRecordQuery,
     Reply as SpiritReply, TopicSelection,
 };
-use version_projection::{ComponentName, ContractVersion};
+use signal_version_handover::{
+    CompletionReport, HandoverAcceptance, HandoverFinalization, HandoverMarker, MarkerRequest,
+    Operation as UpgradeOperation, ReadinessReport, Reply as UpgradeReply,
+};
+use version_projection::{ComponentName as ProjectionComponentName, ContractVersion};
 
 struct RouteFixture {
     root: PathBuf,
@@ -102,7 +106,7 @@ fn spawn_spirit(public_socket: PathBuf, request: &'static str) -> thread::JoinHa
     thread::spawn(move || {
         Command::new(env!("CARGO_BIN_EXE_spirit"))
             .env("PERSONA_SPIRIT_SOCKET", public_socket)
-            .env_remove("PERSONA_SPIRIT_OWNER_SOCKET")
+            .env_remove("PERSONA_SPIRIT_META_SOCKET")
             .arg(request)
             .output()
             .expect("spirit binary runs")
@@ -160,10 +164,6 @@ impl SpiritInstance {
             ))
     }
 
-    fn upgrade_socket_path(&self) -> &Path {
-        self.upgrade_socket.as_path()
-    }
-
     fn store_path(&self) -> &Path {
         self.store.as_path()
     }
@@ -183,34 +183,89 @@ fn observe_records() -> SpiritOperation {
     }))
 }
 
-fn owner_version(label: &str, byte: u8) -> OwnerVersion {
-    OwnerVersion::new(VersionLabel::new(label), ContractVersion::new([byte; 32]))
+fn selector_version(label: &str, byte: u8) -> SelectorVersion {
+    SelectorVersion::new(
+        SelectorVersionLabel::new(label),
+        ContractVersion::new([byte; 32]),
+    )
 }
 
-fn owner_endpoint(label: &str, byte: u8, upgrade_socket_path: &Path) -> VersionEndpoint {
-    VersionEndpoint {
-        version: owner_version(label, byte),
-        owner_socket_path: OwnerSocketPath::new(format!("/unused/{label}/owner.sock")),
-        upgrade_socket_path: OwnerSocketPath::new(
-            upgrade_socket_path.to_string_lossy().into_owned(),
-        ),
+fn selector_flip(
+    current_label: &str,
+    current_byte: u8,
+    target_label: &str,
+    target_byte: u8,
+) -> SelectorForceFlip {
+    SelectorForceFlip {
+        component: ProjectionComponentName::new("persona-spirit"),
+        current_version: selector_version(current_label, current_byte),
+        target_version: selector_version(target_label, target_byte),
+        reason: SelectorForceReason::OperatorOverride,
     }
 }
 
-fn attempt_handover(current: &SpiritInstance, next: &SpiritInstance) -> AttemptHandover {
-    AttemptHandover {
-        component: ComponentName::new("persona-spirit"),
-        current: owner_endpoint("v0.1.0", 1, current.upgrade_socket_path()),
-        next: owner_endpoint("v0.1.1", 2, next.upgrade_socket_path()),
-    }
+fn active_version_event(engine: &EngineIdentifier, flip: SelectorForceFlip) -> EngineEventDraft {
+    EngineEventDraft::from_input(EngineEventDraftInput {
+        engine: engine.clone(),
+        source: EngineEventSource::Manager,
+        body: EngineEventBody::ActiveVersionChanged(ActiveVersionChanged::from_force_flip(&flip)),
+    })
 }
 
-fn initial_force_flip() -> ForceFlip {
-    ForceFlip {
-        component: ComponentName::new("persona-spirit"),
-        current_version: owner_version("none", 0),
-        target_version: owner_version("v0.1.0", 1),
-        reason: ForceReason::OperatorOverride,
+fn drive_spirit_handover(current: &SpiritInstance, next: &SpiritInstance) -> HandoverMarker {
+    let component = ProjectionComponentName::new("persona-spirit");
+    let current_client = persona_spirit::upgrade::SignalClient::new(current.upgrade_socket.clone());
+    let next_client = persona_spirit::upgrade::SignalClient::new(next.upgrade_socket.clone());
+
+    let current_marker = match current_client
+        .submit(UpgradeOperation::AskHandoverMarker(MarkerRequest {
+            component: component.clone(),
+        }))
+        .expect("current marker reply received")
+    {
+        UpgradeReply::HandoverMarker(marker) => marker,
+        other => panic!("expected current HandoverMarker reply, got {other:?}"),
+    };
+    let next_marker = match next_client
+        .submit(UpgradeOperation::AskHandoverMarker(MarkerRequest {
+            component: component.clone(),
+        }))
+        .expect("next marker reply received")
+    {
+        UpgradeReply::HandoverMarker(marker) => marker,
+        other => panic!("expected next HandoverMarker reply, got {other:?}"),
+    };
+    assert_eq!(current_marker.schema_hash, next_marker.schema_hash);
+    assert_eq!(current_marker.commit_sequence, next_marker.commit_sequence);
+    assert_eq!(current_marker.write_counter, next_marker.write_counter);
+    assert_eq!(
+        current_marker.last_record_identifier,
+        next_marker.last_record_identifier
+    );
+
+    let acceptance = match current_client
+        .submit(UpgradeOperation::ReadyToHandover(ReadinessReport {
+            component: component.clone(),
+            source_marker: current_marker.clone(),
+        }))
+        .expect("readiness reply received")
+    {
+        UpgradeReply::HandoverAccepted(HandoverAcceptance { accepted_marker }) => accepted_marker,
+        other => panic!("expected HandoverAccepted reply, got {other:?}"),
+    };
+
+    match current_client
+        .submit(UpgradeOperation::HandoverCompleted(CompletionReport {
+            component,
+            accepted_marker: acceptance.clone(),
+        }))
+        .expect("completion reply received")
+    {
+        UpgradeReply::HandoverFinalized(HandoverFinalization { finalized_marker }) => {
+            assert_eq!(finalized_marker, acceptance);
+            finalized_marker
+        }
+        other => panic!("expected HandoverFinalized reply, got {other:?}"),
     }
 }
 
@@ -359,32 +414,22 @@ fn persona_handoff_router_routes_new_connections_after_selector_flip_and_old_con
             ManagerStore::start(ManagerStoreLocation::new(root.join("manager.sema")))
         })
         .expect("manager store starts");
-    let manager = runtime
-        .block_on(EngineManager::start_with_store_and_unit_controller(
-            engine.clone(),
-            store.clone(),
-            Arc::new(ManualUnitController),
-        ))
-        .expect("engine manager starts");
     let active_version_reader = ManagerStoreActiveVersionReader::for_component_name(
         engine.clone(),
         "persona-spirit",
         store.clone(),
     );
 
-    let initial_reply = runtime
+    runtime
         .block_on(
-            manager
-                .ask(HandleOwnerVersionHandover::new(OwnerOperation::ForceFlip(
-                    initial_force_flip(),
+            store
+                .ask(AppendEngineEvent::new(active_version_event(
+                    &engine,
+                    selector_flip("none", 0, "v0.1.0", 1),
                 )))
                 .send(),
         )
-        .expect("initial force flip succeeds");
-    let OwnerReply::FlipForced(initial_flip) = initial_reply else {
-        panic!("expected initial FlipForced reply, got {initial_reply:?}");
-    };
-    assert_eq!(initial_flip.active_version.label.as_str(), "v0.1.0");
+        .expect("initial selector event appends");
 
     let steady_output = spawn_spirit(
         public_socket.clone(),
@@ -404,19 +449,17 @@ fn persona_handoff_router_routes_new_connections_after_selector_flip_and_old_con
         .block_on(router.handoff_one_from_manager_store(&active_version_reader))
         .expect("Persona hands old client descriptor to current version");
 
-    let handover_reply = runtime
+    let _finalized_marker = drive_spirit_handover(&current, &next);
+    runtime
         .block_on(
-            manager
-                .ask(HandleOwnerVersionHandover::new(
-                    OwnerOperation::AttemptHandover(attempt_handover(&current, &next)),
-                ))
+            store
+                .ask(AppendEngineEvent::new(active_version_event(
+                    &engine,
+                    selector_flip("v0.1.0", 1, "v0.1.1", 2),
+                )))
                 .send(),
         )
-        .expect("owner attempt handover returns a typed reply");
-    let OwnerReply::HandoverSucceeded(success) = handover_reply else {
-        panic!("expected HandoverSucceeded reply, got {handover_reply:?}");
-    };
-    assert_eq!(success.active_version.label.as_str(), "v0.1.1");
+        .expect("post-handover selector event appends");
 
     let codec = ordinary::FrameCodec::default();
     let request = codec.request_frame(observe_records());
@@ -454,9 +497,6 @@ fn persona_handoff_router_routes_new_connections_after_selector_flip_and_old_con
     assert_eq!(next_handoffs.len(), 1);
     assert_eq!(next_upgrades.len(), 1);
 
-    runtime
-        .block_on(EngineManager::stop(manager))
-        .expect("engine manager stops");
     runtime
         .block_on(ManagerStore::close_and_stop(store))
         .expect("manager store closes");

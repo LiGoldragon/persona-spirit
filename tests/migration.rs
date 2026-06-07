@@ -2,7 +2,7 @@ use std::fs;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use nota_codec::{Decoder, NotaDecode};
+use nota_next::NotaSource;
 use persona_spirit::{
     MigrationConfiguration, SpiritStore, StoreLocation, StorePath,
     migration::{IdentifierMigrationTable, ShortIdentifierMigrationTable},
@@ -13,12 +13,11 @@ use sema_engine::{
     Assertion, Engine, EngineOpen, EngineRecord, RecordKey, TableDescriptor, TableName,
 };
 use signal_persona_spirit::{
-    CertaintySelection, Date, Description, Entry, Kind, ObservationMode, PrivacySelection,
-    RecordIdentifier, RecordObservation, RecordQuery, RecordedTimeSelection, Reply as WorkingReply,
-    Time, Topic, TopicSelection, Topics,
+    CertaintySelection, Date, Description, Entry, Kind, Magnitude, ObservationMode,
+    PrivacySelection, RecordIdentifier, RecordObservation, RecordQuery, RecordedTimeSelection,
+    Reply as WorkingReply, Time, Topic, TopicSelection, Topics,
     migration::{v010, v020, v030},
 };
-use signal_sema::Magnitude;
 
 const V010_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
 const V020_SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(2);
@@ -354,7 +353,7 @@ fn spirit_next_migration_binary_reads_one_nota_argument_and_writes_completed_rep
     );
     assert_eq!(
         String::from_utf8_lossy(&output.stdout).trim(),
-        "(MigrationCompleted 1)"
+        "(MigrationCompleted (1))"
     );
     let records = target_provenances(&fixture.target);
     assert_eq!(
@@ -550,7 +549,7 @@ fn spirit_identifier_migration_binary_reads_one_nota_argument_and_writes_complet
     );
     assert_eq!(
         String::from_utf8_lossy(&output.stdout).trim(),
-        "(MigrationCompleted 1)"
+        "(MigrationCompleted (1))"
     );
     let mapping = read_identifier_mapping_table(&fixture.target);
     assert_eq!(mapping.rows[0].ordinal_identifier, 7);
@@ -662,7 +661,7 @@ fn spirit_short_identifier_migration_binary_reads_one_nota_argument_and_writes_c
     );
     assert_eq!(
         String::from_utf8_lossy(&output.stdout).trim(),
-        "(MigrationCompleted 1)"
+        "(MigrationCompleted (1))"
     );
     let mapping = read_short_identifier_mapping_table(&fixture.target);
     assert_eq!(mapping.rows.len(), 1);
@@ -701,7 +700,7 @@ fn spirit_privacy_migration_binary_reads_one_nota_argument_and_writes_completed_
     );
     assert_eq!(
         String::from_utf8_lossy(&output.stdout).trim(),
-        "(MigrationCompleted 1)"
+        "(MigrationCompleted (1))"
     );
     let records = target_provenances(&fixture.target);
     assert_eq!(records[0].summary.privacy, Magnitude::Zero);
@@ -750,7 +749,7 @@ fn spirit_migration_binary_reads_one_nota_argument_and_writes_completed_reply() 
     );
     assert_eq!(
         String::from_utf8_lossy(&output.stdout).trim(),
-        "(MigrationCompleted 2)"
+        "(MigrationCompleted (2))"
     );
     let records = target_provenances(&fixture.target);
     assert_eq!(records[0].date, Date::new(2026, 5, 19));
@@ -796,7 +795,7 @@ fn spirit_migration_binary_accepts_configuration_file_path_argument() {
     );
     assert_eq!(
         String::from_utf8_lossy(&output.stdout).trim(),
-        "(MigrationCompleted 1)"
+        "(MigrationCompleted (1))"
     );
 }
 
@@ -905,15 +904,17 @@ fn target_provenances(target: &StorePath) -> Vec<signal_persona_spirit::RecordPr
 
 fn read_identifier_mapping_table(target: &StorePath) -> IdentifierMigrationTable {
     let text = fs::read_to_string(identifier_mapping_table_path(target)).expect("mapping reads");
-    let mut decoder = Decoder::new(&text);
-    IdentifierMigrationTable::decode(&mut decoder).expect("mapping decodes")
+    NotaSource::new(&text)
+        .parse::<IdentifierMigrationTable>()
+        .expect("mapping decodes")
 }
 
 fn read_short_identifier_mapping_table(target: &StorePath) -> ShortIdentifierMigrationTable {
     let text =
         fs::read_to_string(short_identifier_mapping_table_path(target)).expect("mapping reads");
-    let mut decoder = Decoder::new(&text);
-    ShortIdentifierMigrationTable::decode(&mut decoder).expect("mapping decodes")
+    NotaSource::new(&text)
+        .parse::<ShortIdentifierMigrationTable>()
+        .expect("mapping decodes")
 }
 
 fn identifier_mapping_table_path(target: &StorePath) -> std::path::PathBuf {

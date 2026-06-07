@@ -10,29 +10,31 @@ Read this before editing the spirit runtime.
 - `~/primary/skills/rust-discipline.md`
 - this repo's `ARCHITECTURE.md`
 - `signal-persona-spirit/ARCHITECTURE.md`
-- `owner-signal-persona-spirit/ARCHITECTURE.md`
+- `owner-signal-persona-spirit/ARCHITECTURE.md` (current meta policy contract
+  name until the repository rename lands)
 
 ## Boundary
 
 This repo owns the spirit runtime: daemon, CLI client, actor tree, sema-engine
 state, classifier orchestration, and mind forwarding.
 
-Contract records stay in `signal-persona-spirit` and
-`owner-signal-persona-spirit`.
+Contract records stay in `signal-persona-spirit` and the meta policy contract
+currently named `owner-signal-persona-spirit`.
 
 ## Invariants
 
 - CLI and daemon binaries take exactly one argument.
 - The CLI peeks the NOTA request head and routes it through generated
-  `signal-frame::signal_cli!` metadata from the working and owner contracts.
+  `signal-frame::signal_cli!` metadata from the working and meta policy
+  contracts.
 - The CLI decodes that argument as either a
   `signal-persona-spirit::Operation` request or an
-  `owner-signal-persona-spirit::Operation` request, depending on the generated
-  route decision.
+  `owner-signal-persona-spirit::Operation` meta policy request, depending on
+  the generated route decision.
 - The daemon decodes that argument as `DaemonConfiguration`, selects the
   embedded or configured bootstrap-policy source, then binds one ordinary
-  socket for `signal-persona-spirit::Frame` values and one owner socket for
-  `owner-signal-persona-spirit::Frame` values.
+  socket for `signal-persona-spirit::Frame` values and one meta policy socket
+  for the current `owner-signal-persona-spirit::Frame` values.
 - If `DaemonConfiguration` includes a handoff-control socket, the daemon
   connects to Persona's control socket and can receive public-client file
   descriptors over `SCM_RIGHTS`; each received descriptor is served as the same
@@ -41,7 +43,7 @@ Contract records stay in `signal-persona-spirit` and
   connection, so it can drain even if the daemon later closes direct public
   sockets during version handover.
 - The CLI request path never opens `SpiritActorRuntime` directly. It decodes
-  NOTA into the selected working or owner request type through
+  NOTA into the selected working or meta policy request type through
   `signal_frame::ClientShape`, injects advisory `Caller` context, sends a
   Signal frame to the selected daemon socket, and renders the daemon's Signal
   reply back to NOTA.
@@ -49,7 +51,7 @@ Contract records stay in `signal-persona-spirit` and
   socket's contract and sends a Signal frame to the daemon rather than opening
   the store itself.
 - `PERSONA_SPIRIT_SOCKET` configures the working socket for working requests;
-  `PERSONA_SPIRIT_OWNER_SOCKET` configures the owner socket for owner requests.
+  `PERSONA_SPIRIT_META_SOCKET` configures the meta policy socket.
 - Signal-frame ingress submits typed requests directly to `SpiritRoot`; it does
   not go back through the NOTA decoder actor.
 - Ordinary request execution passes through `signal-executor`: dispatch lowers
@@ -60,8 +62,8 @@ Contract records stay in `signal-persona-spirit` and
   and multi-command operation plans are rejected before any command runs. A
   future multi-command operation must add a real transaction boundary before
   it lands.
-- The ordinary socket rejects owner frames; the owner socket rejects ordinary
-  frames.
+- The ordinary socket rejects meta policy frames; the meta policy socket rejects
+  ordinary frames.
 - Each named actor is data-bearing. Do not add public zero-sized actor nouns.
 - Owner-signal lifecycle and identity requests route through `OwnerPlane`, not
   through the ordinary text ingress or dispatch path.
@@ -146,7 +148,7 @@ Contract records stay in `signal-persona-spirit` and
   separately so a profile can install the CLI without the daemon or the daemon
   without relying on the default package.
 - Runtime code does not invent intent-classification behavior.
-- Spirit forwards authority to mind only through typed owner-signal contracts.
-- `persona-spirit-daemon` serves ordinary request/reply frames and owner
+- Spirit forwards authority to mind only through typed meta policy contracts.
+- `persona-spirit-daemon` serves ordinary request/reply frames and meta policy
   request/reply frames on different sockets. Test-only bounded helpers must
   remove both sockets on shutdown.

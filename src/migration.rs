@@ -1,6 +1,6 @@
 use std::{fs, path::PathBuf};
 
-use nota_codec::{Decoder, Encoder, NotaDecode, NotaEncode, NotaRecord};
+use nota_next::{NotaDecode, NotaEncode, NotaSource};
 use sema::SchemaVersion;
 use sema_engine::{
     Engine, EngineOpen, EngineRecord, QueryPlan, RecordKey, TableDescriptor, TableName,
@@ -12,7 +12,7 @@ use signal_persona_spirit::{
 use version_projection::VersionProjection;
 
 use crate::{
-    Error, Result, StoreLocation, StorePath,
+    Error, Result as SpiritResult, StoreLocation, StorePath,
     store::{SpiritStore, StampedEntry},
 };
 
@@ -26,7 +26,7 @@ const IDENTIFIER_MIGRATION_TABLE_EXTENSION: &str = "identifier-migration.nota";
 const SHORT_IDENTIFIER_MIGRATION_TABLE_EXTENSION: &str = "short-identifier-migration.nota";
 const SHORT_IDENTIFIER_MAXIMUM_CODE_LENGTH: usize = 7;
 
-#[derive(Debug, Clone, PartialEq, Eq, NotaRecord)]
+#[derive(Debug, Clone, PartialEq, Eq, NotaEncode, NotaDecode)]
 pub struct MigrationConfiguration {
     pub source: StorePath,
     pub target: StorePath,
@@ -42,23 +42,23 @@ pub struct MigrationOutcome {
     records: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, NotaRecord)]
+#[derive(Debug, Clone, PartialEq, Eq, NotaEncode, NotaDecode)]
 pub struct IdentifierMigrationTable {
     pub rows: Vec<IdentifierMigrationRow>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, NotaRecord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, NotaEncode, NotaDecode)]
 pub struct IdentifierMigrationRow {
     pub hash_identifier: RecordIdentifier,
     pub ordinal_identifier: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, NotaRecord)]
+#[derive(Debug, Clone, PartialEq, Eq, NotaEncode, NotaDecode)]
 pub struct ShortIdentifierMigrationTable {
     pub rows: Vec<ShortIdentifierMigrationRow>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, NotaRecord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, NotaEncode, NotaDecode)]
 pub struct ShortIdentifierMigrationRow {
     pub previous_identifier: RecordIdentifier,
     pub current_identifier: RecordIdentifier,
@@ -133,41 +133,33 @@ impl MigrationConfiguration {
         Self { source, target }
     }
 
-    pub fn from_argument(argument: signal_frame::SingleArgument) -> Result<Self> {
+    pub fn from_argument(argument: signal_frame::SingleArgument) -> SpiritResult<Self> {
         Self::from_text(&migration_configuration_argument_text(argument)?)
     }
 
-    pub fn from_text(text: &str) -> Result<Self> {
-        let mut decoder = Decoder::new(text);
-        let configuration = Self::decode(&mut decoder).map_err(Error::invalid_spirit_request)?;
-        if let Some(token) = decoder
-            .peek_token()
-            .map_err(Error::invalid_spirit_request)?
-        {
-            return Err(Error::InvalidSpiritRequest {
-                reason: format!("expected end of input, got {token:?}"),
-            });
-        }
-        Ok(configuration)
+    pub fn from_text(text: &str) -> SpiritResult<Self> {
+        NotaSource::new(text)
+            .parse::<Self>()
+            .map_err(Error::invalid_spirit_request)
     }
 
-    pub fn migrate(self) -> Result<MigrationOutcome> {
+    pub fn migrate(self) -> SpiritResult<MigrationOutcome> {
         migrate_v010_to_v020(&self.source, &self.target)
     }
 
-    pub fn migrate_v020_to_next(self) -> Result<MigrationOutcome> {
+    pub fn migrate_v020_to_next(self) -> SpiritResult<MigrationOutcome> {
         migrate_v020_to_next(&self.source, &self.target)
     }
 
-    pub fn migrate_v030_to_v040(self) -> Result<MigrationOutcome> {
+    pub fn migrate_v030_to_v040(self) -> SpiritResult<MigrationOutcome> {
         migrate_v030_to_v040(&self.source, &self.target)
     }
 
-    pub fn migrate_v040_to_v050(self) -> Result<MigrationOutcome> {
+    pub fn migrate_v040_to_v050(self) -> SpiritResult<MigrationOutcome> {
         V040ToV050Migration::new(&self.source, &self.target).migrate()
     }
 
-    pub fn migrate_v050_to_v052(self) -> Result<MigrationOutcome> {
+    pub fn migrate_v050_to_v052(self) -> SpiritResult<MigrationOutcome> {
         V050ToV052Migration::new(&self.source, &self.target).migrate()
     }
 }
@@ -245,12 +237,8 @@ impl IdentifierMigrationTablePath {
         Self { path }
     }
 
-    fn write(&self, table: &IdentifierMigrationTable) -> Result<()> {
-        let mut encoder = Encoder::new();
-        table
-            .encode(&mut encoder)
-            .map_err(Error::invalid_spirit_reply)?;
-        fs::write(&self.path, encoder.into_string()).map_err(Error::input_output)
+    fn write(&self, table: &IdentifierMigrationTable) -> SpiritResult<()> {
+        fs::write(&self.path, table.to_nota()).map_err(Error::input_output)
     }
 }
 
@@ -266,12 +254,8 @@ impl ShortIdentifierMigrationTablePath {
         Self { path }
     }
 
-    fn write(&self, table: &ShortIdentifierMigrationTable) -> Result<()> {
-        let mut encoder = Encoder::new();
-        table
-            .encode(&mut encoder)
-            .map_err(Error::invalid_spirit_reply)?;
-        fs::write(&self.path, encoder.into_string()).map_err(Error::input_output)
+    fn write(&self, table: &ShortIdentifierMigrationTable) -> SpiritResult<()> {
+        fs::write(&self.path, table.to_nota()).map_err(Error::input_output)
     }
 }
 
@@ -300,7 +284,7 @@ impl<'configuration> V040ToV050Migration<'configuration> {
         Self { source, target }
     }
 
-    fn migrate(self) -> Result<MigrationOutcome> {
+    fn migrate(self) -> SpiritResult<MigrationOutcome> {
         let source_records = V040Store::open(self.source)?.all_records()?;
         let target_store = SpiritStore::open(&StoreLocation::new(self.target.as_path()))?;
         if !target_store.is_empty()? {
@@ -330,7 +314,7 @@ impl<'configuration> V050ToV052Migration<'configuration> {
         Self { source, target }
     }
 
-    fn migrate(self) -> Result<MigrationOutcome> {
+    fn migrate(self) -> SpiritResult<MigrationOutcome> {
         let source_records = V050Store::open(self.source)?.all_records()?;
         let target_store = SpiritStore::open(&StoreLocation::new(self.target.as_path()))?;
         if !target_store.is_empty()? {
@@ -361,7 +345,10 @@ impl<'configuration> V050ToV052Migration<'configuration> {
     }
 }
 
-pub fn migrate_v010_to_v020(source: &StorePath, target: &StorePath) -> Result<MigrationOutcome> {
+pub fn migrate_v010_to_v020(
+    source: &StorePath,
+    target: &StorePath,
+) -> SpiritResult<MigrationOutcome> {
     let source_records = V010Store::open(source)?.all_records()?;
     let target_store = SpiritStore::open(&StoreLocation::new(target.as_path()))?;
     if !target_store.is_empty()? {
@@ -378,7 +365,10 @@ pub fn migrate_v010_to_v020(source: &StorePath, target: &StorePath) -> Result<Mi
     Ok(MigrationOutcome::new(migrated))
 }
 
-pub fn migrate_v020_to_next(source: &StorePath, target: &StorePath) -> Result<MigrationOutcome> {
+pub fn migrate_v020_to_next(
+    source: &StorePath,
+    target: &StorePath,
+) -> SpiritResult<MigrationOutcome> {
     let source_records = V020Store::open(source)?.all_records()?;
     let target_store = SpiritStore::open(&StoreLocation::new(target.as_path()))?;
     if !target_store.is_empty()? {
@@ -395,7 +385,10 @@ pub fn migrate_v020_to_next(source: &StorePath, target: &StorePath) -> Result<Mi
     Ok(MigrationOutcome::new(migrated))
 }
 
-pub fn migrate_v030_to_v040(source: &StorePath, target: &StorePath) -> Result<MigrationOutcome> {
+pub fn migrate_v030_to_v040(
+    source: &StorePath,
+    target: &StorePath,
+) -> SpiritResult<MigrationOutcome> {
     let source_records = V030Store::open(source)?.all_records()?;
     let target_store = SpiritStore::open(&StoreLocation::new(target.as_path()))?;
     if !target_store.is_empty()? {
@@ -413,10 +406,8 @@ pub fn migrate_v030_to_v040(source: &StorePath, target: &StorePath) -> Result<Mi
 }
 
 impl NotaEncode for MigrationCompleted {
-    fn encode(&self, encoder: &mut Encoder) -> nota_codec::Result<()> {
-        encoder.start_record("MigrationCompleted")?;
-        self.records.encode(encoder)?;
-        encoder.end_record()
+    fn to_nota(&self) -> String {
+        format!("(MigrationCompleted ({}))", self.records)
     }
 }
 
@@ -453,7 +444,7 @@ struct V050RecordGroups {
 struct V050IdentifierPolicy;
 
 impl V010Store {
-    fn open(path: &StorePath) -> Result<Self> {
+    fn open(path: &StorePath) -> SpiritResult<Self> {
         let mut engine = Engine::open(EngineOpen::new(path.as_path(), V010_SCHEMA_VERSION))
             .map_err(Error::spirit_store)?;
         let records = engine
@@ -462,7 +453,7 @@ impl V010Store {
         Ok(Self { engine, records })
     }
 
-    fn all_records(&self) -> Result<Vec<V010StoredRecord>> {
+    fn all_records(&self) -> SpiritResult<Vec<V010StoredRecord>> {
         let mut records = self
             .engine
             .match_records(QueryPlan::all(self.records))
@@ -475,7 +466,7 @@ impl V010Store {
 }
 
 impl V020Store {
-    fn open(path: &StorePath) -> Result<Self> {
+    fn open(path: &StorePath) -> SpiritResult<Self> {
         let mut engine = Engine::open(EngineOpen::new(path.as_path(), V020_SCHEMA_VERSION))
             .map_err(Error::spirit_store)?;
         let records = engine
@@ -484,7 +475,7 @@ impl V020Store {
         Ok(Self { engine, records })
     }
 
-    fn all_records(&self) -> Result<Vec<V020StoredRecord>> {
+    fn all_records(&self) -> SpiritResult<Vec<V020StoredRecord>> {
         let mut records = self
             .engine
             .match_records(QueryPlan::all(self.records))
@@ -497,7 +488,7 @@ impl V020Store {
 }
 
 impl V030Store {
-    fn open(path: &StorePath) -> Result<Self> {
+    fn open(path: &StorePath) -> SpiritResult<Self> {
         let mut engine = Engine::open(EngineOpen::new(path.as_path(), V030_SCHEMA_VERSION))
             .map_err(Error::spirit_store)?;
         let records = engine
@@ -506,7 +497,7 @@ impl V030Store {
         Ok(Self { engine, records })
     }
 
-    fn all_records(&self) -> Result<Vec<V030StoredRecord>> {
+    fn all_records(&self) -> SpiritResult<Vec<V030StoredRecord>> {
         let mut records = self
             .engine
             .match_records(QueryPlan::all(self.records))
@@ -519,7 +510,7 @@ impl V030Store {
 }
 
 impl V040Store {
-    fn open(path: &StorePath) -> Result<Self> {
+    fn open(path: &StorePath) -> SpiritResult<Self> {
         let mut engine = Engine::open(EngineOpen::new(path.as_path(), V040_SCHEMA_VERSION))
             .map_err(Error::spirit_store)?;
         let records = engine
@@ -528,7 +519,7 @@ impl V040Store {
         Ok(Self { engine, records })
     }
 
-    fn all_records(&self) -> Result<Vec<V040StoredRecord>> {
+    fn all_records(&self) -> SpiritResult<Vec<V040StoredRecord>> {
         let mut records = self
             .engine
             .match_records(QueryPlan::all(self.records))
@@ -541,7 +532,7 @@ impl V040Store {
 }
 
 impl V050Store {
-    fn open(path: &StorePath) -> Result<Self> {
+    fn open(path: &StorePath) -> SpiritResult<Self> {
         let mut engine = Engine::open(EngineOpen::new(path.as_path(), V050_SCHEMA_VERSION))
             .map_err(Error::spirit_store)?;
         let records = engine
@@ -550,7 +541,7 @@ impl V050Store {
         Ok(Self { engine, records })
     }
 
-    fn all_records(&self) -> Result<Vec<V050StoredRecord>> {
+    fn all_records(&self) -> SpiritResult<Vec<V050StoredRecord>> {
         let mut records = self
             .engine
             .match_records(QueryPlan::all(self.records))
@@ -599,7 +590,7 @@ impl V050IdentifierPolicy {
 }
 
 impl V010StoredRecord {
-    fn project(self) -> Result<StampedEntry> {
+    fn project(self) -> SpiritResult<StampedEntry> {
         Ok(StampedEntry::new(
             <V010ToV011 as VersionProjection<v010::Entry, Entry>>::project(self.entry.entry)
                 .map_err(|error| Error::migration(error.to_string()))?,
@@ -610,7 +601,7 @@ impl V010StoredRecord {
 }
 
 impl V020StoredRecord {
-    fn project(self) -> Result<StampedEntry> {
+    fn project(self) -> SpiritResult<StampedEntry> {
         Ok(StampedEntry::new(
             <V020ToV030 as VersionProjection<v020::Entry, Entry>>::project(self.entry.entry)
                 .map_err(|error| Error::migration(error.to_string()))?,
@@ -621,7 +612,7 @@ impl V020StoredRecord {
 }
 
 impl V030StoredRecord {
-    fn project(self) -> Result<StampedEntry> {
+    fn project(self) -> SpiritResult<StampedEntry> {
         Ok(StampedEntry::new(
             <V030ToV040 as VersionProjection<v030::Entry, Entry>>::project(self.entry.entry)
                 .map_err(|error| Error::migration(error.to_string()))?,
@@ -667,7 +658,9 @@ impl EngineRecord for V050StoredRecord {
     }
 }
 
-fn migration_configuration_argument_text(argument: signal_frame::SingleArgument) -> Result<String> {
+fn migration_configuration_argument_text(
+    argument: signal_frame::SingleArgument,
+) -> SpiritResult<String> {
     let value = argument.as_str();
     if value.starts_with('(') {
         Ok(value.to_string())

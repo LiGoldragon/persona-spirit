@@ -47,10 +47,10 @@ path = "src/bin/spirit-migrate-0-5-to-0-5-2.rs"
 [dependencies]
 kameo                       = { git = "https://github.com/LiGoldragon/kameo", branch = "persona-lifecycle-terminal-outcome", default-features = false, features = ["macros", "tracing"] }
 getrandom                   = "0.3"
-nota-codec                  = { git = "https://github.com/LiGoldragon/nota-codec.git", branch = "main" }
+nota-next                   = { git = "https://github.com/LiGoldragon/nota-next.git", branch = "main" }
 owner-signal-persona-spirit = { git = "https://github.com/LiGoldragon/owner-signal-persona-spirit.git", branch = "main" }
 rkyv                        = { version = "0.8", default-features = false, features = ["std", "bytecheck", "little_endian", "pointer_width_32", "unaligned"] }
-sema                        = { git = "https://github.com/LiGoldragon/sema.git" }
+sema                        = { git = "https://github.com/LiGoldragon/sema.git", branch = "main" }
 sema-engine                 = { git = "https://github.com/LiGoldragon/sema-engine.git", branch = "main" }
 signal-frame                     = { git = "https://github.com/LiGoldragon/signal-frame.git", branch = "main" }
 signal-executor                  = { git = "https://github.com/LiGoldragon/signal-executor.git", branch = "main" }
@@ -64,9 +64,9 @@ unix-ancillary                   = "0.2"
 version-projection               = { git = "https://github.com/LiGoldragon/version-projection.git", branch = "main" }
 
 [dev-dependencies]
-owner-signal-version-handover = { git = "https://github.com/LiGoldragon/owner-signal-version-handover.git", branch = "main" }
-persona = { git = "https://github.com/LiGoldragon/persona.git", branch = "main" }
-signal-persona-origin = { git = "https://github.com/LiGoldragon/signal-persona-origin.git" }
+meta-signal-upgrade  = { git = "https://github.com/LiGoldragon/meta-signal-upgrade.git", branch = "main" }
+persona              = { git = "https://github.com/LiGoldragon/persona.git", branch = "main" }
+signal-persona-origin = { git = "https://github.com/LiGoldragon/signal-persona-origin.git", branch = "main" }
 
 [lints.rust]
 unsafe_code = "forbid"

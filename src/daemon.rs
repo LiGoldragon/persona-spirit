@@ -10,7 +10,7 @@ use std::sync::{
 };
 use std::thread;
 
-use nota_codec::{Decoder, NotaDecode, NotaTransparent};
+use nota_next::{Block, NotaBlock, NotaDecode, NotaDecodeError, NotaEncode, NotaSource};
 use owner_signal_persona_spirit::{
     Frame as OwnerFrame, FrameBody as OwnerFrameBody, Operation as OwnerOperation,
     Reply as OwnerReply,
@@ -36,14 +36,14 @@ use signal_version_handover::{
 use unix_ancillary::UnixStreamExt;
 
 use crate::{
-    Error, Result, StoreLocation,
+    Error, Result as SpiritResult, StoreLocation,
     actors::{policy::BootstrapPolicySource, root::SpiritRoot},
     error::RequestRejectionReason as SpiritRequestRejectionReason,
 };
 
 const DEFAULT_MAXIMUM_FRAME_BYTES: usize = 1024 * 1024;
 
-#[derive(Debug, Clone, PartialEq, Eq, nota_codec::NotaRecord)]
+#[derive(Debug, Clone, PartialEq, Eq, NotaEncode, NotaDecode)]
 pub struct DaemonConfiguration {
     pub ordinary_socket_path: SocketPath,
     pub owner_socket_path: SocketPath,
@@ -56,16 +56,16 @@ pub struct DaemonConfiguration {
     pub engine_management_socket_mode: Option<SocketMode>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, NotaTransparent)]
+#[derive(Debug, Clone, PartialEq, Eq, NotaEncode, NotaDecode)]
 pub struct SocketPath(String);
 
-#[derive(Debug, Clone, PartialEq, Eq, NotaTransparent)]
+#[derive(Debug, Clone, PartialEq, Eq, NotaEncode, NotaDecode)]
 pub struct StorePath(String);
 
-#[derive(Debug, Clone, PartialEq, Eq, NotaTransparent)]
+#[derive(Debug, Clone, PartialEq, Eq, NotaEncode, NotaDecode)]
 pub struct BootstrapPolicyPath(String);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, NotaTransparent)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SocketMode(u32);
 
 pub mod ordinary {
@@ -253,12 +253,10 @@ impl DaemonConfiguration {
         self
     }
 
-    pub fn from_text(text: &str) -> Result<Self> {
-        let mut decoder = Decoder::new(text);
-        let configuration =
-            Self::decode(&mut decoder).map_err(Error::invalid_daemon_configuration)?;
-        StrictEnd::new(&mut decoder).expect()?;
-        Ok(configuration)
+    pub fn from_text(text: &str) -> SpiritResult<Self> {
+        NotaSource::new(text)
+            .parse::<Self>()
+            .map_err(Error::invalid_daemon_configuration)
     }
 
     pub fn store_location(&self) -> StoreLocation {
@@ -278,7 +276,7 @@ impl SocketPath {
         Self(value.into())
     }
 
-    pub fn from_environment() -> Result<Self> {
+    pub fn from_environment() -> SpiritResult<Self> {
         std::env::var("PERSONA_SPIRIT_SOCKET")
             .map(Self::new)
             .map_err(|_| Error::MissingSpiritSocket)
@@ -319,6 +317,22 @@ impl SocketMode {
     }
 }
 
+impl NotaEncode for SocketMode {
+    fn to_nota(&self) -> String {
+        self.0.to_string()
+    }
+}
+
+impl NotaDecode for SocketMode {
+    fn from_nota_block(block: &Block) -> std::result::Result<Self, NotaDecodeError> {
+        let value = NotaBlock::new(block).parse_integer()?;
+        let mode = u32::try_from(value).map_err(|_| NotaDecodeError::InvalidInteger {
+            value: value.to_string(),
+        })?;
+        Ok(Self(mode))
+    }
+}
+
 impl ordinary::FrameCodec {
     pub const fn new(maximum_frame_bytes: usize) -> Self {
         Self {
@@ -326,7 +340,7 @@ impl ordinary::FrameCodec {
         }
     }
 
-    pub fn read_frame(&self, stream: &mut UnixStream) -> Result<Frame> {
+    pub fn read_frame(&self, stream: &mut UnixStream) -> SpiritResult<Frame> {
         let mut prefix = [0_u8; 4];
         stream
             .read_exact(&mut prefix)
@@ -348,7 +362,7 @@ impl ordinary::FrameCodec {
         Frame::decode_length_prefixed(&bytes).map_err(Error::signal_frame)
     }
 
-    pub fn write_frame(&self, stream: &mut UnixStream, frame: &Frame) -> Result<()> {
+    pub fn write_frame(&self, stream: &mut UnixStream, frame: &Frame) -> SpiritResult<()> {
         let bytes = frame
             .encode_length_prefixed()
             .map_err(Error::signal_frame)?;
@@ -364,7 +378,7 @@ impl ordinary::FrameCodec {
         Frame::new(FrameBody::Reply { exchange, reply })
     }
 
-    pub fn request_from_frame(&self, frame: Frame) -> Result<ReceivedRequest> {
+    pub fn request_from_frame(&self, frame: Frame) -> SpiritResult<ReceivedRequest> {
         let short_header = frame.short_header();
         match frame.into_body() {
             FrameBody::Request { exchange, request } => {
@@ -382,7 +396,7 @@ impl ordinary::FrameCodec {
         &self,
         short_header: ShortHeader,
         request: &signal_frame::Request<WorkingOperation>,
-    ) -> Result<()> {
+    ) -> SpiritResult<()> {
         let expected = short_header.to_le_bytes()[0];
         let expected_kind =
             WorkingOperation::kind_from_short_header(short_header).ok_or_else(|| {
@@ -400,7 +414,7 @@ impl ordinary::FrameCodec {
         Ok(())
     }
 
-    pub fn reply_from_frame(&self, frame: Frame) -> Result<Reply<WorkingReply>> {
+    pub fn reply_from_frame(&self, frame: Frame) -> SpiritResult<Reply<WorkingReply>> {
         match frame.into_body() {
             FrameBody::Reply { reply, .. } => Ok(reply),
             other => Err(Error::UnexpectedFrame {
@@ -426,7 +440,7 @@ impl owner::FrameCodec {
         }
     }
 
-    pub fn read_frame(&self, stream: &mut UnixStream) -> Result<OwnerFrame> {
+    pub fn read_frame(&self, stream: &mut UnixStream) -> SpiritResult<OwnerFrame> {
         let mut prefix = [0_u8; 4];
         stream
             .read_exact(&mut prefix)
@@ -448,7 +462,7 @@ impl owner::FrameCodec {
         OwnerFrame::decode_length_prefixed(&bytes).map_err(Error::signal_frame)
     }
 
-    pub fn write_frame(&self, stream: &mut UnixStream, frame: &OwnerFrame) -> Result<()> {
+    pub fn write_frame(&self, stream: &mut UnixStream, frame: &OwnerFrame) -> SpiritResult<()> {
         let bytes = frame
             .encode_length_prefixed()
             .map_err(Error::signal_frame)?;
@@ -471,7 +485,7 @@ impl owner::FrameCodec {
         OwnerFrame::new(OwnerFrameBody::Reply { exchange, reply })
     }
 
-    pub fn request_from_frame(&self, frame: OwnerFrame) -> Result<ReceivedOwnerRequest> {
+    pub fn request_from_frame(&self, frame: OwnerFrame) -> SpiritResult<ReceivedOwnerRequest> {
         match frame.into_body() {
             OwnerFrameBody::Request { exchange, request } => {
                 Ok(ReceivedOwnerRequest { exchange, request })
@@ -483,7 +497,7 @@ impl owner::FrameCodec {
         }
     }
 
-    pub fn reply_from_frame(&self, frame: OwnerFrame) -> Result<Reply<OwnerReply>> {
+    pub fn reply_from_frame(&self, frame: OwnerFrame) -> SpiritResult<Reply<OwnerReply>> {
         match frame.into_body() {
             OwnerFrameBody::Reply { reply, .. } => Ok(reply),
             other => Err(Error::UnexpectedFrame {
@@ -509,7 +523,7 @@ impl upgrade::FrameCodec {
         }
     }
 
-    pub fn read_frame(&self, stream: &mut UnixStream) -> Result<UpgradeFrame> {
+    pub fn read_frame(&self, stream: &mut UnixStream) -> SpiritResult<UpgradeFrame> {
         let mut prefix = [0_u8; 4];
         stream
             .read_exact(&mut prefix)
@@ -531,7 +545,7 @@ impl upgrade::FrameCodec {
         UpgradeFrame::decode_length_prefixed(&bytes).map_err(Error::signal_frame)
     }
 
-    pub fn write_frame(&self, stream: &mut UnixStream, frame: &UpgradeFrame) -> Result<()> {
+    pub fn write_frame(&self, stream: &mut UnixStream, frame: &UpgradeFrame) -> SpiritResult<()> {
         let bytes = frame
             .encode_length_prefixed()
             .map_err(Error::signal_frame)?;
@@ -554,7 +568,7 @@ impl upgrade::FrameCodec {
         UpgradeFrame::new(UpgradeFrameBody::Reply { exchange, reply })
     }
 
-    pub fn request_from_frame(&self, frame: UpgradeFrame) -> Result<ReceivedUpgradeRequest> {
+    pub fn request_from_frame(&self, frame: UpgradeFrame) -> SpiritResult<ReceivedUpgradeRequest> {
         match frame.into_body() {
             UpgradeFrameBody::Request { exchange, request } => {
                 Ok(ReceivedUpgradeRequest { exchange, request })
@@ -566,7 +580,7 @@ impl upgrade::FrameCodec {
         }
     }
 
-    pub fn reply_from_frame(&self, frame: UpgradeFrame) -> Result<Reply<UpgradeReply>> {
+    pub fn reply_from_frame(&self, frame: UpgradeFrame) -> SpiritResult<Reply<UpgradeReply>> {
         match frame.into_body() {
             UpgradeFrameBody::Reply { reply, .. } => Ok(reply),
             other => Err(Error::UnexpectedFrame {
@@ -590,18 +604,18 @@ impl DaemonRuntime {
         Self { configuration }
     }
 
-    pub fn from_argument(argument: signal_frame::SingleArgument) -> Result<Self> {
+    pub fn from_argument(argument: signal_frame::SingleArgument) -> SpiritResult<Self> {
         let text = daemon_configuration_argument_text(argument)?;
         Ok(Self::from_configuration(DaemonConfiguration::from_text(
             &text,
         )?))
     }
 
-    pub fn run(self) -> Result<()> {
+    pub fn run(self) -> SpiritResult<()> {
         self.bind()?.serve_forever()
     }
 
-    pub fn bind(self) -> Result<BoundDaemon> {
+    pub fn bind(self) -> SpiritResult<BoundDaemon> {
         SocketBinding::bind(
             &self.configuration.ordinary_socket_path,
             self.configuration.socket_mode,
@@ -720,7 +734,9 @@ impl DaemonRuntime {
     }
 }
 
-fn daemon_configuration_argument_text(argument: signal_frame::SingleArgument) -> Result<String> {
+fn daemon_configuration_argument_text(
+    argument: signal_frame::SingleArgument,
+) -> SpiritResult<String> {
     let value = argument.as_str();
     if value.starts_with('(') {
         Ok(value.to_string())
@@ -752,7 +768,7 @@ impl BoundDaemon {
             .map(SocketPath::as_path)
     }
 
-    pub fn serve_one(&mut self) -> Result<ServedExchange> {
+    pub fn serve_one(&mut self) -> SpiritResult<ServedExchange> {
         let (mut stream, _address) = self
             .ordinary_listener
             .accept()
@@ -767,7 +783,7 @@ impl BoundDaemon {
         )
     }
 
-    pub fn serve_handoff_one(&mut self) -> Result<ServedExchange> {
+    pub fn serve_handoff_one(&mut self) -> SpiritResult<ServedExchange> {
         let control = self.handoff_control.as_ref().ok_or_else(|| {
             Error::input_output(std::io::Error::new(
                 ErrorKind::NotConnected,
@@ -785,7 +801,7 @@ impl BoundDaemon {
         )
     }
 
-    pub fn serve_owner_one(&mut self) -> Result<ServedOwnerExchange> {
+    pub fn serve_owner_one(&mut self) -> SpiritResult<ServedOwnerExchange> {
         let (mut stream, _address) = self.owner_listener.accept().map_err(Error::input_output)?;
         let frame = self.owner_codec.read_frame(&mut stream)?;
         let received = self.owner_codec.request_from_frame(frame)?;
@@ -801,7 +817,7 @@ impl BoundDaemon {
         Ok(ServedOwnerExchange::new(reply))
     }
 
-    pub fn serve_upgrade_one(&mut self) -> Result<ServedUpgradeExchange> {
+    pub fn serve_upgrade_one(&mut self) -> SpiritResult<ServedUpgradeExchange> {
         let (mut stream, _address) = self
             .upgrade_listener
             .accept()
@@ -816,7 +832,9 @@ impl BoundDaemon {
         Ok(ServedUpgradeExchange::new(reply))
     }
 
-    pub fn serve_engine_management_one(&mut self) -> Result<Vec<ServedEngineManagementExchange>> {
+    pub fn serve_engine_management_one(
+        &mut self,
+    ) -> SpiritResult<Vec<ServedEngineManagementExchange>> {
         let listener = self.engine_management_listener.as_ref().ok_or_else(|| {
             Error::InvalidDaemonConfiguration {
                 reason: "engine management socket is not configured".to_string(),
@@ -830,10 +848,10 @@ impl BoundDaemon {
         .serve_connection(&mut stream)
     }
 
-    pub fn serve_count(mut self, count: usize) -> Result<Vec<ServedExchange>> {
+    pub fn serve_count(mut self, count: usize) -> SpiritResult<Vec<ServedExchange>> {
         let result = (0..count)
             .map(|_| self.serve_one())
-            .collect::<Result<Vec<_>>>();
+            .collect::<SpiritResult<Vec<_>>>();
         let shutdown = self.shutdown();
         match (result, shutdown) {
             (Ok(served), Ok(())) => Ok(served),
@@ -842,10 +860,10 @@ impl BoundDaemon {
         }
     }
 
-    pub fn serve_owner_count(mut self, count: usize) -> Result<Vec<ServedOwnerExchange>> {
+    pub fn serve_owner_count(mut self, count: usize) -> SpiritResult<Vec<ServedOwnerExchange>> {
         let result = (0..count)
             .map(|_| self.serve_owner_one())
-            .collect::<Result<Vec<_>>>();
+            .collect::<SpiritResult<Vec<_>>>();
         let shutdown = self.shutdown();
         match (result, shutdown) {
             (Ok(served), Ok(())) => Ok(served),
@@ -854,10 +872,10 @@ impl BoundDaemon {
         }
     }
 
-    pub fn serve_upgrade_count(mut self, count: usize) -> Result<Vec<ServedUpgradeExchange>> {
+    pub fn serve_upgrade_count(mut self, count: usize) -> SpiritResult<Vec<ServedUpgradeExchange>> {
         let result = (0..count)
             .map(|_| self.serve_upgrade_one())
-            .collect::<Result<Vec<_>>>();
+            .collect::<SpiritResult<Vec<_>>>();
         let shutdown = self.shutdown();
         match (result, shutdown) {
             (Ok(served), Ok(())) => Ok(served),
@@ -870,7 +888,7 @@ impl BoundDaemon {
         mut self,
         handoff_count: usize,
         upgrade_count: usize,
-    ) -> Result<(Vec<ServedExchange>, Vec<ServedUpgradeExchange>)> {
+    ) -> SpiritResult<(Vec<ServedExchange>, Vec<ServedUpgradeExchange>)> {
         let control = self.handoff_control.take().ok_or_else(|| {
             Error::input_output(std::io::Error::new(
                 ErrorKind::NotConnected,
@@ -887,11 +905,11 @@ impl BoundDaemon {
         let handoff_handle = thread::spawn(move || {
             (0..handoff_count)
                 .map(|_| handoff.serve_one())
-                .collect::<Result<Vec<_>>>()
+                .collect::<SpiritResult<Vec<_>>>()
         });
         let upgrade_result = (0..upgrade_count)
             .map(|_| self.serve_upgrade_one())
-            .collect::<Result<Vec<_>>>();
+            .collect::<SpiritResult<Vec<_>>>();
         let handoff_result = handoff_handle
             .join()
             .map_err(|_| Error::actor_runtime("handoff control thread panicked"))?;
@@ -902,7 +920,7 @@ impl BoundDaemon {
         }
     }
 
-    pub fn serve_forever(self) -> Result<()> {
+    pub fn serve_forever(self) -> SpiritResult<()> {
         let ordinary = SocketServer::new(
             self.ordinary_listener
                 .try_clone()
@@ -984,7 +1002,7 @@ impl BoundDaemon {
             .and(engine_management_result)
     }
 
-    pub fn shutdown(self) -> Result<()> {
+    pub fn shutdown(self) -> SpiritResult<()> {
         let stop = self.runtime.block_on(SpiritRoot::stop(self.root));
         let remove_ordinary = SocketBinding::remove(&self.ordinary_socket);
         let remove_owner = SocketBinding::remove(&self.owner_socket);
@@ -1013,14 +1031,14 @@ impl BoundDaemon {
     fn reply_to_owner_request(
         &self,
         request: signal_frame::Request<OwnerOperation>,
-    ) -> Result<Reply<OwnerReply>> {
+    ) -> SpiritResult<Reply<OwnerReply>> {
         OwnerExchangeHandler::new(self.root.clone(), self.runtime.clone()).reply_to_request(request)
     }
 
     fn reply_to_upgrade_request(
         &self,
         request: signal_frame::Request<UpgradeOperation>,
-    ) -> Result<Reply<UpgradeReply>> {
+    ) -> SpiritResult<Reply<UpgradeReply>> {
         UpgradeExchangeHandler::new(
             self.root.clone(),
             self.runtime.clone(),
@@ -1116,7 +1134,7 @@ impl SocketServer {
         }
     }
 
-    fn serve_forever(self) -> Result<()> {
+    fn serve_forever(self) -> SpiritResult<()> {
         loop {
             if let Err(error) = self.serve_one() {
                 eprintln!("persona-spirit-daemon ordinary client error: {error}");
@@ -1124,7 +1142,7 @@ impl SocketServer {
         }
     }
 
-    fn serve_one(&self) -> Result<ServedExchange> {
+    fn serve_one(&self) -> SpiritResult<ServedExchange> {
         let (mut stream, _address) = self.listener.accept().map_err(Error::input_output)?;
         serve_ordinary_stream(
             &mut stream,
@@ -1154,7 +1172,7 @@ impl HandoffControlServer {
         }
     }
 
-    fn serve_forever(self) -> Result<()> {
+    fn serve_forever(self) -> SpiritResult<()> {
         loop {
             if let Err(error) = self.serve_one() {
                 eprintln!("persona-spirit-daemon handoff control error: {error}");
@@ -1162,7 +1180,7 @@ impl HandoffControlServer {
         }
     }
 
-    fn serve_one(&self) -> Result<ServedExchange> {
+    fn serve_one(&self) -> SpiritResult<ServedExchange> {
         let mut stream = receive_handoff_stream(&self.control)?;
         serve_ordinary_stream(
             &mut stream,
@@ -1192,7 +1210,7 @@ impl OwnerSocketServer {
         }
     }
 
-    fn serve_forever(self) -> Result<()> {
+    fn serve_forever(self) -> SpiritResult<()> {
         loop {
             if let Err(error) = self.serve_one() {
                 eprintln!("persona-spirit-daemon owner client error: {error}");
@@ -1200,7 +1218,7 @@ impl OwnerSocketServer {
         }
     }
 
-    fn serve_one(&self) -> Result<ServedOwnerExchange> {
+    fn serve_one(&self) -> SpiritResult<ServedOwnerExchange> {
         let (mut stream, _address) = self.listener.accept().map_err(Error::input_output)?;
         let frame = self.codec.read_frame(&mut stream)?;
         let received = self.codec.request_from_frame(frame)?;
@@ -1233,7 +1251,7 @@ impl UpgradeSocketServer {
         }
     }
 
-    fn serve_forever(self) -> Result<()> {
+    fn serve_forever(self) -> SpiritResult<()> {
         loop {
             if let Err(error) = self.serve_one() {
                 eprintln!("persona-spirit-daemon upgrade client error: {error}");
@@ -1241,7 +1259,7 @@ impl UpgradeSocketServer {
         }
     }
 
-    fn serve_one(&self) -> Result<ServedUpgradeExchange> {
+    fn serve_one(&self) -> SpiritResult<ServedUpgradeExchange> {
         let (mut stream, _address) = self.listener.accept().map_err(Error::input_output)?;
         let frame = self.codec.read_frame(&mut stream)?;
         let received = self.codec.request_from_frame(frame)?;
@@ -1262,7 +1280,7 @@ impl EngineManagementSocketServer {
         Self { listener, codec }
     }
 
-    fn serve_forever(self) -> Result<()> {
+    fn serve_forever(self) -> SpiritResult<()> {
         loop {
             match self.listener.accept() {
                 Ok((mut stream, _address)) => {
@@ -1280,7 +1298,7 @@ impl EngineManagementSocketServer {
     fn serve_connection(
         &self,
         stream: &mut UnixStream,
-    ) -> Result<Vec<ServedEngineManagementExchange>> {
+    ) -> SpiritResult<Vec<ServedEngineManagementExchange>> {
         let mut served = Vec::new();
         loop {
             let received = match self.codec.read_request(stream) {
@@ -1343,7 +1361,7 @@ impl OrdinaryExchangeHandler {
     fn reply_to_request(
         &self,
         request: signal_frame::Request<WorkingOperation>,
-    ) -> Result<Reply<WorkingReply>> {
+    ) -> SpiritResult<Reply<WorkingReply>> {
         let reply = self
             .runtime
             .block_on(async {
@@ -1367,18 +1385,18 @@ impl OwnerExchangeHandler {
     fn reply_to_request(
         &self,
         request: signal_frame::Request<OwnerOperation>,
-    ) -> Result<Reply<OwnerReply>> {
+    ) -> SpiritResult<Reply<OwnerReply>> {
         let replies = request
             .payloads
             .into_iter()
             .map(|request| self.reply_to_operation(request))
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<SpiritResult<Vec<_>>>()?;
         Ok(Reply::committed(
             NonEmpty::try_from_vec(replies).expect("request is non-empty"),
         ))
     }
 
-    fn reply_to_operation(&self, request: OwnerOperation) -> Result<SubReply<OwnerReply>> {
+    fn reply_to_operation(&self, request: OwnerOperation) -> SpiritResult<SubReply<OwnerReply>> {
         let reply = self
             .runtime
             .block_on(async {
@@ -1407,18 +1425,21 @@ impl UpgradeExchangeHandler {
     fn reply_to_request(
         &self,
         request: signal_frame::Request<UpgradeOperation>,
-    ) -> Result<Reply<UpgradeReply>> {
+    ) -> SpiritResult<Reply<UpgradeReply>> {
         let replies = request
             .payloads
             .into_iter()
             .map(|request| self.reply_to_operation(request))
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<SpiritResult<Vec<_>>>()?;
         Ok(Reply::committed(
             NonEmpty::try_from_vec(replies).expect("request is non-empty"),
         ))
     }
 
-    fn reply_to_operation(&self, request: UpgradeOperation) -> Result<SubReply<UpgradeReply>> {
+    fn reply_to_operation(
+        &self,
+        request: UpgradeOperation,
+    ) -> SpiritResult<SubReply<UpgradeReply>> {
         let freezes_public_writes = matches!(request, UpgradeOperation::ReadyToHandover(_));
         let closes_public_sockets = matches!(request, UpgradeOperation::HandoverCompleted(_));
         let may_reopen_public_writes = matches!(request, UpgradeOperation::RecoverFromFailure(_));
@@ -1459,7 +1480,7 @@ fn serve_ordinary_stream(
     codec: ordinary::FrameCodec,
     public_sockets: PublicSockets,
     admission: OrdinaryAdmission,
-) -> Result<ServedExchange> {
+) -> SpiritResult<ServedExchange> {
     let frame = codec.read_frame(stream)?;
     let received = codec.request_from_frame(frame)?;
     let accepted = match admission {
@@ -1478,7 +1499,7 @@ fn serve_ordinary_stream(
     Ok(ServedExchange::new(reply))
 }
 
-fn receive_handoff_stream(control: &UnixStream) -> Result<UnixStream> {
+fn receive_handoff_stream(control: &UnixStream) -> SpiritResult<UnixStream> {
     let received = control.recv_fds::<1>().map_err(Error::input_output)?;
     let Some(file_descriptor) = received.fds.into_iter().next() else {
         return Err(Error::input_output(std::io::Error::new(
@@ -1562,7 +1583,7 @@ impl ordinary::SignalClient {
         }
     }
 
-    pub fn submit(&self, request: WorkingOperation) -> Result<WorkingReply> {
+    pub fn submit(&self, request: WorkingOperation) -> SpiritResult<WorkingReply> {
         let mut stream = UnixStream::connect(self.socket.as_path()).map_err(Error::input_output)?;
         let frame = self.codec.request_frame(request);
         self.codec.write_frame(&mut stream, &frame)?;
@@ -1570,7 +1591,7 @@ impl ordinary::SignalClient {
         self.reply_payload(self.codec.reply_from_frame(reply)?)
     }
 
-    fn reply_payload(&self, reply: Reply<WorkingReply>) -> Result<WorkingReply> {
+    fn reply_payload(&self, reply: Reply<WorkingReply>) -> SpiritResult<WorkingReply> {
         match reply {
             Reply::Accepted { per_operation, .. } => match per_operation.into_head() {
                 SubReply::Ok(payload) => Ok(payload),
@@ -1596,7 +1617,7 @@ impl owner::SignalClient {
         }
     }
 
-    pub fn submit(&self, request: OwnerOperation) -> Result<OwnerReply> {
+    pub fn submit(&self, request: OwnerOperation) -> SpiritResult<OwnerReply> {
         let mut stream = UnixStream::connect(self.socket.as_path()).map_err(Error::input_output)?;
         let frame = self.codec.request_frame(request);
         self.codec.write_frame(&mut stream, &frame)?;
@@ -1604,7 +1625,7 @@ impl owner::SignalClient {
         self.reply_payload(self.codec.reply_from_frame(reply)?)
     }
 
-    fn reply_payload(&self, reply: Reply<OwnerReply>) -> Result<OwnerReply> {
+    fn reply_payload(&self, reply: Reply<OwnerReply>) -> SpiritResult<OwnerReply> {
         match reply {
             Reply::Accepted { per_operation, .. } => match per_operation.into_head() {
                 SubReply::Ok(payload) => Ok(payload),
@@ -1630,7 +1651,7 @@ impl upgrade::SignalClient {
         }
     }
 
-    pub fn submit(&self, request: UpgradeOperation) -> Result<UpgradeReply> {
+    pub fn submit(&self, request: UpgradeOperation) -> SpiritResult<UpgradeReply> {
         let mut stream = UnixStream::connect(self.socket.as_path()).map_err(Error::input_output)?;
         let frame = self.codec.request_frame(request);
         self.codec.write_frame(&mut stream, &frame)?;
@@ -1638,7 +1659,7 @@ impl upgrade::SignalClient {
         self.reply_payload(self.codec.reply_from_frame(reply)?)
     }
 
-    fn reply_payload(&self, reply: Reply<UpgradeReply>) -> Result<UpgradeReply> {
+    fn reply_payload(&self, reply: Reply<UpgradeReply>) -> SpiritResult<UpgradeReply> {
         match reply {
             Reply::Accepted { per_operation, .. } => match per_operation.into_head() {
                 SubReply::Ok(payload) => Ok(payload),
@@ -1786,42 +1807,18 @@ fn io_error(error: impl std::fmt::Display) -> std::io::Error {
 struct SocketBinding;
 
 impl SocketBinding {
-    fn bind(socket: &SocketPath, _mode: SocketMode) -> Result<()> {
+    fn bind(socket: &SocketPath, _mode: SocketMode) -> SpiritResult<()> {
         if let Some(parent) = socket.as_path().parent() {
             std::fs::create_dir_all(parent).map_err(Error::input_output)?;
         }
         Self::remove(socket)
     }
 
-    fn remove(socket: &SocketPath) -> Result<()> {
+    fn remove(socket: &SocketPath) -> SpiritResult<()> {
         match std::fs::remove_file(socket.as_path()) {
             Ok(()) => Ok(()),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
             Err(error) => Err(Error::input_output(error)),
-        }
-    }
-}
-
-struct StrictEnd<'decoder, 'input> {
-    decoder: &'decoder mut Decoder<'input>,
-}
-
-impl<'decoder, 'input> StrictEnd<'decoder, 'input> {
-    fn new(decoder: &'decoder mut Decoder<'input>) -> Self {
-        Self { decoder }
-    }
-
-    fn expect(&mut self) -> Result<()> {
-        if let Some(token) = self
-            .decoder
-            .peek_token()
-            .map_err(Error::invalid_daemon_configuration)?
-        {
-            Err(Error::InvalidDaemonConfiguration {
-                reason: format!("expected end of input, got {token:?}"),
-            })
-        } else {
-            Ok(())
         }
     }
 }

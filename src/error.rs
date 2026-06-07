@@ -30,8 +30,8 @@ pub enum Error {
     #[error("persona-spirit requires PERSONA_SPIRIT_SOCKET to reach the daemon")]
     MissingSpiritSocket,
 
-    #[error("persona-spirit requires PERSONA_SPIRIT_OWNER_SOCKET to reach the owner daemon socket")]
-    MissingOwnerSpiritSocket,
+    #[error("persona-spirit requires PERSONA_SPIRIT_META_SOCKET to reach the meta daemon socket")]
+    MissingMetaSpiritSocket,
 
     #[error("persona-spirit cannot route command-line request: {reason}")]
     CommandLineRoute { reason: String },
@@ -107,19 +107,19 @@ impl std::fmt::Display for RequestRejectionReason {
 }
 
 impl Error {
-    pub fn invalid_spirit_request(error: nota_codec::Error) -> Self {
+    pub fn invalid_spirit_request(error: impl std::fmt::Display) -> Self {
         Self::InvalidSpiritRequest {
             reason: error.to_string(),
         }
     }
 
-    pub fn invalid_spirit_reply(error: nota_codec::Error) -> Self {
+    pub fn invalid_spirit_reply(error: impl std::fmt::Display) -> Self {
         Self::InvalidSpiritReply {
             reason: error.to_string(),
         }
     }
 
-    pub fn invalid_daemon_configuration(error: nota_codec::Error) -> Self {
+    pub fn invalid_daemon_configuration(error: impl std::fmt::Display) -> Self {
         Self::InvalidDaemonConfiguration {
             reason: error.to_string(),
         }
@@ -193,7 +193,7 @@ impl From<signal_frame::CommandLineError> for Error {
             signal_frame::CommandLineError::Argument(error) => Self::from(error),
             signal_frame::CommandLineError::MissingSocket { variable } => match variable.as_str() {
                 "PERSONA_SPIRIT_SOCKET" => Self::MissingSpiritSocket,
-                "PERSONA_SPIRIT_OWNER_SOCKET" => Self::MissingOwnerSpiritSocket,
+                "PERSONA_SPIRIT_META_SOCKET" => Self::MissingMetaSpiritSocket,
                 _ => Self::InputOutput {
                     reason: format!("missing socket environment variable {variable}"),
                 },
@@ -254,7 +254,7 @@ impl BatchErrorClassification for Error {
             | Self::FrameTooLarge { .. }
             | Self::UnexpectedFrame { .. }
             | Self::MissingSpiritSocket
-            | Self::MissingOwnerSpiritSocket
+            | Self::MissingMetaSpiritSocket
             | Self::CommandLineRoute { .. }
             | Self::WrongArgumentCount { .. }
             | Self::FlagArgument { .. }

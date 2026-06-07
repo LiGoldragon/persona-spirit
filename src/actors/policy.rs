@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use kameo::actor::{Actor, ActorRef};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
-use nota_codec::{Decoder, NotaDecode, NotaRecord};
+use nota_next::{NotaDecode, NotaEncode, NotaSource};
 use owner_signal_persona_spirit::{
     BootstrapPolicyReloaded, Reply as OwnerReply, RequestUnimplemented, UnimplementedReason,
 };
@@ -21,7 +21,7 @@ pub enum BootstrapPolicySource {
     Path(PathBuf),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, NotaRecord)]
+#[derive(Debug, Clone, PartialEq, Eq, NotaEncode, NotaDecode)]
 pub struct BootstrapPolicy {
     pub text: String,
 }
@@ -92,10 +92,9 @@ impl BootstrapPolicy {
     }
 
     fn from_text(text: &str) -> Result<Self, String> {
-        let mut decoder = Decoder::new(text);
-        let policy = Self::decode(&mut decoder).map_err(|error| error.to_string())?;
-        PolicyTextEnd::new(&mut decoder).expect()?;
-        Ok(policy)
+        NotaSource::new(text)
+            .parse::<Self>()
+            .map_err(|error| error.to_string())
     }
 }
 
@@ -120,27 +119,5 @@ impl Message<ReloadBootstrapPolicy> for PolicyPlane {
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.reload(message.trace)
-    }
-}
-
-struct PolicyTextEnd<'decoder, 'input> {
-    decoder: &'decoder mut Decoder<'input>,
-}
-
-impl<'decoder, 'input> PolicyTextEnd<'decoder, 'input> {
-    fn new(decoder: &'decoder mut Decoder<'input>) -> Self {
-        Self { decoder }
-    }
-
-    fn expect(&mut self) -> Result<(), String> {
-        if let Some(token) = self
-            .decoder
-            .peek_token()
-            .map_err(|error| error.to_string())?
-        {
-            Err(format!("expected end of input, got {token:?}"))
-        } else {
-            Ok(())
-        }
     }
 }

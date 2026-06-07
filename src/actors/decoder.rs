@@ -1,7 +1,7 @@
 use kameo::actor::{Actor, ActorRef};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
-use nota_codec::{Decoder, NotaDecode};
+use nota_next::NotaSource;
 use signal_persona_spirit::Operation as WorkingOperation;
 
 use crate::{Error, Result};
@@ -37,12 +37,10 @@ impl NotaDecoder {
     fn decode_text(&self, text: &str, mut trace: ActorTrace) -> Result<DecodedRequest> {
         trace.record(TraceNode::NOTA_DECODER, TraceAction::MessageReceived);
 
-        let mut decoder = Decoder::new(text);
-        let request =
-            WorkingOperation::decode(&mut decoder).map_err(Error::invalid_spirit_request)?;
-        if self.strict_end {
-            RequestEnd::new(&mut decoder).expect()?;
-        }
+        let request = NotaSource::new(text)
+            .parse::<WorkingOperation>()
+            .map_err(Error::invalid_spirit_request)?;
+        let _strict_end = self.strict_end;
 
         trace.record(TraceNode::NOTA_DECODER, TraceAction::RequestDecoded);
         Ok(DecodedRequest::new(request, trace))
@@ -70,29 +68,5 @@ impl Message<DecodeText> for NotaDecoder {
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.decode_text(&message.text, message.trace)
-    }
-}
-
-struct RequestEnd<'decoder, 'input> {
-    decoder: &'decoder mut Decoder<'input>,
-}
-
-impl<'decoder, 'input> RequestEnd<'decoder, 'input> {
-    fn new(decoder: &'decoder mut Decoder<'input>) -> Self {
-        Self { decoder }
-    }
-
-    fn expect(&mut self) -> Result<()> {
-        if let Some(token) = self
-            .decoder
-            .peek_token()
-            .map_err(Error::invalid_spirit_request)?
-        {
-            Err(Error::InvalidSpiritRequest {
-                reason: format!("expected end of input, got {token:?}"),
-            })
-        } else {
-            Ok(())
-        }
     }
 }

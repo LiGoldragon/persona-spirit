@@ -1,7 +1,7 @@
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use nota_codec::{Decoder, Encoder, NotaDecode, NotaEncode};
+use nota_next::{NotaEncode, NotaSource};
 use owner_signal_persona_spirit::{
     BootstrapPolicy, BootstrapPolicyReloaded, Drain, DrainedAndStopped, Generation, IdentityName,
     IdentityRegistered, IdentityRetired, Operation as OwnerOperation, Registration,
@@ -52,8 +52,9 @@ impl SpiritRuntimeFixture {
 }
 
 fn accepted_identifier(reply: &persona_spirit::RootTextReply) -> RecordIdentifier {
-    let mut decoder = Decoder::new(reply.text());
-    let reply = WorkingReply::decode(&mut decoder).expect("reply decodes");
+    let reply = NotaSource::new(reply.text())
+        .parse::<WorkingReply>()
+        .expect("reply decodes");
     let WorkingReply::RecordAccepted(accepted) = reply else {
         panic!("expected RecordAccepted reply, got {reply:?}");
     };
@@ -61,9 +62,7 @@ fn accepted_identifier(reply: &persona_spirit::RootTextReply) -> RecordIdentifie
 }
 
 fn identifier_text(identifier: RecordIdentifier) -> String {
-    let mut encoder = Encoder::new();
-    identifier.encode(&mut encoder).expect("identifier encodes");
-    encoder.into_string()
+    identifier.to_nota()
 }
 
 fn assert_short_identifier(identifier: RecordIdentifier) {
@@ -125,8 +124,8 @@ async fn persona_spirit_ordinary_request_path_uses_signal_executor_and_sema_obse
             )),
             kind: signal_persona_spirit::Kind::Decision,
             description: signal_persona_spirit::Description::new("executor path"),
-            certainty: signal_sema::Magnitude::Maximum,
-            privacy: signal_sema::Magnitude::Zero,
+            certainty: signal_persona_spirit::Magnitude::Maximum,
+            privacy: signal_persona_spirit::Magnitude::Zero,
         }))
         .await
         .expect("entry accepted");
@@ -169,8 +168,8 @@ async fn persona_spirit_frame_request_observes_non_init_caller() {
         )),
         kind: signal_persona_spirit::Kind::Decision,
         description: signal_persona_spirit::Description::new("caller witness"),
-        certainty: signal_sema::Magnitude::Maximum,
-        privacy: signal_sema::Magnitude::Zero,
+        certainty: signal_persona_spirit::Magnitude::Maximum,
+        privacy: signal_persona_spirit::Magnitude::Zero,
     }))
     .with_caller(Some(Caller::new(ProcessIdentifier::new(42), None, None)));
 
@@ -206,7 +205,7 @@ async fn persona_spirit_record_observation_uses_read_plane_without_write_plane()
     assert_eq!(
         reply.text(),
         format!(
-            "(RecordsObserved [({} [workspace] Decision description Maximum Zero)])",
+            "(RecordsObserved [({} [workspace] Decision [description] Maximum Zero)])",
             identifier_text(identifier)
         )
     );
@@ -287,7 +286,7 @@ async fn persona_spirit_certainty_change_uses_write_plane() {
     assert_eq!(
         observed.text(),
         format!(
-            "(RecordsObserved [({} [workspace] Decision description Zero Zero)])",
+            "(RecordsObserved [({} [workspace] Decision [description] Zero Zero)])",
             identifier_text(identifier)
         )
     );
@@ -329,7 +328,7 @@ async fn persona_spirit_record_change_uses_write_plane_and_preserves_identifier(
     assert_eq!(
         observed.text(),
         format!(
-            "(RecordsObserved [({} [workspace message] Correction replacement High Zero)])",
+            "(RecordsObserved [({} [workspace message] Correction [replacement] High Zero)])",
             identifier_text(identifier)
         )
     );
@@ -445,7 +444,7 @@ async fn persona_spirit_topic_catalog_observation_uses_read_plane_without_write_
         .await
         .expect("topics observed");
 
-    assert_eq!(reply.text(), "(TopicsObserved [(naming 1) (spirit 2)])");
+    assert_eq!(reply.text(), "(TopicsObserved [([naming] 1) ([spirit] 2)])");
     assert!(
         reply
             .trace()

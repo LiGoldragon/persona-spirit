@@ -237,8 +237,8 @@ either a raw NOTA request record (argument begins with `(`) or a path to a NOTA
 request file, peeks the request record head, routes it through the generated
 `signal-frame::signal_cli!` table, and then decodes against the selected
 contract. Working requests become length-prefixed `signal-persona-spirit`
-frames on `PERSONA_SPIRIT_SOCKET`; owner requests become length-prefixed
-`owner-signal-persona-spirit` frames on `PERSONA_SPIRIT_OWNER_SOCKET`. The CLI
+frames on `PERSONA_SPIRIT_SOCKET`; meta policy requests become length-prefixed
+`owner-signal-persona-spirit` frames on `PERSONA_SPIRIT_META_SOCKET`. The CLI
 encodes the selected daemon reply back to NOTA. If the selected socket is not
 configured, the CLI fails instead of opening a store or running the actor tree
 in-process.
@@ -424,7 +424,7 @@ work today against the hand-written types.
 | The daemon binary accepts raw NOTA `DaemonConfiguration` or a path to a NOTA configuration file as its single argument. | `persona_spirit_daemon_accepts_configuration_file_path_argument` writes a configuration file and checks `DaemonRuntime::from_argument` loads it. |
 | The CLI routes request heads through generated working/owner contract metadata before full decode. | `persona_spirit_generated_dispatch_routes_working_and_owner_heads` and `persona_spirit_request_head_uses_generated_dispatch_before_full_decode` check the generated table. |
 | The CLI type-checks one selected contract request. | `tests/boundary.rs` checks valid working `State`, `Record`, and `Observe` requests and owner `Register` requests before daemon submission. |
-| The CLI requires the selected daemon socket instead of using an in-process store fallback. | `persona_spirit_binary_requires_socket_environment` runs a working request without `PERSONA_SPIRIT_SOCKET`; `persona_spirit_binary_requires_owner_socket_for_owner_requests` runs an owner request without `PERSONA_SPIRIT_OWNER_SOCKET`. |
+| The CLI requires the selected daemon socket instead of using an in-process store fallback. | `persona_spirit_binary_requires_socket_environment` runs a working request without `PERSONA_SPIRIT_SOCKET`; `persona_spirit_binary_requires_owner_socket_for_owner_requests` runs a meta policy request without `PERSONA_SPIRIT_META_SOCKET`. |
 | The CLI path only translates NOTA to Signal frames and Signal replies to NOTA. | `persona_spirit_command_line_path_does_not_use_actor_runtime_directly` checks `src/bin/spirit.rs` is a one-line `signal_frame::signal_cli!` invocation and does not mention `SpiritActorRuntime` or `StoreLocation`. |
 | The CLI accepts a path to a NOTA request file. | `persona_spirit_client_accepts_request_file_path_argument` writes a request file, invokes the same client path, and checks daemon-backed persistence. |
 | Spirit-local commands project to payloadless Sema operation labels. | `tests/sema_projection.rs` checks `Command::from_request` and `ToSemaOperation` through real actor-runtime requests. |
@@ -485,7 +485,7 @@ work today against the hand-written types.
 | Daemon shutdown removes all socket paths. | `persona_spirit_daemon_serves_signal_frames_through_actor_root` checks ordinary, owner, and upgrade sockets are removed after bounded serving. |
 | Signal-frame daemon ingress does not route through the NOTA decoder. | `persona_spirit_daemon_source_does_not_route_signal_frames_through_nota_decoder` checks the socket boundary calls `SubmitRequest`. |
 | The CLI acts as a daemon client without bypassing Signal. | `persona_spirit_client_can_send_nota_request_to_running_daemon` decodes NOTA then sends a Signal frame to the socket. |
-| The CLI can reach owner-only contract behavior through the owner socket. | `spirit_binary_routes_owner_request_to_owner_socket` sends `(Register (operator))` through `spirit` with only `PERSONA_SPIRIT_OWNER_SOCKET` configured. |
+| The CLI can reach meta policy contract behavior through the policy socket. | `spirit_binary_routes_owner_request_to_owner_socket` sends `(Register (operator))` through `spirit` with only `PERSONA_SPIRIT_META_SOCKET` configured. |
 | The flake exposes installable CLI and daemon packages separately. | `test-split-packages` checks `packages.spirit` contains only `spirit` and `packages.persona-spirit-daemon` contains only `persona-spirit-daemon`. |
 | No LLM classifier or mind-forwarding behavior exists until its intent is clear. | Status section says this explicitly. |
 
@@ -530,12 +530,12 @@ Implemented now:
 - repo scaffold;
 - daemon binary and `spirit` CLI binary names;
 - shared `signal-frame::SingleArgument` one-argument boundary parser;
-- one-line generated CLI head dispatch from the working and owner signal
+- one-line generated CLI head dispatch from the working and meta policy signal
   contracts through `signal_frame::signal_cli!(spirit, signal_persona_spirit)`;
 - typed CLI request decoding for `signal-persona-spirit::Operation` and
   `owner-signal-persona-spirit::Operation` from a raw NOTA argument or a NOTA
   request file path, using the shared signal-frame client;
-- CLI daemon-client mode that requires the selected working or owner socket,
+- CLI daemon-client mode that requires the selected working or meta policy socket,
   injects advisory `Caller` context, and performs only NOTA request decoding,
   signal-frame submission, and NOTA reply encoding;
 - provisional classifier for `State` statements that stores the text as one

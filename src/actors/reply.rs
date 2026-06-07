@@ -1,12 +1,12 @@
 use kameo::actor::{Actor, ActorRef};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
-use nota_codec::{Encoder, NotaEncode};
+use nota_next::NotaEncode;
 use signal_persona_spirit::{
     OperationKind, Reply as WorkingReply, RequestUnimplemented, UnimplementedReason,
 };
 
-use crate::{Error, Result};
+use crate::Result;
 
 use super::pipeline::PipelineReply;
 use super::trace::{ActorTrace, TraceAction, TraceNode};
@@ -98,11 +98,7 @@ impl ReplyTextEncoder {
 
     fn encode_reply(&self, reply: WorkingReply, mut trace: ActorTrace) -> Result<TextReply> {
         trace.record(TraceNode::REPLY_TEXT_ENCODER, TraceAction::MessageReceived);
-        let mut encoder = Encoder::new();
-        reply
-            .encode(&mut encoder)
-            .map_err(Error::invalid_spirit_reply)?;
-        let text = encoder.into_string();
+        let text = reply.to_nota();
         let _canonical = self.policy.canonical;
         trace.record(TraceNode::REPLY_TEXT_ENCODER, TraceAction::TextEncoded);
         Ok(TextReply::new(text, reply, trace))

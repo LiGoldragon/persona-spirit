@@ -1,8 +1,7 @@
 use kameo::actor::{Actor, ActorRef};
 use kameo::error::Infallible;
 use kameo::message::{Context as ActorContext, Message};
-use signal_persona_spirit::{Description, Entry, Kind, Statement, Topic, Topics};
-use signal_sema::Magnitude;
+use signal_persona_spirit::{Description, Entry, Kind, Magnitude, Statement, Topic, Topics};
 
 use super::trace::{ActorTrace, TraceAction, TraceNode};
 

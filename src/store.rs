@@ -878,10 +878,9 @@ impl RecordIdentifierCodeRange {
 #[cfg(test)]
 mod tests {
     use signal_persona_spirit::{
-        Description, Kind, OutputTarget, RecordChange, RecordedTimeRange,
+        Description, Kind, Magnitude, OutputTarget, RecordChange, RecordedTimeRange,
         RemovalCandidateCollection,
     };
-    use signal_sema::Magnitude;
 
     use super::*;
 

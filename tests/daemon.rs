@@ -6,7 +6,7 @@ use std::process::Command;
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use nota_codec::{Encoder, NotaEncode};
+use nota_next::NotaEncode;
 use owner_signal_persona_spirit::{
     BootstrapPolicy, BootstrapPolicyReloaded, Frame as OwnerFrame, FrameBody as OwnerFrameBody,
     Generation, IdentityName, IdentityRegistered, Operation as OwnerOperation, Registration,
@@ -29,11 +29,10 @@ use signal_frame::{
     RequestPayload, RetryClassification, SessionEpoch, SubReply,
 };
 use signal_persona_spirit::{
-    CertaintySelection, Date, Description, Entry, Frame, FrameBody, Kind, Observation,
+    CertaintySelection, Date, Description, Entry, Frame, FrameBody, Kind, Magnitude, Observation,
     ObservationMode, Operation as WorkingOperation, PublicRecordQuery, RecordIdentifier,
     Reply as WorkingReply, Statement, StatementText, Time, Topic, TopicSelection, Topics,
 };
-use signal_sema::Magnitude;
 use signal_version_handover::{
     HandoverAcceptance, HandoverFinalization, HandoverRejection, HandoverRejectionReason,
     MarkerRequest, Operation as UpgradeOperation, Reply as UpgradeReply,
@@ -242,12 +241,7 @@ fn working_request_frame(request: Request<WorkingOperation>) -> Frame {
 #[test]
 fn persona_spirit_daemon_configuration_is_one_nota_record() {
     let fixture = DaemonFixture::new("configuration");
-    let mut encoder = Encoder::new();
-    fixture
-        .configuration()
-        .encode(&mut encoder)
-        .expect("configuration encodes");
-    let text = encoder.into_string();
+    let text = fixture.configuration().to_nota();
 
     let configuration = DaemonConfiguration::from_text(&text).expect("configuration decodes");
 
@@ -265,11 +259,7 @@ fn persona_spirit_daemon_configuration_is_one_nota_record() {
 #[test]
 fn persona_spirit_daemon_accepts_configuration_file_path_argument() {
     let fixture = DaemonFixture::new("configuration-file-path");
-    let mut encoder = Encoder::new();
-    fixture
-        .configuration()
-        .encode(&mut encoder)
-        .expect("configuration encodes");
+    let text = fixture.configuration().to_nota();
     let mut path = std::env::temp_dir();
     path.push(format!(
         "persona-spirit-configuration-file-path-{}.nota",
@@ -278,7 +268,7 @@ fn persona_spirit_daemon_accepts_configuration_file_path_argument() {
             .expect("system clock after epoch")
             .as_nanos()
     ));
-    fs::write(&path, encoder.into_string()).expect("configuration file written");
+    fs::write(&path, text).expect("configuration file written");
 
     let argument = SingleArgument::from_arguments([
         "persona-spirit-daemon".to_string(),
@@ -1620,10 +1610,7 @@ fn spirit_binary_routes_owner_request_to_owner_socket() {
     let handle = thread::spawn(move || daemon.serve_owner_count(1));
 
     let output = Command::new(env!("CARGO_BIN_EXE_spirit"))
-        .env(
-            "PERSONA_SPIRIT_OWNER_SOCKET",
-            fixture.owner_socket.as_path(),
-        )
+        .env("PERSONA_SPIRIT_META_SOCKET", fixture.owner_socket.as_path())
         .env_remove("PERSONA_SPIRIT_SOCKET")
         .arg("(Register (operator))")
         .output()
@@ -1640,6 +1627,6 @@ fn spirit_binary_routes_owner_request_to_owner_socket() {
     );
     assert_eq!(
         String::from_utf8_lossy(&output.stdout).trim(),
-        "(IdentityRegistered (operator))"
+        "(IdentityRegistered ([operator]))"
     );
 }

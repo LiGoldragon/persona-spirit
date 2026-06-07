@@ -2,7 +2,7 @@ use std::fs;
 use std::process::{Command, Output};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use nota_codec::{Decoder, Encoder, NotaDecode, NotaEncode};
+use nota_next::{NotaEncode, NotaSource};
 use persona_spirit::{
     DaemonConfiguration, DaemonRuntime, Error, SocketMode, SocketPath, StorePath,
 };
@@ -86,7 +86,7 @@ impl StoreFixture {
         let handle = std::thread::spawn(move || daemon.serve_count(1));
         let output = Command::new(env!("CARGO_BIN_EXE_spirit"))
             .env("PERSONA_SPIRIT_SOCKET", self.ordinary_socket.as_path())
-            .env_remove("PERSONA_SPIRIT_OWNER_SOCKET")
+            .env_remove("PERSONA_SPIRIT_META_SOCKET")
             .arg(text)
             .output()
             .expect("binary runs");
@@ -99,8 +99,9 @@ impl StoreFixture {
 }
 
 fn accepted_identifier(reply: &str) -> RecordIdentifier {
-    let mut decoder = Decoder::new(reply);
-    let reply = WorkingReply::decode(&mut decoder).expect("reply decodes");
+    let reply = NotaSource::new(reply)
+        .parse::<WorkingReply>()
+        .expect("reply decodes");
     let WorkingReply::RecordAccepted(accepted) = reply else {
         panic!("expected RecordAccepted reply, got {reply:?}");
     };
@@ -112,9 +113,7 @@ fn accepted_identifier_text(reply: &str) -> String {
 }
 
 fn identifier_text(identifier: RecordIdentifier) -> String {
-    let mut encoder = Encoder::new();
-    identifier.encode(&mut encoder).expect("identifier encodes");
-    encoder.into_string()
+    identifier.to_nota()
 }
 
 fn assert_record_accepted(reply: &str) -> RecordIdentifier {
@@ -205,14 +204,14 @@ fn persona_spirit_binary_requires_socket_environment() {
 fn persona_spirit_binary_requires_owner_socket_for_owner_requests() {
     let output = Command::new(env!("CARGO_BIN_EXE_spirit"))
         .env("PERSONA_SPIRIT_SOCKET", "/tmp/persona-spirit-unused.sock")
-        .env_remove("PERSONA_SPIRIT_OWNER_SOCKET")
+        .env_remove("PERSONA_SPIRIT_META_SOCKET")
         .arg("(Register (operator))")
         .output()
         .expect("binary runs");
 
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("missing socket environment variable PERSONA_SPIRIT_OWNER_SOCKET"));
+    assert!(stderr.contains("missing socket environment variable PERSONA_SPIRIT_META_SOCKET"));
 }
 
 #[test]
@@ -230,11 +229,8 @@ fn persona_spirit_generated_dispatch_routes_working_and_owner_heads() {
         dispatch.route_head("Observe"),
         Ok(CommandLineSocket::Working)
     );
-    assert_eq!(
-        dispatch.route_head("Register"),
-        Ok(CommandLineSocket::Owner)
-    );
-    assert_eq!(dispatch.route_head("Start"), Ok(CommandLineSocket::Owner));
+    assert_eq!(dispatch.route_head("Register"), Ok(CommandLineSocket::Meta));
+    assert_eq!(dispatch.route_head("Start"), Ok(CommandLineSocket::Meta));
     assert!(dispatch.route_head("Unknown").is_err());
 }
 
@@ -250,7 +246,7 @@ fn persona_spirit_request_head_uses_generated_dispatch_before_full_decode() {
     );
     assert_eq!(
         owner.route::<signal_persona_spirit::Operation, owner_signal_persona_spirit::Operation>(),
-        Ok(CommandLineSocket::Owner)
+        Ok(CommandLineSocket::Meta)
     );
 }
 
@@ -384,7 +380,11 @@ fn persona_spirit_client_rejects_identifier_range_after_random_identifiers() {
         .reply_text("(Observe (RecordIdentifiers ((Range (2 3)) SummaryOnly)))")
         .expect_err("identifier range no longer decodes");
 
-    assert!(error.to_string().contains("unknown variant `Range`"));
+    assert!(
+        error
+            .to_string()
+            .contains("unknown RecordIdentifierSelection variant Range")
+    );
 }
 
 #[test]
@@ -945,7 +945,7 @@ fn persona_spirit_client_lists_topics_with_entry_counts() {
         .reply_text("(Observe Topics)")
         .expect("topics observed");
 
-    assert_eq!(reply, "(TopicsObserved [(naming 1) (spirit 2)])");
+    assert_eq!(reply, "(TopicsObserved [([naming] 1) ([spirit] 2)])");
 }
 
 #[test]
@@ -965,7 +965,7 @@ fn persona_spirit_client_hides_private_records_from_topic_counts() {
         .reply_text("(Observe Topics)")
         .expect("topics observed");
 
-    assert_eq!(reply, "(TopicsObserved [(naming 1) (spirit 1)])");
+    assert_eq!(reply, "(TopicsObserved [([naming] 1) ([spirit] 1)])");
 }
 
 #[test]
@@ -982,7 +982,7 @@ fn persona_spirit_client_counts_topic_memberships() {
         .reply_text("(Observe Topics)")
         .expect("topics observed");
 
-    assert_eq!(reply, "(TopicsObserved [(nota 1) (spirit 2)])");
+    assert_eq!(reply, "(TopicsObserved [([nota] 1) ([spirit] 2)])");
 }
 
 #[test]
