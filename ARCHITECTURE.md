@@ -123,7 +123,7 @@ flowchart LR
     classifier["ClassifierPlane"]
     clock["ClockPlane"]
     dispatch["DispatchPhase"]
-    executor["SignalExecutor"]
+    executor["NexusRunner"]
     observer["SemaObserver"]
     state["StatePlane"]
     subscription["SubscriptionPlane"]
@@ -157,9 +157,10 @@ ingress or dispatch path. `PolicyPlane` owns bootstrap-policy parsing and
 reload state. `ClassifierPlane` owns the current conservative statement-to-record
 policy. `ClockPlane` owns daemon-side capture-time stamping; clients never
 submit capture time. `DispatchPhase` is the boundary where ordinary operations
-enter `signal-executor`: it lowers contract operations into Spirit-local
-`Command` values, executes them through the Kameo planes, and publishes
-payloadless `signal-sema` observations after successful execution. `RecordStore`
+enter the `triad-runtime` Nexus runner: it lowers contract operations into
+Spirit-local `Command` values, routes them through the runner's SEMA read/write
+steps and the existing Kameo planes, and publishes payloadless `signal-sema`
+observations after successful execution. `RecordStore`
 owns `SpiritStore`, which owns the sema-engine handle. It runs as the store
 plane.
 `StatePlane` owns current psyche state and pending clarification questions.
@@ -313,7 +314,7 @@ Its `.schema` file declares two enums plus a universal variant:
   (FanOutTargets [
     (RecordWriteEffect [
       (Store SpiritStorage InsertStampedEntry)
-      (Notify ObserverSet PublishRecordCaptured)
+      (Notify SemaObserver PublishRecordCaptured)
       (Reply RecordAccepted)
     ])
   ])
@@ -430,9 +431,9 @@ work today against the hand-written types.
 | Spirit-local commands project to payloadless Sema operation labels. | `tests/sema_projection.rs` checks `Command::from_request` and `ToSemaOperation` through real actor-runtime requests. |
 | Spirit-local effects project to payloadless Sema outcome labels. | `tests/sema_projection.rs` checks `Effect::from_reply`, `ToSemaOutcome`, and `SemaObservation` after real actor-runtime replies. |
 | Sema observations do not carry Spirit payloads. | `tests/sema_projection.rs` expects only `SemaOperation` plus `SemaOutcome` for assert, match, subscribe, and retract paths. |
-| Ordinary requests execute through `signal-executor`, not a hand-rolled request match. | `persona_spirit_ordinary_request_path_uses_signal_executor_and_sema_observer` and `persona_spirit_dispatch_path_depends_on_signal_executor` check runtime trace and source dependency. |
+| Ordinary requests execute through the `triad-runtime` Nexus runner, not a hand-rolled request match. | `persona_spirit_ordinary_request_path_uses_nexus_runner_and_sema_observer` and `persona_spirit_dispatch_path_depends_on_triad_runner` check runtime trace and source dependency. |
 | Multi-operation ordinary batches do not pretend to be atomic until the store supports atomic batch execution. | `persona_spirit_daemon_rejects_multi_operation_batches_before_any_commit` expects `BatchAborted` with `NotCommitted` and an empty later query. |
-| Spirit's current atomicity is degenerate: one operation lowers to one command, and multi-operation batches or multi-command operation plans are rejected before any command runs. | `persona_spirit_daemon_rejects_multi_operation_batches_before_any_commit` verifies batch rejection-before-commit; `spirit_rejects_multi_command_operation_plan_before_execution` verifies multi-command plans cannot execute sequentially without a transaction. |
+| Spirit's current atomicity is degenerate: one accepted Signal request carries one operation and routes to one local command. | `persona_spirit_daemon_rejects_multi_operation_batches_before_any_commit` verifies batch rejection-before-commit; `spirit_routes_read_commands_to_sema_read_step` and `spirit_routes_write_commands_to_sema_write_step` verify the runner split. |
 | Accepted no-change paths still project through explicit Spirit-local commands. | `spirit_unimplemented_observer_operations_project_as_explicit_no_change_commands` checks valid-but-unimplemented `Tap` / `Untap` requests become `Subscribe` / `Retract` commands with `NoChange` outcomes. |
 | Kameo is the only actor runtime dependency. | `persona_spirit_uses_kameo_as_only_actor_runtime` scans the manifest. |
 | Actor types are data-bearing, not public zero-sized actor nouns. | `persona_spirit_actor_types_are_data_bearing` checks each named actor has a struct body. |
@@ -441,7 +442,7 @@ work today against the hand-written types.
 | `Record` operations traverse root, ingress, decoder, dispatch, daemon clock, store, sema writer, and reply encoder. | `persona_spirit_entry_assertion_runs_through_actor_planes` checks `ActorTrace` ordering. |
 | `Record` operations persist a top-level record. | `persona_spirit_client_asserts_entry_and_mints_record_identifier` checks `RecordAccepted`. |
 | Submitted `Entry` records carry no client-provided capture time and no verbatim payload. | `persona_spirit_client_asserts_entry_and_mints_record_identifier` submits only topics, kind, description, and certainty; `persona_spirit_client_rejects_opaque_integer_timestamp_shape` and `persona_spirit_client_rejects_parenthesized_date_time_shape` reject old timestamp-bearing shapes. |
-| The daemon stamps capture time before storage. | `persona_spirit_ordinary_request_path_uses_signal_executor_and_sema_observer` checks `ClockPlane` and `EntryStamped`; provenance replies include daemon-produced `Date` and `Time`. |
+| The daemon stamps capture time before storage. | `persona_spirit_ordinary_request_path_uses_nexus_runner_and_sema_observer` checks `ClockPlane` and `EntryStamped`; provenance replies include daemon-produced `Date` and `Time`. |
 | Spirit mints `RecordIdentifier`; agents never submit it. | `persona_spirit_client_asserts_entry_and_mints_record_identifier` sends no identifier and receives one. |
 | Repeated similar entries remain distinct records. | `persona_spirit_client_repeated_entries_remain_distinct_records` stores two matching descriptions. |
 | Record observations use the read plane and not the write plane. | `persona_spirit_record_observation_uses_read_plane_without_write_plane` checks `SemaReader` without `SemaWriter`. |
@@ -505,7 +506,7 @@ src/actors/policy.rs               — bootstrap-policy parsing and reload actor
 src/actors/decoder.rs              — strict NOTA request decoder actor
 src/actors/classifier.rs           — conservative statement-to-record classifier actor
 src/actors/clock.rs                — daemon-side capture-time stamping actor
-src/actors/dispatch.rs             — request dispatch actor; signal-executor lowering, command execution, and Sema observation publication
+src/actors/dispatch.rs             — request dispatch actor; Nexus runner lowering, command execution, and Sema observation publication
 src/actors/state.rs                — psyche-state and pending-question working-state actor
 src/actors/subscription.rs         — subscription token and stream registration actor
 src/actors/store.rs                — sema-engine store actor
@@ -551,7 +552,7 @@ Implemented now:
   private upgrade socket for handover marker, readiness, and completion;
 - CLI socket-client mode for a running daemon;
 - actor trace witnesses for root, ingress, decode, dispatch, store, sema
-  writer/reader, signal-executor, signal-sema observer, working state, reply
+  writer/reader, Nexus runner, signal-sema observer, working state, reply
   shaping, and reply encoding;
 - sema-engine backed `Record` operation;
 - sema-engine backed `Remove` operation returning `RecordRemoved`;
@@ -571,9 +572,8 @@ Implemented now:
 - dependency on the ordinary and meta spirit contracts.
 - local `Command` / `Effect` projection into payloadless
   `signal-sema::SemaObservation` labels, tested through the actor runtime;
-- ordinary request execution through `signal-executor::Executor`, with the
-  existing Kameo planes serving as Spirit's component-local
-  `CommandExecutor`.
+- ordinary request execution through `triad-runtime::Runner`, with the
+  existing Kameo planes serving as Spirit's component-local execution bodies.
 - split Nix packages: `packages.spirit` / default for the CLI,
   `packages.persona-spirit-daemon` for the daemon, and `packages.full` for the
   complete build product.

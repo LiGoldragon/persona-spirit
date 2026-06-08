@@ -66,7 +66,7 @@ fn effect_event_for(request: WorkingOperation, reply: WorkingReply) -> EffectEmi
 
 fn assert_runtime_projection_trace(trace: &persona_spirit::ActorTrace) {
     assert!(trace.contains_action(
-        persona_spirit::TraceNode::SIGNAL_EXECUTOR,
+        persona_spirit::TraceNode::NEXUS_RUNNER,
         persona_spirit::TraceAction::OperationReceived
     ));
     assert!(trace.contains_action(

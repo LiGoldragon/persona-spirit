@@ -53,13 +53,13 @@ rkyv                        = { version = "0.8", default-features = false, featu
 sema                        = { git = "https://github.com/LiGoldragon/sema.git", branch = "main" }
 sema-engine                 = { git = "https://github.com/LiGoldragon/sema-engine.git", branch = "main" }
 signal-frame                     = { git = "https://github.com/LiGoldragon/signal-frame.git", branch = "main" }
-signal-executor                  = { git = "https://github.com/LiGoldragon/signal-executor.git", branch = "main" }
 signal-engine-management         = { git = "https://github.com/LiGoldragon/signal-engine-management.git", branch = "main" }
 signal-spirit                    = { git = "https://github.com/LiGoldragon/signal-spirit.git", branch = "main", features = ["nota-text"] }
 signal-sema                      = { git = "https://github.com/LiGoldragon/signal-sema.git", branch = "main" }
 signal-version-handover          = { git = "https://github.com/LiGoldragon/signal-version-handover.git", branch = "main" }
 thiserror                        = "2"
 tokio                            = { version = "1", default-features = false, features = ["macros", "rt-multi-thread"] }
+triad-runtime                    = { git = "https://github.com/LiGoldragon/triad-runtime.git", branch = "main" }
 unix-ancillary                   = "0.2"
 version-projection               = { git = "https://github.com/LiGoldragon/version-projection.git", branch = "main" }
 

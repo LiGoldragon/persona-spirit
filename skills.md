@@ -53,14 +53,15 @@ currently named `meta-signal-spirit`.
   `PERSONA_SPIRIT_META_SOCKET` configures the meta policy socket.
 - Signal-frame ingress submits typed requests directly to `SpiritRoot`; it does
   not go back through the NOTA decoder actor.
-- Ordinary request execution passes through `signal-executor`: dispatch lowers
-  the working contract operation into Spirit-local `Command`, executes through the Kameo actor
-  planes as `CommandExecutor`, and publishes `signal-sema` observations.
-- Spirit's current `CommandExecutor` implementation is degenerate-atomic:
-  each accepted operation lowers to one command, and multi-operation batches
-  and multi-command operation plans are rejected before any command runs. A
-  future multi-command operation must add a real transaction boundary before
-  it lands.
+- Ordinary request execution passes through the `triad-runtime` Nexus runner:
+  dispatch lowers the working contract operation into a Spirit-local
+  `Command`, the runner routes read-like commands through its SEMA-read step
+  and write-like commands through its SEMA-write step, and successful effects
+  still publish `signal-sema` observations.
+- Spirit's current request atomicity is degenerate: each accepted Signal
+  request must carry exactly one operation. Multi-operation batches are
+  rejected before any command runs. A future multi-operation request must add
+  a real transaction boundary before it lands.
 - The ordinary socket rejects meta policy frames; the meta policy socket rejects
   ordinary frames.
 - Each named actor is data-bearing. Do not add public zero-sized actor nouns.

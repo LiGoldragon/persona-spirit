@@ -3,14 +3,14 @@ use std::sync::{Arc, Mutex};
 use kameo::actor::{Actor, ActorRef};
 use kameo::error::{Infallible, SendError};
 use kameo::message::{Context, Message};
-use signal_executor::{
-    BatchEffects, BatchPlan, CommandEffect, CommandExecutor, Executor, Lowering, ObserverChannel,
-    ObserverSet, OperationEffects, OperationPlan,
-};
-use signal_frame::{NonEmpty, Request};
+use signal_frame::{BatchErrorClassification, NonEmpty, Reply as FrameReply, Request, SubReply};
+use signal_sema::{SemaOperation, ToSemaOperation};
 use signal_spirit::{
     EffectEmitted, Operation as WorkingOperation, OperationKind, OperationReceived,
     RecordObservation, Reply as WorkingReply, RequestUnimplemented, UnimplementedReason,
+};
+use triad_runtime::{
+    ContinuationExhausted, NextStep, NexusAction as TriadNexusAction, Runner, RunnerEngines,
 };
 
 use crate::observation::{
@@ -62,10 +62,42 @@ struct SharedTrace {
     trace: Arc<Mutex<ActorTrace>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct SpiritLowering;
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SpiritCommandEffect {
+    command: Command,
+    effect: Effect,
+}
 
-struct SpiritCommandExecutor {
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum SpiritSemaWriteInput {
+    Execute(Command),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum SpiritSemaReadInput {
+    Execute(Command),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum SpiritSemaOutput {
+    Completed(SpiritCommandEffect),
+    Rejected,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum SpiritNexusWork {
+    SignalArrived(WorkingOperation),
+    SemaCompleted(SpiritSemaOutput),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum SpiritNexusAction {
+    CommandSemaWrite(SpiritSemaWriteInput),
+    CommandSemaRead(SpiritSemaReadInput),
+    ReplyToSignal(WorkingReply),
+}
+
+struct SpiritRuntimeEngines {
     classifier: ActorRef<classifier::ClassifierPlane>,
     clock: ActorRef<clock::ClockPlane>,
     store: ActorRef<store::RecordStore>,
@@ -73,10 +105,7 @@ struct SpiritCommandExecutor {
     subscription: ActorRef<subscription::SubscriptionPlane>,
     reply: ActorRef<reply::ReplyShaper>,
     trace: SharedTrace,
-}
-
-struct SpiritObserverRecorder {
-    trace: SharedTrace,
+    last_error: Option<Error>,
 }
 
 impl DispatchPhase {
@@ -111,7 +140,14 @@ impl DispatchPhase {
     ) -> Result<FramePipelineReply> {
         let trace = SharedTrace::new(trace);
         trace.record(TraceNode::DISPATCH_PHASE, TraceAction::MessageReceived);
-        let command_executor = SpiritCommandExecutor::new(
+        let operation_count = request.payloads().len();
+        if operation_count != 1 {
+            let error = Error::UnsupportedAtomicBatch { operation_count };
+            let reply = Self::batch_aborted_reply(&error, operation_count);
+            return Ok(FramePipelineReply::new(reply, trace.snapshot()));
+        }
+        let operation = request.payloads.into_head();
+        let mut engines = SpiritRuntimeEngines::new(
             self.classifier.clone(),
             self.clock.clone(),
             self.store.clone(),
@@ -120,11 +156,27 @@ impl DispatchPhase {
             self.reply.clone(),
             trace.clone(),
         );
-        let observer = SpiritObserverRecorder::new(trace.clone());
-        let observers = ObserverSet::new(observer);
-        let mut executor = Executor::new(SpiritLowering, command_executor, observers);
-        let reply = executor.execute(request).await;
+        let signal_reply = Runner::default()
+            .drive(&mut engines, SpiritNexusWork::SignalArrived(operation))
+            .await;
+        let reply = match engines.take_last_error() {
+            Some(error) => Self::batch_aborted_reply(&error, operation_count),
+            None => FrameReply::committed(NonEmpty::single(SubReply::Ok(signal_reply))),
+        };
         Ok(FramePipelineReply::new(reply, trace.snapshot()))
+    }
+
+    fn batch_aborted_reply(error: &Error, operation_count: usize) -> FrameReply<WorkingReply> {
+        let mut per_operation = NonEmpty::single(SubReply::Invalidated);
+        for _ in 1..operation_count {
+            per_operation.push(SubReply::Invalidated);
+        }
+        FrameReply::batch_aborted(
+            error.batch_failure_reason(),
+            error.retry_classification(),
+            error.commit_status(),
+            per_operation,
+        )
     }
 }
 
@@ -157,47 +209,43 @@ impl SharedTrace {
     }
 }
 
-impl SpiritLowering {
-    fn unimplemented_reply(_operation: &WorkingOperation) -> WorkingReply {
-        WorkingReply::RequestUnimplemented(RequestUnimplemented {
-            reason: UnimplementedReason::IntegrationNotLanded,
-        })
+impl SpiritCommandEffect {
+    fn new(command: Command, effect: Effect) -> Self {
+        Self { command, effect }
+    }
+
+    fn command(&self) -> &Command {
+        &self.command
+    }
+
+    fn effect(&self) -> &Effect {
+        &self.effect
     }
 }
 
-impl Lowering for SpiritLowering {
-    type Operation = WorkingOperation;
+impl triad_runtime::SemaWriteInput for SpiritSemaWriteInput {}
+
+impl triad_runtime::SemaReadInput for SpiritSemaReadInput {}
+
+impl triad_runtime::NexusWork for SpiritNexusWork {}
+
+impl TriadNexusAction for SpiritNexusAction {
     type Reply = WorkingReply;
-    type Command = Command;
-    type ComponentEffect = Effect;
+    type SemaWrite = SpiritSemaWriteInput;
+    type SemaRead = SpiritSemaReadInput;
+    type Effect = std::convert::Infallible;
+    type Work = SpiritNexusWork;
 
-    fn lower(
-        &self,
-        operation: &Self::Operation,
-    ) -> std::result::Result<OperationPlan<Command>, WorkingReply> {
-        Command::from_request(operation.clone())
-            .map(OperationPlan::single)
-            .ok_or_else(|| Self::unimplemented_reply(operation))
-    }
-
-    fn reply_from_effects(
-        &self,
-        _operation: &Self::Operation,
-        effects: &OperationEffects<Command, Effect>,
-    ) -> WorkingReply {
-        // Spirit currently lowers each operation to a one-command plan.
-        // If an operation grows a multi-command pipeline, the final
-        // command effect is the canonical reply by convention.
-        effects
-            .component_effects()
-            .last()
-            .expect("persona-spirit operation effects are non-empty")
-            .clone()
-            .into_reply()
+    fn into_next_step(self) -> triad_runtime::NexusActionNextStep<Self> {
+        match self {
+            Self::CommandSemaWrite(input) => NextStep::SemaWrite(input),
+            Self::CommandSemaRead(input) => NextStep::SemaRead(input),
+            Self::ReplyToSignal(reply) => NextStep::Reply(reply),
+        }
     }
 }
 
-impl SpiritCommandExecutor {
+impl SpiritRuntimeEngines {
     fn new(
         classifier: ActorRef<classifier::ClassifierPlane>,
         clock: ActorRef<clock::ClockPlane>,
@@ -215,28 +263,56 @@ impl SpiritCommandExecutor {
             subscription,
             reply,
             trace,
+            last_error: None,
         }
     }
 
-    async fn execute_operation_plan(
-        &self,
-        plan: OperationPlan<Command>,
-    ) -> Result<OperationEffects<Command, Effect>> {
-        let command = Self::single_command_from_operation_plan(plan)?;
-        let effect = self.execute_command(command).await?;
-        Ok(OperationEffects::new(NonEmpty::single(effect)))
+    fn take_last_error(&mut self) -> Option<Error> {
+        self.last_error.take()
     }
 
-    fn single_command_from_operation_plan(plan: OperationPlan<Command>) -> Result<Command> {
-        let commands = plan.into_commands();
-        let command_count = commands.len();
-        if command_count != 1 {
-            return Err(Error::UnsupportedAtomicOperationPlan { command_count });
+    fn action_for_signal(&self, operation: WorkingOperation) -> SpiritNexusAction {
+        let Some(command) = Command::from_request(operation.clone()) else {
+            return SpiritNexusAction::ReplyToSignal(Self::unimplemented_reply(&operation));
+        };
+        self.publish_operation_received(&operation);
+        Self::action_for_command(command)
+    }
+
+    fn action_for_command(command: Command) -> SpiritNexusAction {
+        match command.to_sema_operation() {
+            SemaOperation::Match => {
+                SpiritNexusAction::CommandSemaRead(SpiritSemaReadInput::Execute(command))
+            }
+            _ => SpiritNexusAction::CommandSemaWrite(SpiritSemaWriteInput::Execute(command)),
         }
-        Ok(commands.into_head())
     }
 
-    async fn execute_command(&self, command: Command) -> Result<CommandEffect<Command, Effect>> {
+    fn action_for_sema_output(&self, output: SpiritSemaOutput) -> SpiritNexusAction {
+        match output {
+            SpiritSemaOutput::Completed(effect) => {
+                self.publish_effect_emitted(&effect);
+                SpiritNexusAction::ReplyToSignal(effect.effect().clone().into_reply())
+            }
+            SpiritSemaOutput::Rejected => {
+                SpiritNexusAction::ReplyToSignal(Self::unimplemented_reply_for_engine_failure())
+            }
+        }
+    }
+
+    fn unimplemented_reply(_operation: &WorkingOperation) -> WorkingReply {
+        WorkingReply::RequestUnimplemented(RequestUnimplemented {
+            reason: UnimplementedReason::IntegrationNotLanded,
+        })
+    }
+
+    fn unimplemented_reply_for_engine_failure() -> WorkingReply {
+        WorkingReply::RequestUnimplemented(RequestUnimplemented {
+            reason: UnimplementedReason::IntegrationNotLanded,
+        })
+    }
+
+    async fn execute_command(&self, command: Command) -> Result<SpiritCommandEffect> {
         let reply = match command.clone() {
             Command::ClassifyStatement(statement) => self.classify_statement(statement).await?,
             Command::AssertEntry(entry) => self.capture_entry(entry).await?,
@@ -268,7 +344,7 @@ impl SpiritCommandExecutor {
                 self.shape_unimplemented(OperationKind::Untap).await?
             }
         };
-        Ok(CommandEffect::new(command, Effect::from_reply(reply)))
+        Ok(SpiritCommandEffect::new(command, Effect::from_reply(reply)))
     }
 
     async fn capture_entry(&self, entry: signal_spirit::Entry) -> Result<WorkingReply> {
@@ -550,54 +626,75 @@ impl SpiritCommandExecutor {
     fn reply_send_error<Message>(error: SendError<Message, Infallible>) -> Error {
         Error::actor_runtime(error.to_string())
     }
-}
 
-impl CommandExecutor for SpiritCommandExecutor {
-    type Command = Command;
-    type ComponentEffect = Effect;
-    type Error = Error;
-
-    async fn execute_atomic_batch(
-        &mut self,
-        plan: BatchPlan<Self::Command>,
-    ) -> Result<BatchEffects<Self::Command, Self::ComponentEffect>> {
-        // Degenerate atomicity: today's Spirit lowering must emit exactly
-        // one operation plan per request and exactly one command per plan.
-        // Multi-operation batches and multi-command plans are rejected
-        // before any command runs, so the single committed command is the
-        // whole atomic unit.
-        let operation_count = plan.operations().len();
-        if operation_count != 1 {
-            return Err(Error::UnsupportedAtomicBatch { operation_count });
-        }
-        let operation = plan.into_operations().into_head();
-        let effects = self.execute_operation_plan(operation).await?;
-        Ok(BatchEffects::single(effects))
-    }
-}
-
-impl SpiritObserverRecorder {
-    fn new(trace: SharedTrace) -> Self {
-        Self { trace }
-    }
-}
-
-impl ObserverChannel<WorkingOperation, CommandEffect<Command, Effect>> for SpiritObserverRecorder {
     fn publish_operation_received(&self, operation: &WorkingOperation) {
         let _event = OperationReceived {
             operation: operation.kind(),
         };
         self.trace
-            .record(TraceNode::SIGNAL_EXECUTOR, TraceAction::OperationReceived);
+            .record(TraceNode::NEXUS_RUNNER, TraceAction::OperationReceived);
     }
 
-    fn publish_effect_emitted(&self, effect: &CommandEffect<Command, Effect>) {
+    fn publish_effect_emitted(&self, effect: &SpiritCommandEffect) {
         let _event = EffectEmitted {
             operation: effect.command().operation_kind(),
             outcome: effect.effect().outcome(),
         };
         self.trace
             .record(TraceNode::SEMA_OBSERVER, TraceAction::ObservationProjected);
+    }
+}
+
+impl RunnerEngines for SpiritRuntimeEngines {
+    type Reply = WorkingReply;
+    type SemaWrite = SpiritSemaWriteInput;
+    type SemaRead = SpiritSemaReadInput;
+    type Effect = std::convert::Infallible;
+    type Work = SpiritNexusWork;
+
+    fn decide_next_step(
+        &mut self,
+        work: Self::Work,
+    ) -> NextStep<Self::Reply, Self::SemaWrite, Self::SemaRead, Self::Effect, Self::Work> {
+        let action = match work {
+            SpiritNexusWork::SignalArrived(operation) => self.action_for_signal(operation),
+            SpiritNexusWork::SemaCompleted(output) => self.action_for_sema_output(output),
+        };
+        TriadNexusAction::into_next_step(action)
+    }
+
+    async fn apply_sema_write(&mut self, input: Self::SemaWrite) -> Self::Work {
+        let output = match input {
+            SpiritSemaWriteInput::Execute(command) => match self.execute_command(command).await {
+                Ok(effect) => SpiritSemaOutput::Completed(effect),
+                Err(error) => {
+                    self.last_error = Some(error);
+                    SpiritSemaOutput::Rejected
+                }
+            },
+        };
+        SpiritNexusWork::SemaCompleted(output)
+    }
+
+    async fn observe_sema_read(&mut self, input: Self::SemaRead) -> Self::Work {
+        let output = match input {
+            SpiritSemaReadInput::Execute(command) => match self.execute_command(command).await {
+                Ok(effect) => SpiritSemaOutput::Completed(effect),
+                Err(error) => {
+                    self.last_error = Some(error);
+                    SpiritSemaOutput::Rejected
+                }
+            },
+        };
+        SpiritNexusWork::SemaCompleted(output)
+    }
+
+    async fn run_effect(&mut self, effect: Self::Effect) -> Self::Work {
+        match effect {}
+    }
+
+    fn budget_exhausted_reply(&self, _exhausted: ContinuationExhausted) -> Self::Reply {
+        Self::unimplemented_reply_for_engine_failure()
     }
 }
 
@@ -646,33 +743,26 @@ impl Message<RouteFrameRequest> for DispatchPhase {
 
 #[cfg(test)]
 mod tests {
-    use signal_frame::NonEmpty;
-
     use super::*;
 
     #[test]
-    fn spirit_rejects_multi_command_operation_plan_before_execution() {
-        let plan = OperationPlan::new(NonEmpty::from_head_and_tail(
-            Command::ReadState,
-            vec![Command::ReadQuestions],
-        ));
+    fn spirit_routes_read_commands_to_sema_read_step() {
+        let action = SpiritRuntimeEngines::action_for_command(Command::ReadState);
 
-        let error = SpiritCommandExecutor::single_command_from_operation_plan(plan)
-            .expect_err("multi-command plan is rejected");
-
-        assert_eq!(
-            error,
-            Error::UnsupportedAtomicOperationPlan { command_count: 2 }
-        );
+        assert!(matches!(action, SpiritNexusAction::CommandSemaRead(_)));
     }
 
     #[test]
-    fn spirit_accepts_single_command_operation_plan_as_degenerate_atomic_unit() {
-        let plan = OperationPlan::single(Command::ReadState);
+    fn spirit_routes_write_commands_to_sema_write_step() {
+        let action =
+            SpiritRuntimeEngines::action_for_command(Command::AssertEntry(signal_spirit::Entry {
+                topics: signal_spirit::Topics::single(signal_spirit::Topic::new("workspace")),
+                kind: signal_spirit::Kind::Decision,
+                description: signal_spirit::Description::new("runner command"),
+                certainty: signal_spirit::Magnitude::High,
+                privacy: signal_spirit::Magnitude::Zero,
+            }));
 
-        let command = SpiritCommandExecutor::single_command_from_operation_plan(plan)
-            .expect("single command plan is accepted");
-
-        assert_eq!(command, Command::ReadState);
+        assert!(matches!(action, SpiritNexusAction::CommandSemaWrite(_)));
     }
 }

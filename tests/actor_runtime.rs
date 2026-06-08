@@ -95,7 +95,7 @@ async fn persona_spirit_entry_assertion_runs_through_actor_planes() {
         TraceNode::INGRESS_PHASE,
         TraceNode::NOTA_DECODER,
         TraceNode::DISPATCH_PHASE,
-        TraceNode::SIGNAL_EXECUTOR,
+        TraceNode::NEXUS_RUNNER,
         TraceNode::CLOCK_PLANE,
         TraceNode::RECORD_STORE,
         TraceNode::SEMA_WRITER,
@@ -113,15 +113,15 @@ async fn persona_spirit_entry_assertion_runs_through_actor_planes() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn persona_spirit_ordinary_request_path_uses_signal_executor_and_sema_observer() {
-    let fixture = SpiritRuntimeFixture::new("signal-executor-path");
+async fn persona_spirit_ordinary_request_path_uses_nexus_runner_and_sema_observer() {
+    let fixture = SpiritRuntimeFixture::new("nexus-runner-path");
     let runtime = fixture.runtime().await;
 
     let reply = runtime
         .submit_request(WorkingOperation::Record(signal_spirit::Entry {
             topics: signal_spirit::Topics::single(signal_spirit::Topic::new("workspace")),
             kind: signal_spirit::Kind::Decision,
-            description: signal_spirit::Description::new("executor path"),
+            description: signal_spirit::Description::new("runner path"),
             certainty: signal_spirit::Magnitude::Maximum,
             privacy: signal_spirit::Magnitude::Zero,
         }))
@@ -131,7 +131,7 @@ async fn persona_spirit_ordinary_request_path_uses_signal_executor_and_sema_obse
     assert!(
         reply
             .trace()
-            .contains_action(TraceNode::SIGNAL_EXECUTOR, TraceAction::OperationReceived)
+            .contains_action(TraceNode::NEXUS_RUNNER, TraceAction::OperationReceived)
     );
     assert!(
         reply
@@ -145,7 +145,7 @@ async fn persona_spirit_ordinary_request_path_uses_signal_executor_and_sema_obse
     );
     assert!(reply.trace().contains_ordered(&[
         TraceNode::DISPATCH_PHASE,
-        TraceNode::SIGNAL_EXECUTOR,
+        TraceNode::NEXUS_RUNNER,
         TraceNode::CLOCK_PLANE,
         TraceNode::RECORD_STORE,
         TraceNode::SEMA_WRITER,
@@ -396,7 +396,7 @@ async fn persona_spirit_collect_removal_candidates_archives_before_retracting() 
     );
     assert!(reply.trace().contains_ordered(&[
         TraceNode::DISPATCH_PHASE,
-        TraceNode::SIGNAL_EXECUTOR,
+        TraceNode::NEXUS_RUNNER,
         TraceNode::RECORD_STORE,
         TraceNode::SEMA_READER,
         TraceNode::SEMA_WRITER,
@@ -846,7 +846,7 @@ fn persona_spirit_public_surface_uses_side_modules_instead_of_spirit_prefixes() 
 }
 
 #[test]
-fn persona_spirit_dispatch_path_depends_on_signal_executor() {
+fn persona_spirit_dispatch_path_depends_on_triad_runner() {
     let manifest = std::fs::read_to_string(format!("{}/Cargo.toml", env!("CARGO_MANIFEST_DIR")))
         .expect("cargo manifest is readable");
     let source = std::fs::read_to_string(format!(
@@ -854,11 +854,16 @@ fn persona_spirit_dispatch_path_depends_on_signal_executor() {
         env!("CARGO_MANIFEST_DIR")
     ))
     .expect("dispatch source is readable");
+    let retired_underscore_name = ["signal", "executor"].join("_");
+    let retired_hyphen_name = ["signal", "executor"].join("-");
+    let retired_constructor = ["Executor", "::new"].join("");
 
-    assert!(manifest.contains("signal-executor"));
-    assert!(source.contains("signal_executor::"));
-    assert!(source.contains("Executor::new"));
-    assert!(source.contains(".execute(request).await"));
+    assert!(manifest.contains("triad-runtime"));
+    assert!(source.contains("Runner::default()"));
+    assert!(source.contains("RunnerEngines for SpiritRuntimeEngines"));
+    assert!(!manifest.contains(&retired_hyphen_name));
+    assert!(!source.contains(&retired_underscore_name));
+    assert!(!source.contains(&retired_constructor));
 }
 
 #[test]

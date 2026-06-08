@@ -15,7 +15,7 @@ impl TraceNode {
     pub const STATE_PLANE: Self = Self::new("StatePlane");
     pub const SUBSCRIPTION_PLANE: Self = Self::new("SubscriptionPlane");
     pub const RECORD_STORE: Self = Self::new("RecordStore");
-    pub const SIGNAL_EXECUTOR: Self = Self::new("SignalExecutor");
+    pub const NEXUS_RUNNER: Self = Self::new("NexusRunner");
     pub const SEMA_OBSERVER: Self = Self::new("SemaObserver");
     pub const SEMA_WRITER: Self = Self::new("SemaWriter");
     pub const SEMA_READER: Self = Self::new("SemaReader");

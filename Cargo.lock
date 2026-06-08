@@ -444,7 +444,7 @@ dependencies = [
 [[package]]
 name = "meta-signal-upgrade"
 version = "0.2.2"
-source = "git+https://github.com/LiGoldragon/meta-signal-upgrade.git?branch=main#2ee978d33e907998966709b49a41db3ef9befe86"
+source = "git+https://github.com/LiGoldragon/meta-signal-upgrade.git?branch=main#570e610f969439d7ed13e33195f0ad0a0572b9c7"
 dependencies = [
  "nota-next",
  "rkyv",
@@ -579,7 +579,6 @@ dependencies = [
  "sema",
  "sema-engine",
  "signal-engine-management",
- "signal-executor",
  "signal-frame",
  "signal-persona-origin",
  "signal-sema",
@@ -587,6 +586,7 @@ dependencies = [
  "signal-version-handover",
  "thiserror",
  "tokio",
+ "triad-runtime",
  "unix-ancillary",
  "version-projection",
 ]
@@ -748,7 +748,7 @@ dependencies = [
 [[package]]
 name = "schema-rust-next"
 version = "0.5.1"
-source = "git+https://github.com/LiGoldragon/schema-rust-next.git?branch=main#83f1ee1f91a67e8728ad0fdc657b4cbd7d3d48dc"
+source = "git+https://github.com/LiGoldragon/schema-rust-next.git?branch=main#aa4b80e1509f2ba6d344f8ead523b32675b21f21"
 dependencies = [
  "prettyplease",
  "proc-macro2",
@@ -833,20 +833,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "signal-executor"
-version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/signal-executor.git?branch=main#6446b3f5ef58ac8fd28aa25bb7bdce5f4e59982f"
-dependencies = [
- "rkyv",
- "signal-frame",
- "signal-sema",
- "thiserror",
-]
-
-[[package]]
 name = "signal-frame"
 version = "0.2.1"
-source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#8b128d3648935d9d322d5c4985d5b347aaeecddd"
+source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#166bda84dc63bf8461fff11a41c43d6a1c92a941"
 dependencies = [
  "nota-next",
  "paste",
@@ -858,7 +847,7 @@ dependencies = [
 [[package]]
 name = "signal-frame-macros"
 version = "0.1.1"
-source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#8b128d3648935d9d322d5c4985d5b347aaeecddd"
+source = "git+https://github.com/LiGoldragon/signal-frame.git?branch=main#166bda84dc63bf8461fff11a41c43d6a1c92a941"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1217,7 +1206,7 @@ dependencies = [
 [[package]]
 name = "triad-runtime"
 version = "0.6.0"
-source = "git+https://github.com/LiGoldragon/triad-runtime.git?branch=main#1210391f3f99914ca79abbc50b9eba4df9946a83"
+source = "git+https://github.com/LiGoldragon/triad-runtime.git?branch=main#bedbb1dbbe93a78dd990edc60b15a8aa475460c8"
 dependencies = [
  "kameo 0.20.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustix",
@@ -1255,16 +1244,14 @@ dependencies = [
 [[package]]
 name = "upgrade"
 version = "0.1.1"
-source = "git+https://github.com/LiGoldragon/upgrade.git?branch=main#fb864a13bc6ae94f49ff8eef97a082a507d08d68"
+source = "git+https://github.com/LiGoldragon/upgrade.git?branch=main#8f2768d3033f52d816887f8ca6e94edaf9fc5ba7"
 dependencies = [
  "meta-signal-upgrade",
  "rkyv",
  "schema-next",
  "schema-rust-next",
  "sema-engine",
- "signal-executor",
  "signal-frame",
- "signal-sema",
  "signal-spirit",
  "signal-upgrade",
  "thiserror",
@@ -1287,7 +1274,7 @@ dependencies = [
 [[package]]
 name = "version-projection"
 version = "0.1.0"
-source = "git+https://github.com/LiGoldragon/version-projection.git?branch=main#e40fd1493236b4506260a9e53a15e7bbda96951d"
+source = "git+https://github.com/LiGoldragon/version-projection.git?branch=main#f00b239f75aca30098a60b30e877faafe8625d77"
 dependencies = [
  "nota-next",
  "rkyv",
