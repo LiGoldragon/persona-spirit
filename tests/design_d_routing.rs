@@ -21,7 +21,7 @@ use persona_spirit::{
     DaemonConfiguration, DaemonRuntime, ServedExchange, SocketMode, SocketPath, StorePath, ordinary,
 };
 use signal_frame::{Reply, SubReply};
-use signal_persona_origin::EngineIdentifier;
+use signal_persona::origin::EngineIdentifier;
 use signal_spirit::{
     CertaintySelection, Observation, Operation as SpiritOperation, PublicRecordQuery,
     Reply as SpiritReply, TopicSelection,

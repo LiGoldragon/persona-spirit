@@ -53,7 +53,7 @@ rkyv                        = { version = "0.8", default-features = false, featu
 sema                        = { git = "https://github.com/LiGoldragon/sema.git", branch = "main" }
 sema-engine                 = { git = "https://github.com/LiGoldragon/sema-engine.git", branch = "main" }
 signal-frame                     = { git = "https://github.com/LiGoldragon/signal-frame.git", branch = "main" }
-signal-engine-management         = { git = "https://github.com/LiGoldragon/signal-engine-management.git", branch = "main" }
+signal-persona                   = { git = "https://github.com/LiGoldragon/signal-persona.git", branch = "main" }
 signal-spirit                    = { git = "https://github.com/LiGoldragon/signal-spirit.git", branch = "main", features = ["nota-text"] }
 signal-sema                      = { git = "https://github.com/LiGoldragon/signal-sema.git", branch = "main" }
 signal-version-handover          = { git = "https://github.com/LiGoldragon/signal-version-handover.git", branch = "main" }
@@ -66,7 +66,6 @@ version-projection               = { git = "https://github.com/LiGoldragon/versi
 [dev-dependencies]
 meta-signal-upgrade  = { git = "https://github.com/LiGoldragon/meta-signal-upgrade.git", branch = "main" }
 persona              = { git = "https://github.com/LiGoldragon/persona.git", branch = "main" }
-signal-persona-origin = { git = "https://github.com/LiGoldragon/signal-persona-origin.git", branch = "main" }
 
 [lints.rust]
 unsafe_code = "forbid"

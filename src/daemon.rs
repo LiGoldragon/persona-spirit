@@ -14,16 +14,16 @@ use meta_signal_spirit::{
     Frame as MetaFrame, FrameBody as MetaFrameBody, Operation as MetaOperation, Reply as MetaReply,
 };
 use nota_next::{Block, NotaBlock, NotaDecode, NotaDecodeError, NotaEncode, NotaSource};
-use signal_engine_management::{
+use signal_frame::{
+    ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, OperationDispatchError, Reply,
+    RequestPayload, RequestRejectionReason, SessionEpoch, ShortHeader, SubReply,
+};
+use signal_persona::{
     ComponentHealth, ComponentHealthReport, ComponentIdentity, ComponentKind,
     ComponentName as EngineManagementComponentName, ComponentReady,
     EngineManagementProtocolVersion, Frame as EngineManagementFrame,
     FrameBody as EngineManagementFrameBody, Operation as EngineManagementOperation,
     Query as EngineManagementQuery, Reply as EngineManagementReply, StopAcknowledgement,
-};
-use signal_frame::{
-    ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, OperationDispatchError, Reply,
-    RequestPayload, RequestRejectionReason, SessionEpoch, ShortHeader, SubReply,
 };
 use signal_spirit::{Frame, FrameBody, Operation as WorkingOperation, Reply as WorkingReply};
 use signal_version_handover::{

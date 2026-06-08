@@ -17,16 +17,16 @@ use persona_spirit::{
     SocketPath, StoreLocation, StorePath, meta, ordinary, store::SpiritStore, store::StampedEntry,
     upgrade,
 };
-use signal_engine_management::{
-    ComponentHealth, ComponentKind, ComponentName as EngineManagementComponentName,
-    EngineManagementProtocolVersion, Frame as EngineManagementFrame,
-    FrameBody as EngineManagementFrameBody, Operation as EngineManagementOperation, Presence,
-    Query as EngineManagementQuery, Reply as EngineManagementReply,
-};
 use signal_frame::{
     AcceptedOutcome, BatchFailureReason, ClientShape, CommandLineSockets, CommitStatus,
     ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, Request, RequestBuilder,
     RequestPayload, RetryClassification, SessionEpoch, SubReply,
+};
+use signal_persona::{
+    ComponentHealth, ComponentKind, ComponentName as EngineManagementComponentName,
+    EngineManagementProtocolVersion, Frame as EngineManagementFrame,
+    FrameBody as EngineManagementFrameBody, Operation as EngineManagementOperation, Presence,
+    Query as EngineManagementQuery, Reply as EngineManagementReply,
 };
 use signal_spirit::{
     CertaintySelection, Date, Description, Entry, Frame, FrameBody, Kind, Magnitude, Observation,
