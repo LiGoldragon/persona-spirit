@@ -22,7 +22,7 @@ use persona_spirit::{
 };
 use signal_frame::{Reply, SubReply};
 use signal_persona_origin::EngineIdentifier;
-use signal_persona_spirit::{
+use signal_spirit::{
     CertaintySelection, Observation, Operation as SpiritOperation, PublicRecordQuery,
     Reply as SpiritReply, TopicSelection,
 };
@@ -37,7 +37,7 @@ struct RouteFixture {
     public_socket: PathBuf,
     control_socket: PathBuf,
     ordinary_socket: SocketPath,
-    owner_socket: SocketPath,
+    meta_socket: SocketPath,
     upgrade_socket: SocketPath,
     store: StorePath,
 }
@@ -50,7 +50,7 @@ impl RouteFixture {
             public_socket: root.join("p.sock"),
             control_socket: root.join("c.sock"),
             ordinary_socket: socket_path(&root, "o.sock"),
-            owner_socket: socket_path(&root, "w.sock"),
+            meta_socket: socket_path(&root, "w.sock"),
             upgrade_socket: socket_path(&root, "u.sock"),
             store: StorePath::new(
                 root.join("persona-spirit.sema")
@@ -73,7 +73,7 @@ impl RouteFixture {
     fn configuration(&self) -> DaemonConfiguration {
         DaemonConfiguration::new(
             self.ordinary_socket.clone(),
-            self.owner_socket.clone(),
+            self.meta_socket.clone(),
             self.upgrade_socket.clone(),
             self.store.clone(),
             SocketMode::from_octal(0o600),
@@ -130,7 +130,7 @@ fn assert_spirit_output_contains(output: Output, fragments: &[&str]) {
 
 struct SpiritInstance {
     ordinary_socket: SocketPath,
-    owner_socket: SocketPath,
+    meta_socket: SocketPath,
     upgrade_socket: SocketPath,
     store: StorePath,
 }
@@ -141,7 +141,7 @@ impl SpiritInstance {
         std::fs::create_dir_all(&root).expect("spirit instance root created");
         Self {
             ordinary_socket: socket_path(&root, "spirit.sock"),
-            owner_socket: socket_path(&root, "owner.sock"),
+            meta_socket: socket_path(&root, "meta.sock"),
             upgrade_socket: socket_path(&root, "upgrade.sock"),
             store: StorePath::new(root.join("spirit.sema").to_string_lossy().into_owned()),
         }
@@ -150,7 +150,7 @@ impl SpiritInstance {
     fn configuration(&self) -> DaemonConfiguration {
         DaemonConfiguration::new(
             self.ordinary_socket.clone(),
-            self.owner_socket.clone(),
+            self.meta_socket.clone(),
             self.upgrade_socket.clone(),
             self.store.clone(),
             SocketMode::from_octal(0o600),
@@ -178,8 +178,8 @@ fn observe_records() -> SpiritOperation {
         topic_selection: TopicSelection::any(),
         kind: None,
         certainty_selection: CertaintySelection::Any,
-        recorded_time_selection: signal_persona_spirit::RecordedTimeSelection::Any,
-        mode: signal_persona_spirit::ObservationMode::SummaryOnly,
+        recorded_time_selection: signal_spirit::RecordedTimeSelection::Any,
+        mode: signal_spirit::ObservationMode::SummaryOnly,
     }))
 }
 

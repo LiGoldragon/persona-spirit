@@ -10,12 +10,12 @@ use signal_frame::{
     ClientShape, CommandLineDispatch, CommandLineSocket, CommandLineSockets, RequestHead,
     RequestInput, RequestText, SingleArgument, SingleArgumentError,
 };
-use signal_persona_spirit::{RecordIdentifier, Reply as WorkingReply};
+use signal_spirit::{RecordIdentifier, Reply as WorkingReply};
 
 #[derive(Debug, Clone)]
 struct StoreFixture {
     ordinary_socket: SocketPath,
-    owner_socket: SocketPath,
+    meta_socket: SocketPath,
     upgrade_socket: SocketPath,
     store: StorePath,
 }
@@ -28,15 +28,15 @@ impl StoreFixture {
             .as_nanos();
         let mut ordinary_socket = std::env::temp_dir();
         ordinary_socket.push(format!("persona-spirit-{test_name}-{nanos}-ordinary.sock"));
-        let mut owner_socket = std::env::temp_dir();
-        owner_socket.push(format!("persona-spirit-{test_name}-{nanos}-owner.sock"));
+        let mut meta_socket = std::env::temp_dir();
+        meta_socket.push(format!("persona-spirit-{test_name}-{nanos}-meta.sock"));
         let mut upgrade_socket = std::env::temp_dir();
         upgrade_socket.push(format!("persona-spirit-{test_name}-{nanos}-upgrade.sock"));
         let mut store = std::env::temp_dir();
         store.push(format!("persona-spirit-{test_name}-{nanos}.sema"));
         Self {
             ordinary_socket: SocketPath::new(ordinary_socket.to_string_lossy().into_owned()),
-            owner_socket: SocketPath::new(owner_socket.to_string_lossy().into_owned()),
+            meta_socket: SocketPath::new(meta_socket.to_string_lossy().into_owned()),
             upgrade_socket: SocketPath::new(upgrade_socket.to_string_lossy().into_owned()),
             store: StorePath::new(store.to_string_lossy().into_owned()),
         }
@@ -48,12 +48,12 @@ impl StoreFixture {
         let request_text = RequestInput::new(argument.clone())
             .text()
             .map_err(Error::from)?;
-        RequestText::<signal_persona_spirit::Operation>::new(request_text)
+        RequestText::<signal_spirit::Operation>::new(request_text)
             .decode_request()
             .map_err(Error::from)?;
         let daemon = DaemonRuntime::from_configuration(DaemonConfiguration::new(
             self.ordinary_socket.clone(),
-            self.owner_socket.clone(),
+            self.meta_socket.clone(),
             self.upgrade_socket.clone(),
             self.store.clone(),
             SocketMode::from_octal(0o600),
@@ -61,10 +61,9 @@ impl StoreFixture {
         .bind()
         .expect("daemon binds");
         let handle = std::thread::spawn(move || daemon.serve_count(1));
-        let client =
-            ClientShape::<signal_persona_spirit::Frame, owner_signal_persona_spirit::Frame>::new(
-                CommandLineSockets::working_only(self.ordinary_socket.as_path().to_path_buf()),
-            );
+        let client = ClientShape::<signal_spirit::Frame, meta_signal_spirit::Frame>::new(
+            CommandLineSockets::working_only(self.ordinary_socket.as_path().to_path_buf()),
+        );
         let reply = client.reply_text(argument).map_err(Error::from);
         handle
             .join()
@@ -76,7 +75,7 @@ impl StoreFixture {
     fn binary_output(&self, text: &str) -> Output {
         let daemon = DaemonRuntime::from_configuration(DaemonConfiguration::new(
             self.ordinary_socket.clone(),
-            self.owner_socket.clone(),
+            self.meta_socket.clone(),
             self.upgrade_socket.clone(),
             self.store.clone(),
             SocketMode::from_octal(0o600),
@@ -201,7 +200,7 @@ fn persona_spirit_binary_requires_socket_environment() {
 }
 
 #[test]
-fn persona_spirit_binary_requires_owner_socket_for_owner_requests() {
+fn persona_spirit_binary_requires_meta_socket_for_meta_requests() {
     let output = Command::new(env!("CARGO_BIN_EXE_spirit"))
         .env("PERSONA_SPIRIT_SOCKET", "/tmp/persona-spirit-unused.sock")
         .env_remove("PERSONA_SPIRIT_META_SOCKET")
@@ -215,11 +214,9 @@ fn persona_spirit_binary_requires_owner_socket_for_owner_requests() {
 }
 
 #[test]
-fn persona_spirit_generated_dispatch_routes_working_and_owner_heads() {
-    let dispatch = CommandLineDispatch::<
-        signal_persona_spirit::Operation,
-        owner_signal_persona_spirit::Operation,
-    >::new();
+fn persona_spirit_generated_dispatch_routes_working_and_meta_heads() {
+    let dispatch =
+        CommandLineDispatch::<signal_spirit::Operation, meta_signal_spirit::Operation>::new();
 
     assert_eq!(
         dispatch.route_head("Record"),
@@ -238,14 +235,14 @@ fn persona_spirit_generated_dispatch_routes_working_and_owner_heads() {
 fn persona_spirit_request_head_uses_generated_dispatch_before_full_decode() {
     let working = RequestHead::from_text("(Record ([workspace] Decision [description] Maximum))")
         .expect("working head reads");
-    let owner = RequestHead::from_text("(Register (operator))").expect("owner head reads");
+    let meta = RequestHead::from_text("(Register (operator))").expect("meta head reads");
 
     assert_eq!(
-        working.route::<signal_persona_spirit::Operation, owner_signal_persona_spirit::Operation>(),
+        working.route::<signal_spirit::Operation, meta_signal_spirit::Operation>(),
         Ok(CommandLineSocket::Working)
     );
     assert_eq!(
-        owner.route::<signal_persona_spirit::Operation, owner_signal_persona_spirit::Operation>(),
+        meta.route::<signal_spirit::Operation, meta_signal_spirit::Operation>(),
         Ok(CommandLineSocket::Meta)
     );
 }
@@ -308,7 +305,7 @@ fn persona_spirit_client_accepts_high_magnitude_and_observes_it_back() {
 
 #[test]
 fn persona_spirit_client_rejects_opaque_integer_timestamp_shape() {
-    RequestText::<signal_persona_spirit::Operation>::new(
+    RequestText::<signal_spirit::Operation>::new(
         "(Record ([workspace] Decision [description only] Maximum 1779000000))",
     )
     .decode_request()
@@ -317,7 +314,7 @@ fn persona_spirit_client_rejects_opaque_integer_timestamp_shape() {
 
 #[test]
 fn persona_spirit_client_rejects_parenthesized_date_time_shape() {
-    RequestText::<signal_persona_spirit::Operation>::new(
+    RequestText::<signal_spirit::Operation>::new(
         "(Record ([workspace] Decision [description only] Maximum (2026 5 20) (14 30 0)))",
     )
     .decode_request()
@@ -1042,16 +1039,16 @@ fn persona_spirit_client_rejects_unknown_record_shape() {
 }
 
 #[test]
-fn persona_spirit_owner_request_text_decodes_owner_contract_only() {
-    let owner = RequestText::<owner_signal_persona_spirit::Operation>::new("(Register (operator))")
+fn persona_spirit_meta_request_text_decodes_meta_contract_only() {
+    let meta = RequestText::<meta_signal_spirit::Operation>::new("(Register (operator))")
         .decode_request()
-        .expect("owner request decodes");
-    let ordinary = RequestText::<signal_persona_spirit::Operation>::new("(Register (operator))")
-        .decode_request();
+        .expect("meta request decodes");
+    let ordinary =
+        RequestText::<signal_spirit::Operation>::new("(Register (operator))").decode_request();
 
     assert!(matches!(
-        owner.payloads().head(),
-        owner_signal_persona_spirit::Operation::Register(_)
+        meta.payloads().head(),
+        meta_signal_spirit::Operation::Register(_)
     ));
     assert!(ordinary.is_err());
 }

@@ -10,11 +10,10 @@ use std::sync::{
 };
 use std::thread;
 
-use nota_next::{Block, NotaBlock, NotaDecode, NotaDecodeError, NotaEncode, NotaSource};
-use owner_signal_persona_spirit::{
-    Frame as OwnerFrame, FrameBody as OwnerFrameBody, Operation as OwnerOperation,
-    Reply as OwnerReply,
+use meta_signal_spirit::{
+    Frame as MetaFrame, FrameBody as MetaFrameBody, Operation as MetaOperation, Reply as MetaReply,
 };
+use nota_next::{Block, NotaBlock, NotaDecode, NotaDecodeError, NotaEncode, NotaSource};
 use signal_engine_management::{
     ComponentHealth, ComponentHealthReport, ComponentIdentity, ComponentKind,
     ComponentName as EngineManagementComponentName, ComponentReady,
@@ -26,9 +25,7 @@ use signal_frame::{
     ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, OperationDispatchError, Reply,
     RequestPayload, RequestRejectionReason, SessionEpoch, ShortHeader, SubReply,
 };
-use signal_persona_spirit::{
-    Frame, FrameBody, Operation as WorkingOperation, Reply as WorkingReply,
-};
+use signal_spirit::{Frame, FrameBody, Operation as WorkingOperation, Reply as WorkingReply};
 use signal_version_handover::{
     Frame as UpgradeFrame, FrameBody as UpgradeFrameBody, Operation as UpgradeOperation,
     Reply as UpgradeReply,
@@ -46,7 +43,7 @@ const DEFAULT_MAXIMUM_FRAME_BYTES: usize = 1024 * 1024;
 #[derive(Debug, Clone, PartialEq, Eq, NotaEncode, NotaDecode)]
 pub struct DaemonConfiguration {
     pub ordinary_socket_path: SocketPath,
-    pub owner_socket_path: SocketPath,
+    pub meta_socket_path: SocketPath,
     pub upgrade_socket_path: SocketPath,
     pub store_path: StorePath,
     pub socket_mode: SocketMode,
@@ -89,7 +86,7 @@ pub mod ordinary {
     }
 }
 
-pub mod owner {
+pub mod meta {
     use super::{DEFAULT_MAXIMUM_FRAME_BYTES, SocketPath};
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -137,18 +134,18 @@ pub struct DaemonRuntime {
 
 pub struct BoundDaemon {
     ordinary_socket: SocketPath,
-    owner_socket: SocketPath,
+    meta_socket: SocketPath,
     upgrade_socket: SocketPath,
     engine_management_socket: Option<SocketPath>,
     ordinary_listener: UnixListener,
-    owner_listener: UnixListener,
+    meta_listener: UnixListener,
     upgrade_listener: UnixListener,
     engine_management_listener: Option<UnixListener>,
     handoff_control: Option<UnixStream>,
     runtime: Arc<tokio::runtime::Runtime>,
     root: kameo::actor::ActorRef<SpiritRoot>,
     codec: ordinary::FrameCodec,
-    owner_codec: owner::FrameCodec,
+    meta_codec: meta::FrameCodec,
     upgrade_codec: upgrade::FrameCodec,
     engine_management_codec: EngineManagementFrameCodec,
     public_sockets: PublicSockets,
@@ -161,9 +158,9 @@ pub struct ReceivedRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ReceivedOwnerRequest {
+pub struct ReceivedMetaRequest {
     exchange: ExchangeIdentifier,
-    request: signal_frame::Request<OwnerOperation>,
+    request: signal_frame::Request<MetaOperation>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -178,8 +175,8 @@ pub struct ServedExchange {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ServedOwnerExchange {
-    reply: Reply<OwnerReply>,
+pub struct ServedMetaExchange {
+    reply: Reply<MetaReply>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -195,7 +192,7 @@ pub struct ServedEngineManagementExchange {
 #[derive(Debug, Clone)]
 struct PublicSockets {
     ordinary_socket: SocketPath,
-    owner_socket: SocketPath,
+    meta_socket: SocketPath,
     state: Arc<AtomicU8>,
 }
 
@@ -209,14 +206,14 @@ enum PublicSocketState {
 impl DaemonConfiguration {
     pub fn new(
         ordinary_socket_path: SocketPath,
-        owner_socket_path: SocketPath,
+        meta_socket_path: SocketPath,
         upgrade_socket_path: SocketPath,
         store_path: StorePath,
         socket_mode: SocketMode,
     ) -> Self {
         Self {
             ordinary_socket_path,
-            owner_socket_path,
+            meta_socket_path,
             upgrade_socket_path,
             store_path,
             socket_mode,
@@ -433,14 +430,14 @@ impl ordinary::FrameCodec {
     }
 }
 
-impl owner::FrameCodec {
+impl meta::FrameCodec {
     pub const fn new(maximum_frame_bytes: usize) -> Self {
         Self {
             maximum_frame_bytes,
         }
     }
 
-    pub fn read_frame(&self, stream: &mut UnixStream) -> SpiritResult<OwnerFrame> {
+    pub fn read_frame(&self, stream: &mut UnixStream) -> SpiritResult<MetaFrame> {
         let mut prefix = [0_u8; 4];
         stream
             .read_exact(&mut prefix)
@@ -459,10 +456,10 @@ impl owner::FrameCodec {
         stream
             .read_exact(&mut bytes[4..])
             .map_err(Error::input_output)?;
-        OwnerFrame::decode_length_prefixed(&bytes).map_err(Error::signal_frame)
+        MetaFrame::decode_length_prefixed(&bytes).map_err(Error::signal_frame)
     }
 
-    pub fn write_frame(&self, stream: &mut UnixStream, frame: &OwnerFrame) -> SpiritResult<()> {
+    pub fn write_frame(&self, stream: &mut UnixStream, frame: &MetaFrame) -> SpiritResult<()> {
         let bytes = frame
             .encode_length_prefixed()
             .map_err(Error::signal_frame)?;
@@ -470,38 +467,34 @@ impl owner::FrameCodec {
         stream.flush().map_err(Error::input_output)
     }
 
-    pub fn request_frame(&self, request: OwnerOperation) -> OwnerFrame {
-        OwnerFrame::new(OwnerFrameBody::Request {
+    pub fn request_frame(&self, request: MetaOperation) -> MetaFrame {
+        MetaFrame::new(MetaFrameBody::Request {
             exchange: self.exchange(),
             request: request.into_request(),
         })
     }
 
-    pub fn reply_frame(
-        &self,
-        exchange: ExchangeIdentifier,
-        reply: Reply<OwnerReply>,
-    ) -> OwnerFrame {
-        OwnerFrame::new(OwnerFrameBody::Reply { exchange, reply })
+    pub fn reply_frame(&self, exchange: ExchangeIdentifier, reply: Reply<MetaReply>) -> MetaFrame {
+        MetaFrame::new(MetaFrameBody::Reply { exchange, reply })
     }
 
-    pub fn request_from_frame(&self, frame: OwnerFrame) -> SpiritResult<ReceivedOwnerRequest> {
+    pub fn request_from_frame(&self, frame: MetaFrame) -> SpiritResult<ReceivedMetaRequest> {
         match frame.into_body() {
-            OwnerFrameBody::Request { exchange, request } => {
-                Ok(ReceivedOwnerRequest { exchange, request })
+            MetaFrameBody::Request { exchange, request } => {
+                Ok(ReceivedMetaRequest { exchange, request })
             }
             other => Err(Error::UnexpectedFrame {
-                expected: "owner request",
+                expected: "meta request",
                 got: format!("{other:?}"),
             }),
         }
     }
 
-    pub fn reply_from_frame(&self, frame: OwnerFrame) -> SpiritResult<Reply<OwnerReply>> {
+    pub fn reply_from_frame(&self, frame: MetaFrame) -> SpiritResult<Reply<MetaReply>> {
         match frame.into_body() {
-            OwnerFrameBody::Reply { reply, .. } => Ok(reply),
+            MetaFrameBody::Reply { reply, .. } => Ok(reply),
             other => Err(Error::UnexpectedFrame {
-                expected: "owner reply",
+                expected: "meta reply",
                 got: format!("{other:?}"),
             }),
         }
@@ -621,7 +614,7 @@ impl DaemonRuntime {
             self.configuration.socket_mode,
         )?;
         SocketBinding::bind(
-            &self.configuration.owner_socket_path,
+            &self.configuration.meta_socket_path,
             self.configuration.socket_mode,
         )?;
         SocketBinding::bind(
@@ -656,7 +649,7 @@ impl DaemonRuntime {
         let ordinary_listener =
             UnixListener::bind(self.configuration.ordinary_socket_path.as_path())
                 .map_err(Error::input_output)?;
-        let owner_listener = UnixListener::bind(self.configuration.owner_socket_path.as_path())
+        let meta_listener = UnixListener::bind(self.configuration.meta_socket_path.as_path())
             .map_err(Error::input_output)?;
         let upgrade_listener = UnixListener::bind(self.configuration.upgrade_socket_path.as_path())
             .map_err(Error::input_output)?;
@@ -678,7 +671,7 @@ impl DaemonRuntime {
         )
         .map_err(Error::input_output)?;
         std::fs::set_permissions(
-            self.configuration.owner_socket_path.as_path(),
+            self.configuration.meta_socket_path.as_path(),
             std::fs::Permissions::from_mode(self.configuration.socket_mode.as_octal()),
         )
         .map_err(Error::input_output)?;
@@ -712,23 +705,23 @@ impl DaemonRuntime {
         ))?;
         Ok(BoundDaemon {
             ordinary_socket: self.configuration.ordinary_socket_path.clone(),
-            owner_socket: self.configuration.owner_socket_path.clone(),
+            meta_socket: self.configuration.meta_socket_path.clone(),
             upgrade_socket: self.configuration.upgrade_socket_path,
             engine_management_socket: self.configuration.engine_management_socket_path,
             ordinary_listener,
-            owner_listener,
+            meta_listener,
             upgrade_listener,
             engine_management_listener,
             handoff_control,
             runtime,
             root,
             codec: ordinary::FrameCodec::default(),
-            owner_codec: owner::FrameCodec::default(),
+            meta_codec: meta::FrameCodec::default(),
             upgrade_codec: upgrade::FrameCodec::default(),
             engine_management_codec: EngineManagementFrameCodec::default(),
             public_sockets: PublicSockets::open(
                 self.configuration.ordinary_socket_path.clone(),
-                self.configuration.owner_socket_path.clone(),
+                self.configuration.meta_socket_path.clone(),
             ),
         })
     }
@@ -754,8 +747,8 @@ impl BoundDaemon {
         self.ordinary_socket.as_path()
     }
 
-    pub fn owner_socket_path(&self) -> &Path {
-        self.owner_socket.as_path()
+    pub fn meta_socket_path(&self) -> &Path {
+        self.meta_socket.as_path()
     }
 
     pub fn upgrade_socket_path(&self) -> &Path {
@@ -801,20 +794,20 @@ impl BoundDaemon {
         )
     }
 
-    pub fn serve_owner_one(&mut self) -> SpiritResult<ServedOwnerExchange> {
-        let (mut stream, _address) = self.owner_listener.accept().map_err(Error::input_output)?;
-        let frame = self.owner_codec.read_frame(&mut stream)?;
-        let received = self.owner_codec.request_from_frame(frame)?;
-        let reply = if self.public_sockets.accepts_owner_request() {
-            self.reply_to_owner_request(received.request)?
+    pub fn serve_meta_one(&mut self) -> SpiritResult<ServedMetaExchange> {
+        let (mut stream, _address) = self.meta_listener.accept().map_err(Error::input_output)?;
+        let frame = self.meta_codec.read_frame(&mut stream)?;
+        let received = self.meta_codec.request_from_frame(frame)?;
+        let reply = if self.public_sockets.accepts_meta_request() {
+            self.reply_to_meta_request(received.request)?
         } else {
             Reply::rejected(RequestRejectionReason::Internal)
         };
         let frame = self
-            .owner_codec
+            .meta_codec
             .reply_frame(received.exchange, reply.clone());
-        self.owner_codec.write_frame(&mut stream, &frame)?;
-        Ok(ServedOwnerExchange::new(reply))
+        self.meta_codec.write_frame(&mut stream, &frame)?;
+        Ok(ServedMetaExchange::new(reply))
     }
 
     pub fn serve_upgrade_one(&mut self) -> SpiritResult<ServedUpgradeExchange> {
@@ -860,9 +853,9 @@ impl BoundDaemon {
         }
     }
 
-    pub fn serve_owner_count(mut self, count: usize) -> SpiritResult<Vec<ServedOwnerExchange>> {
+    pub fn serve_meta_count(mut self, count: usize) -> SpiritResult<Vec<ServedMetaExchange>> {
         let result = (0..count)
-            .map(|_| self.serve_owner_one())
+            .map(|_| self.serve_meta_one())
             .collect::<SpiritResult<Vec<_>>>();
         let shutdown = self.shutdown();
         match (result, shutdown) {
@@ -930,13 +923,13 @@ impl BoundDaemon {
             self.codec,
             self.public_sockets.clone(),
         );
-        let owner = OwnerSocketServer::new(
-            self.owner_listener
+        let meta = MetaSocketServer::new(
+            self.meta_listener
                 .try_clone()
                 .map_err(Error::input_output)?,
             self.root.clone(),
             self.runtime.clone(),
-            self.owner_codec,
+            self.meta_codec,
             self.public_sockets.clone(),
         );
         let upgrade = UpgradeSocketServer::new(
@@ -975,14 +968,14 @@ impl BoundDaemon {
             thread::spawn(move || handoff.serve_forever())
         });
         let ordinary_handle = thread::spawn(move || ordinary.serve_forever());
-        let owner_handle = thread::spawn(move || owner.serve_forever());
+        let meta_handle = thread::spawn(move || meta.serve_forever());
         let upgrade_result = upgrade.serve_forever();
         let ordinary_result = ordinary_handle
             .join()
             .map_err(|_| Error::actor_runtime("ordinary socket thread panicked"))?;
-        let owner_result = owner_handle
+        let meta_result = meta_handle
             .join()
-            .map_err(|_| Error::actor_runtime("owner socket thread panicked"))?;
+            .map_err(|_| Error::actor_runtime("meta socket thread panicked"))?;
         let handoff_result = match handoff_handle {
             Some(handle) => handle
                 .join()
@@ -996,7 +989,7 @@ impl BoundDaemon {
             None => Ok(()),
         };
         upgrade_result
-            .and(owner_result)
+            .and(meta_result)
             .and(ordinary_result)
             .and(handoff_result)
             .and(engine_management_result)
@@ -1005,7 +998,7 @@ impl BoundDaemon {
     pub fn shutdown(self) -> SpiritResult<()> {
         let stop = self.runtime.block_on(SpiritRoot::stop(self.root));
         let remove_ordinary = SocketBinding::remove(&self.ordinary_socket);
-        let remove_owner = SocketBinding::remove(&self.owner_socket);
+        let remove_meta = SocketBinding::remove(&self.meta_socket);
         let remove_upgrade = SocketBinding::remove(&self.upgrade_socket);
         let remove_engine_management = self
             .engine_management_socket
@@ -1015,7 +1008,7 @@ impl BoundDaemon {
         match (
             stop,
             remove_ordinary,
-            remove_owner,
+            remove_meta,
             remove_upgrade,
             remove_engine_management,
         ) {
@@ -1028,11 +1021,11 @@ impl BoundDaemon {
         }
     }
 
-    fn reply_to_owner_request(
+    fn reply_to_meta_request(
         &self,
-        request: signal_frame::Request<OwnerOperation>,
-    ) -> SpiritResult<Reply<OwnerReply>> {
-        OwnerExchangeHandler::new(self.root.clone(), self.runtime.clone()).reply_to_request(request)
+        request: signal_frame::Request<MetaOperation>,
+    ) -> SpiritResult<Reply<MetaReply>> {
+        MetaExchangeHandler::new(self.root.clone(), self.runtime.clone()).reply_to_request(request)
     }
 
     fn reply_to_upgrade_request(
@@ -1056,11 +1049,11 @@ struct SocketServer {
     public_sockets: PublicSockets,
 }
 
-struct OwnerSocketServer {
+struct MetaSocketServer {
     listener: UnixListener,
     root: kameo::actor::ActorRef<SpiritRoot>,
     runtime: Arc<tokio::runtime::Runtime>,
-    codec: owner::FrameCodec,
+    codec: meta::FrameCodec,
     public_sockets: PublicSockets,
 }
 
@@ -1090,7 +1083,7 @@ struct OrdinaryExchangeHandler {
     runtime: Arc<tokio::runtime::Runtime>,
 }
 
-struct OwnerExchangeHandler {
+struct MetaExchangeHandler {
     root: kameo::actor::ActorRef<SpiritRoot>,
     runtime: Arc<tokio::runtime::Runtime>,
 }
@@ -1193,12 +1186,12 @@ impl HandoffControlServer {
     }
 }
 
-impl OwnerSocketServer {
+impl MetaSocketServer {
     fn new(
         listener: UnixListener,
         root: kameo::actor::ActorRef<SpiritRoot>,
         runtime: Arc<tokio::runtime::Runtime>,
-        codec: owner::FrameCodec,
+        codec: meta::FrameCodec,
         public_sockets: PublicSockets,
     ) -> Self {
         Self {
@@ -1213,24 +1206,24 @@ impl OwnerSocketServer {
     fn serve_forever(self) -> SpiritResult<()> {
         loop {
             if let Err(error) = self.serve_one() {
-                eprintln!("persona-spirit-daemon owner client error: {error}");
+                eprintln!("persona-spirit-daemon meta client error: {error}");
             }
         }
     }
 
-    fn serve_one(&self) -> SpiritResult<ServedOwnerExchange> {
+    fn serve_one(&self) -> SpiritResult<ServedMetaExchange> {
         let (mut stream, _address) = self.listener.accept().map_err(Error::input_output)?;
         let frame = self.codec.read_frame(&mut stream)?;
         let received = self.codec.request_from_frame(frame)?;
-        let reply = if self.public_sockets.accepts_owner_request() {
-            OwnerExchangeHandler::new(self.root.clone(), self.runtime.clone())
+        let reply = if self.public_sockets.accepts_meta_request() {
+            MetaExchangeHandler::new(self.root.clone(), self.runtime.clone())
                 .reply_to_request(received.request)?
         } else {
             Reply::rejected(RequestRejectionReason::Internal)
         };
         let frame = self.codec.reply_frame(received.exchange, reply.clone());
         self.codec.write_frame(&mut stream, &frame)?;
-        Ok(ServedOwnerExchange::new(reply))
+        Ok(ServedMetaExchange::new(reply))
     }
 }
 
@@ -1374,7 +1367,7 @@ impl OrdinaryExchangeHandler {
     }
 }
 
-impl OwnerExchangeHandler {
+impl MetaExchangeHandler {
     fn new(
         root: kameo::actor::ActorRef<SpiritRoot>,
         runtime: Arc<tokio::runtime::Runtime>,
@@ -1384,8 +1377,8 @@ impl OwnerExchangeHandler {
 
     fn reply_to_request(
         &self,
-        request: signal_frame::Request<OwnerOperation>,
-    ) -> SpiritResult<Reply<OwnerReply>> {
+        request: signal_frame::Request<MetaOperation>,
+    ) -> SpiritResult<Reply<MetaReply>> {
         let replies = request
             .payloads
             .into_iter()
@@ -1396,12 +1389,12 @@ impl OwnerExchangeHandler {
         ))
     }
 
-    fn reply_to_operation(&self, request: OwnerOperation) -> SpiritResult<SubReply<OwnerReply>> {
+    fn reply_to_operation(&self, request: MetaOperation) -> SpiritResult<SubReply<MetaReply>> {
         let reply = self
             .runtime
             .block_on(async {
                 self.root
-                    .ask(crate::actors::root::SubmitOwnerRequest { request })
+                    .ask(crate::actors::root::SubmitMetaRequest { request })
                     .await
             })
             .map_err(|error| Error::actor_runtime(error.to_string()))?;
@@ -1511,10 +1504,10 @@ fn receive_handoff_stream(control: &UnixStream) -> SpiritResult<UnixStream> {
 }
 
 impl PublicSockets {
-    fn open(ordinary_socket: SocketPath, owner_socket: SocketPath) -> Self {
+    fn open(ordinary_socket: SocketPath, meta_socket: SocketPath) -> Self {
         Self {
             ordinary_socket,
-            owner_socket,
+            meta_socket,
             state: Arc::new(AtomicU8::new(PublicSocketState::Active.as_u8())),
         }
     }
@@ -1527,7 +1520,7 @@ impl PublicSockets {
         }
     }
 
-    fn accepts_owner_request(&self) -> bool {
+    fn accepts_meta_request(&self) -> bool {
         matches!(self.state(), PublicSocketState::Active)
     }
 
@@ -1553,7 +1546,7 @@ impl PublicSockets {
         self.state
             .store(PublicSocketState::Closed.as_u8(), Ordering::SeqCst);
         let _ = SocketBinding::remove(&self.ordinary_socket);
-        let _ = SocketBinding::remove(&self.owner_socket);
+        let _ = SocketBinding::remove(&self.meta_socket);
     }
 }
 
@@ -1609,15 +1602,15 @@ impl ordinary::SignalClient {
     }
 }
 
-impl owner::SignalClient {
+impl meta::SignalClient {
     pub fn new(socket: SocketPath) -> Self {
         Self {
             socket,
-            codec: owner::FrameCodec::default(),
+            codec: meta::FrameCodec::default(),
         }
     }
 
-    pub fn submit(&self, request: OwnerOperation) -> SpiritResult<OwnerReply> {
+    pub fn submit(&self, request: MetaOperation) -> SpiritResult<MetaReply> {
         let mut stream = UnixStream::connect(self.socket.as_path()).map_err(Error::input_output)?;
         let frame = self.codec.request_frame(request);
         self.codec.write_frame(&mut stream, &frame)?;
@@ -1625,12 +1618,12 @@ impl owner::SignalClient {
         self.reply_payload(self.codec.reply_from_frame(reply)?)
     }
 
-    fn reply_payload(&self, reply: Reply<OwnerReply>) -> SpiritResult<OwnerReply> {
+    fn reply_payload(&self, reply: Reply<MetaReply>) -> SpiritResult<MetaReply> {
         match reply {
             Reply::Accepted { per_operation, .. } => match per_operation.into_head() {
                 SubReply::Ok(payload) => Ok(payload),
                 other => Err(Error::UnexpectedFrame {
-                    expected: "accepted owner operation reply",
+                    expected: "accepted meta operation reply",
                     got: format!("{other:?}"),
                 }),
             },
@@ -1770,12 +1763,12 @@ impl ServedExchange {
     }
 }
 
-impl ServedOwnerExchange {
-    fn new(reply: Reply<OwnerReply>) -> Self {
+impl ServedMetaExchange {
+    fn new(reply: Reply<MetaReply>) -> Self {
         Self { reply }
     }
 
-    pub fn reply(&self) -> &Reply<OwnerReply> {
+    pub fn reply(&self) -> &Reply<MetaReply> {
         &self.reply
     }
 }

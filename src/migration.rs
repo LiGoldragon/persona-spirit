@@ -5,7 +5,7 @@ use sema::SchemaVersion;
 use sema_engine::{
     Engine, EngineOpen, EngineRecord, QueryPlan, RecordKey, TableDescriptor, TableName,
 };
-use signal_persona_spirit::{
+use signal_spirit::{
     Date, Entry, RecordIdentifier, Time,
     migration::{V010ToV011, V020ToV030, V030ToV040, v010, v020, v030},
 };

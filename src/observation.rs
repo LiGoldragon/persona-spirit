@@ -4,7 +4,8 @@
 //! The executable records remain local to this component. `signal-sema`
 //! receives only payloadless classification labels.
 
-use signal_persona_spirit::{
+use signal_sema::{SemaObservation, SemaOperation, SemaOutcome, ToSemaOperation, ToSemaOutcome};
+use signal_spirit::{
     CertaintyChange, CertaintyChanged, EffectOutcome, Observation, ObserverFilter,
     ObserverSubscriptionOpened, ObserverSubscriptionToken, Operation as WorkingOperation,
     OperationKind, PrivacySelection, QuestionsObserved, RecordAccepted, RecordChange,
@@ -15,12 +16,11 @@ use signal_persona_spirit::{
     StateSubscriptionToken, Statement, Subscription, SubscriptionOpened, SubscriptionRetracted,
     SubscriptionToken, TopicsObserved,
 };
-use signal_sema::{SemaObservation, SemaOperation, SemaOutcome, ToSemaOperation, ToSemaOutcome};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     ClassifyStatement(Statement),
-    AssertEntry(signal_persona_spirit::Entry),
+    AssertEntry(signal_spirit::Entry),
     RemoveRecord(RecordIdentifier),
     ChangeCertainty(CertaintyChange),
     ChangeRecord(RecordChange),
@@ -76,7 +76,7 @@ impl RecordIdentifierObservation {
         }
     }
 
-    pub fn private(query: signal_persona_spirit::PrivacyScopedRecordIdentifierQuery) -> Self {
+    pub fn private(query: signal_spirit::PrivacyScopedRecordIdentifierQuery) -> Self {
         Self {
             query: query.record_identifier_query,
             privacy_selection: query.privacy_selection,
@@ -92,7 +92,7 @@ impl RecordSubscriptionObservation {
         }
     }
 
-    pub fn private(subscription: signal_persona_spirit::PrivacyScopedRecordSubscription) -> Self {
+    pub fn private(subscription: signal_spirit::PrivacyScopedRecordSubscription) -> Self {
         Self {
             subscription: subscription.record_subscription,
             privacy_selection: subscription.privacy_selection,

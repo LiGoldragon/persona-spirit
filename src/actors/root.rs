@@ -9,7 +9,7 @@ use super::clock;
 use super::decoder;
 use super::dispatch;
 use super::ingress;
-use super::owner;
+use super::meta;
 use super::pipeline::PipelineReply;
 use super::policy;
 use super::reply::{self, TextReply};
@@ -21,7 +21,7 @@ use super::trace::{ActorTrace, TraceAction, TraceNode};
 const MIRROR_KIND_STAMPED_ENTRY: &str = "StampedEntry";
 
 pub struct SpiritRoot {
-    owner: ActorRef<owner::OwnerPlane>,
+    meta: ActorRef<meta::MetaPlane>,
     ingress: ActorRef<ingress::IngressPhase>,
     dispatch: ActorRef<dispatch::DispatchPhase>,
     encoder: ActorRef<reply::ReplyTextEncoder>,
@@ -40,15 +40,15 @@ pub struct SubmitText {
 }
 
 pub struct SubmitRequest {
-    pub request: signal_persona_spirit::Operation,
+    pub request: signal_spirit::Operation,
 }
 
 pub struct SubmitFrameRequest {
-    pub request: signal_frame::Request<signal_persona_spirit::Operation>,
+    pub request: signal_frame::Request<signal_spirit::Operation>,
 }
 
-pub struct SubmitOwnerRequest {
-    pub request: owner_signal_persona_spirit::Operation,
+pub struct SubmitMetaRequest {
+    pub request: meta_signal_spirit::Operation,
 }
 
 pub struct SubmitUpgradeRequest {
@@ -63,19 +63,19 @@ pub struct RootTextReply {
 
 #[derive(Debug, kameo::Reply)]
 pub struct RootOperationReply {
-    reply: signal_persona_spirit::Reply,
+    reply: signal_spirit::Reply,
     trace: ActorTrace,
 }
 
 #[derive(Debug, kameo::Reply)]
 pub struct RootFrameReply {
-    reply: signal_frame::Reply<signal_persona_spirit::Reply>,
+    reply: signal_frame::Reply<signal_spirit::Reply>,
     trace: ActorTrace,
 }
 
 #[derive(Debug, kameo::Reply)]
-pub struct RootOwnerReply {
-    reply: owner_signal_persona_spirit::Reply,
+pub struct RootMetaReply {
+    reply: meta_signal_spirit::Reply,
     trace: ActorTrace,
 }
 
@@ -119,14 +119,14 @@ impl Arguments {
 
 impl SpiritRoot {
     fn new(
-        owner: ActorRef<owner::OwnerPlane>,
+        meta: ActorRef<meta::MetaPlane>,
         ingress: ActorRef<ingress::IngressPhase>,
         dispatch: ActorRef<dispatch::DispatchPhase>,
         encoder: ActorRef<reply::ReplyTextEncoder>,
         store: ActorRef<store::RecordStore>,
     ) -> Self {
         Self {
-            owner,
+            meta,
             ingress,
             dispatch,
             encoder,
@@ -166,7 +166,7 @@ impl SpiritRoot {
 
     async fn submit_request(
         &self,
-        request: signal_persona_spirit::Operation,
+        request: signal_spirit::Operation,
     ) -> Result<RootOperationReply> {
         let mut trace = ActorTrace::new();
         trace.record(TraceNode::SPIRIT_ROOT, TraceAction::MessageReceived);
@@ -182,7 +182,7 @@ impl SpiritRoot {
 
     async fn submit_frame_request(
         &self,
-        request: signal_frame::Request<signal_persona_spirit::Operation>,
+        request: signal_frame::Request<signal_spirit::Operation>,
     ) -> Result<RootFrameReply> {
         let mut trace = ActorTrace::new();
         trace.record(TraceNode::SPIRIT_ROOT, TraceAction::MessageReceived);
@@ -202,20 +202,20 @@ impl SpiritRoot {
         Ok(RootFrameReply::new(reply, trace))
     }
 
-    async fn submit_owner_request(
+    async fn submit_meta_request(
         &self,
-        request: owner_signal_persona_spirit::Operation,
-    ) -> Result<RootOwnerReply> {
+        request: meta_signal_spirit::Operation,
+    ) -> Result<RootMetaReply> {
         let mut trace = ActorTrace::new();
         trace.record(TraceNode::SPIRIT_ROOT, TraceAction::MessageReceived);
-        let owner = self
-            .owner
-            .ask(owner::RouteOwnerRequest { request, trace })
+        let meta = self
+            .meta
+            .ask(meta::RouteMetaRequest { request, trace })
             .await
-            .map_err(Self::owner_send_error)?;
-        let mut trace = owner.trace;
+            .map_err(Self::meta_send_error)?;
+        let mut trace = meta.trace;
         trace.record(TraceNode::SPIRIT_ROOT, TraceAction::MessageReplied);
-        Ok(RootOwnerReply::new(owner.reply, trace))
+        Ok(RootMetaReply::new(meta.reply, trace))
     }
 
     async fn submit_upgrade_request(
@@ -425,7 +425,7 @@ impl SpiritRoot {
         }
     }
 
-    fn owner_send_error<Message>(error: SendError<Message, kameo::error::Infallible>) -> Error {
+    fn meta_send_error<Message>(error: SendError<Message, kameo::error::Infallible>) -> Error {
         Error::actor_runtime(error.to_string())
     }
 }
@@ -449,11 +449,11 @@ impl RootTextReply {
 }
 
 impl RootOperationReply {
-    fn new(reply: signal_persona_spirit::Reply, trace: ActorTrace) -> Self {
+    fn new(reply: signal_spirit::Reply, trace: ActorTrace) -> Self {
         Self { reply, trace }
     }
 
-    pub fn reply(&self) -> &signal_persona_spirit::Reply {
+    pub fn reply(&self) -> &signal_spirit::Reply {
         &self.reply
     }
 
@@ -461,17 +461,17 @@ impl RootOperationReply {
         &self.trace
     }
 
-    pub fn into_reply(self) -> signal_persona_spirit::Reply {
+    pub fn into_reply(self) -> signal_spirit::Reply {
         self.reply
     }
 }
 
 impl RootFrameReply {
-    fn new(reply: signal_frame::Reply<signal_persona_spirit::Reply>, trace: ActorTrace) -> Self {
+    fn new(reply: signal_frame::Reply<signal_spirit::Reply>, trace: ActorTrace) -> Self {
         Self { reply, trace }
     }
 
-    pub fn reply(&self) -> &signal_frame::Reply<signal_persona_spirit::Reply> {
+    pub fn reply(&self) -> &signal_frame::Reply<signal_spirit::Reply> {
         &self.reply
     }
 
@@ -479,17 +479,17 @@ impl RootFrameReply {
         &self.trace
     }
 
-    pub fn into_reply(self) -> signal_frame::Reply<signal_persona_spirit::Reply> {
+    pub fn into_reply(self) -> signal_frame::Reply<signal_spirit::Reply> {
         self.reply
     }
 }
 
-impl RootOwnerReply {
-    fn new(reply: owner_signal_persona_spirit::Reply, trace: ActorTrace) -> Self {
+impl RootMetaReply {
+    fn new(reply: meta_signal_spirit::Reply, trace: ActorTrace) -> Self {
         Self { reply, trace }
     }
 
-    pub fn reply(&self) -> &owner_signal_persona_spirit::Reply {
+    pub fn reply(&self) -> &meta_signal_spirit::Reply {
         &self.reply
     }
 
@@ -497,7 +497,7 @@ impl RootOwnerReply {
         &self.trace
     }
 
-    pub fn into_reply(self) -> owner_signal_persona_spirit::Reply {
+    pub fn into_reply(self) -> meta_signal_spirit::Reply {
         self.reply
     }
 }
@@ -551,7 +551,7 @@ impl SpiritActorRuntime {
 
     pub async fn submit_request(
         &self,
-        request: signal_persona_spirit::Operation,
+        request: signal_spirit::Operation,
     ) -> Result<RootOperationReply> {
         self.root
             .ask(SubmitRequest { request })
@@ -561,7 +561,7 @@ impl SpiritActorRuntime {
 
     pub async fn submit_frame_request(
         &self,
-        request: signal_frame::Request<signal_persona_spirit::Operation>,
+        request: signal_frame::Request<signal_spirit::Operation>,
     ) -> Result<RootFrameReply> {
         self.root
             .ask(SubmitFrameRequest { request })
@@ -569,12 +569,12 @@ impl SpiritActorRuntime {
             .map_err(Self::root_send_error)
     }
 
-    pub async fn submit_owner_request(
+    pub async fn submit_meta_request(
         &self,
-        request: owner_signal_persona_spirit::Operation,
-    ) -> Result<RootOwnerReply> {
+        request: meta_signal_spirit::Operation,
+    ) -> Result<RootMetaReply> {
         self.root
-            .ask(SubmitOwnerRequest { request })
+            .ask(SubmitMetaRequest { request })
             .await
             .map_err(Self::root_send_error)
     }
@@ -646,10 +646,10 @@ impl Actor for SpiritRoot {
         )
         .spawn()
         .await;
-        let owner = owner::OwnerPlane::supervise(
+        let meta = meta::MetaPlane::supervise(
             &actor_reference,
-            owner::Arguments {
-                lifecycle: owner::LifecycleState::default(),
+            meta::Arguments {
+                lifecycle: meta::LifecycleState::default(),
                 policy,
             },
         )
@@ -710,7 +710,7 @@ impl Actor for SpiritRoot {
         .spawn()
         .await;
 
-        Ok(Self::new(owner, ingress, dispatch, encoder, store))
+        Ok(Self::new(meta, ingress, dispatch, encoder, store))
     }
 }
 
@@ -750,15 +750,15 @@ impl Message<SubmitFrameRequest> for SpiritRoot {
     }
 }
 
-impl Message<SubmitOwnerRequest> for SpiritRoot {
-    type Reply = Result<RootOwnerReply>;
+impl Message<SubmitMetaRequest> for SpiritRoot {
+    type Reply = Result<RootMetaReply>;
 
     async fn handle(
         &mut self,
-        message: SubmitOwnerRequest,
+        message: SubmitMetaRequest,
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
-        self.submit_owner_request(message.request).await
+        self.submit_meta_request(message.request).await
     }
 }
 

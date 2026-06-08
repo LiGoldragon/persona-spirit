@@ -9,17 +9,16 @@ Read this before editing the spirit runtime.
 - `~/primary/skills/kameo.md`
 - `~/primary/skills/rust-discipline.md`
 - this repo's `ARCHITECTURE.md`
-- `signal-persona-spirit/ARCHITECTURE.md`
-- `owner-signal-persona-spirit/ARCHITECTURE.md` (current meta policy contract
-  name until the repository rename lands)
+- `signal-spirit/ARCHITECTURE.md`
+- `meta-signal-spirit/ARCHITECTURE.md` (meta policy contract)
 
 ## Boundary
 
 This repo owns the spirit runtime: daemon, CLI client, actor tree, sema-engine
 state, classifier orchestration, and mind forwarding.
 
-Contract records stay in `signal-persona-spirit` and the meta policy contract
-currently named `owner-signal-persona-spirit`.
+Contract records stay in `signal-spirit` and the meta policy contract
+currently named `meta-signal-spirit`.
 
 ## Invariants
 
@@ -28,13 +27,13 @@ currently named `owner-signal-persona-spirit`.
   `signal-frame::signal_cli!` metadata from the working and meta policy
   contracts.
 - The CLI decodes that argument as either a
-  `signal-persona-spirit::Operation` request or an
-  `owner-signal-persona-spirit::Operation` meta policy request, depending on
+  `signal-spirit::Operation` request or an
+  `meta-signal-spirit::Operation` meta policy request, depending on
   the generated route decision.
 - The daemon decodes that argument as `DaemonConfiguration`, selects the
   embedded or configured bootstrap-policy source, then binds one ordinary
-  socket for `signal-persona-spirit::Frame` values and one meta policy socket
-  for the current `owner-signal-persona-spirit::Frame` values.
+  socket for `signal-spirit::Frame` values and one meta policy socket
+  for the current `meta-signal-spirit::Frame` values.
 - If `DaemonConfiguration` includes a handoff-control socket, the daemon
   connects to Persona's control socket and can receive public-client file
   descriptors over `SCM_RIGHTS`; each received descriptor is served as the same
@@ -65,9 +64,9 @@ currently named `owner-signal-persona-spirit`.
 - The ordinary socket rejects meta policy frames; the meta policy socket rejects
   ordinary frames.
 - Each named actor is data-bearing. Do not add public zero-sized actor nouns.
-- Owner-signal lifecycle and identity requests route through `OwnerPlane`, not
+- Meta-signal lifecycle and identity requests route through `MetaPlane`, not
   through the ordinary text ingress or dispatch path.
-- Bootstrap-policy reload routes from `OwnerPlane` into `PolicyPlane` and
+- Bootstrap-policy reload routes from `MetaPlane` into `PolicyPlane` and
   returns `BootstrapPolicyReloaded` only after the policy source parses.
 - A daemon configured with a bootstrap-policy path passes that path into
   `PolicyPlane`; it does not silently fall back to the embedded seed.

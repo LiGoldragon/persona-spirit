@@ -12,8 +12,8 @@ lifecycle.
 `persona-spirit` follows the component triad:
 
 - `persona-spirit` — runtime daemon + thin CLI.
-- `signal-persona-spirit` — ordinary peer-callable contract.
-- `owner-signal-persona-spirit` — supervisor-only owner contract.
+- `signal-spirit` — ordinary peer-callable contract.
+- `meta-signal-spirit` — supervisor-only meta contract.
 
 ## Authority
 
@@ -39,9 +39,9 @@ Spirit is spawned last because it depends on the components it commands.
 
 Policy state is seeded once from `bootstrap-policy.nota` unless
 `DaemonConfiguration` names an explicit bootstrap-policy path. It is then
-changed only through `owner-signal-persona-spirit`. Working state records
+changed only through `meta-signal-spirit`. Working state records
 captured intent, psyche presence, pending clarification questions, and
-downstream owner-Mutate audit once the runtime lands.
+downstream meta-Mutate audit once the runtime lands.
 
 Record certainty changes are reversible ordinary maintenance. The
 `ChangeCertainty` operation Mutates the stored record at the same
@@ -78,7 +78,7 @@ the sema-engine store schema version and expose an explicit migration
 binary from the prior production shape before the unsuffixed `spirit`
 wrapper can point at that release. v0.4.1 is the privacy-storage cutover:
 it reads a v0.3.0 schema-3 database through the historical
-`signal_persona_spirit::migration::v030` entry shape, projects every
+`signal_spirit::migration::v030` entry shape, projects every
 record to the current entry shape with `privacy = Zero`, and writes a
 fresh schema-4 database. Starting a new versioned daemon with an empty
 database is acceptable only as an explicit side-by-side test surface; it
@@ -116,7 +116,7 @@ plus an optional engine-management socket:
 ```mermaid
 flowchart LR
     root["SpiritRoot"]
-    owner["OwnerPlane"]
+    meta["MetaPlane"]
     policy["PolicyPlane"]
     ingress["IngressPhase"]
     decoder["NotaDecoder"]
@@ -133,8 +133,8 @@ flowchart LR
     writer["SemaWriter trace"]
     reader["SemaReader trace"]
 
-    root --> owner
-    owner --> policy
+    root --> meta
+    meta --> policy
     root --> ingress
     ingress --> decoder
     ingress --> dispatch
@@ -151,8 +151,8 @@ flowchart LR
     root --> encoder
 ```
 
-`OwnerPlane` handles owner-only lifecycle and identity requests carried by
-`owner-signal-persona-spirit`; it is not reachable through the ordinary text
+`MetaPlane` handles meta-only lifecycle and identity requests carried by
+`meta-signal-spirit`; it is not reachable through the ordinary text
 ingress or dispatch path. `PolicyPlane` owns bootstrap-policy parsing and
 reload state. `ClassifierPlane` owns the current conservative statement-to-record
 policy. `ClockPlane` owns daemon-side capture-time stamping; clients never
@@ -170,7 +170,7 @@ planes. `ActorTrace` is a runtime witness, not an audit log: tests assert the
 expected actor path for each constraint.
 
 The daemon socket path does not pretend RKYV Signal traffic is text. The
-ordinary socket reads length-prefixed `signal-persona-spirit::Frame` values,
+ordinary socket reads length-prefixed `signal-spirit::Frame` values,
 checks the `signal-frame::Request`, and submits each working-contract
 `Operation` directly to `SpiritRoot` through the dispatch plane. When
 `DaemonConfiguration` names a handoff-control socket, the daemon also connects
@@ -180,9 +180,9 @@ ordinary length-prefixed Signal stream, so Persona is not on the byte path after
 handoff. A received descriptor is already admitted by Persona, so it can drain
 even if this daemon later closes its public sockets during handover; direct
 ordinary-socket traffic still obeys the daemon's current public-socket state.
-The owner socket reads length-prefixed
-`owner-signal-persona-spirit::Frame` values and submits each owner-contract
-`Operation` directly to `OwnerPlane`.
+The meta socket reads length-prefixed
+`meta-signal-spirit::Frame` values and submits each meta-contract
+`Operation` directly to `MetaPlane`.
 
 When `DaemonConfiguration` names an engine-management socket, the daemon also
 binds `signal-engine-management::EngineManagement` there. This is the
@@ -203,7 +203,7 @@ values. It is the private handover surface for a staged Spirit replacement:
 identifier, `ReadyToHandover` accepts only when the source marker still matches
 the local store, and `HandoverCompleted` finalizes only after a matching
 accepted readiness marker while the store marker remains unchanged. Completion
-then removes the ordinary and owner socket paths. The upgrade socket also
+then removes the ordinary and meta socket paths. The upgrade socket also
 applies the first mirrored write payload shape:
 `RecordKind("StampedEntry")` with component-private rkyv bytes. Broader
 cross-version projection remains the next step before a zero-downtime cutover
@@ -213,21 +213,21 @@ The daemon advances through three handover states:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Active: daemon binds ordinary + owner + upgrade sockets
+    [*] --> Active: daemon binds ordinary + meta + upgrade sockets
     Active --> HandoverMode: ReadyToHandover accepted
     HandoverMode --> Active: handover aborted
     HandoverMode --> PrivateUpgradeOnly: HandoverCompleted received
     PrivateUpgradeOnly --> [*]: daemon retired
 ```
 
-- **Active** — ordinary, owner, and upgrade sockets all serve their
+- **Active** — ordinary, meta, and upgrade sockets all serve their
   respective contracts; public writes accepted. The steady state.
-- **HandoverMode** — ordinary and owner sockets remain bound. Current
+- **HandoverMode** — ordinary and meta sockets remain bound. Current
   implementation freezes public writes so the accepted marker remains
   stable through completion; ordinary reads remain available. If
   Persona cannot complete the cutover, `RecoverFromFailure` returns the
   daemon to `Active` before public socket paths are removed.
-- **PrivateUpgradeOnly** — ordinary and owner socket paths removed;
+- **PrivateUpgradeOnly** — ordinary and meta socket paths removed;
   only the upgrade socket remains bound; the daemon receives mirrored
   `StampedEntry` writes from next if old-compat reads still consume the
   previous shape, then retires.
@@ -236,9 +236,9 @@ The `spirit` CLI is not a second runtime. It resolves its single argument as
 either a raw NOTA request record (argument begins with `(`) or a path to a NOTA
 request file, peeks the request record head, routes it through the generated
 `signal-frame::signal_cli!` table, and then decodes against the selected
-contract. Working requests become length-prefixed `signal-persona-spirit`
+contract. Working requests become length-prefixed `signal-spirit`
 frames on `PERSONA_SPIRIT_SOCKET`; meta policy requests become length-prefixed
-`owner-signal-persona-spirit` frames on `PERSONA_SPIRIT_META_SOCKET`. The CLI
+`meta-signal-spirit` frames on `PERSONA_SPIRIT_META_SOCKET`. The CLI
 encodes the selected daemon reply back to NOTA. If the selected socket is not
 configured, the CLI fails instead of opening a store or running the actor tree
 in-process.
@@ -280,17 +280,17 @@ persona-spirit  ─ daemon
         storage.rs, recorder.rs, observer.rs,
         supervisor.rs, reading_actor.rs
 
-signal-persona-spirit  ─ wire crate
+signal-spirit  ─ wire crate
    │
    ├─ signal_channel!([schema])  ─ legacy wire types at crate root
    └─ emit_schema!()             ─ schema-driven wire types at ::spirit::*
 ```
 
-The two emissions in `signal-persona-spirit` coexist; downstream
+The two emissions in `signal-spirit` coexist; downstream
 consumers reach for either path without a forced cutover. The
 designer-recommended migration path is incremental qualification —
-flip downstream consumers from `signal_persona_spirit::Operation`
-to `signal_persona_spirit::spirit::Operation` one at a time, then
+flip downstream consumers from `signal_spirit::Operation`
+to `signal_spirit::spirit::Operation` one at a time, then
 remove the legacy invocation when all consumers have flipped.
 
 ### Actor-engine pattern
@@ -407,7 +407,7 @@ schema-rust.
 ### Cross-crate import resolution — the one deferred piece
 
 The persona-spirit schemas import from sibling crates
-(`signal-persona-spirit/spirit.schema`, `spirit-storage`, etc.).
+(`signal-spirit/spirit.schema`, `spirit-storage`, etc.).
 The current `LoadedSchema::read_path` resolver can't follow these
 imports without an adjacent worktree layout. The workaround in
 `src/schema_driven/` is hand-written Rust types matching what
@@ -422,9 +422,9 @@ work today against the hand-written types.
 | The `spirit` CLI accepts exactly one argument. | `tests/boundary.rs` checks missing and extra arguments. |
 | The daemon binary accepts exactly one argument. | `tests/boundary.rs` checks the shared argument parser. |
 | The daemon binary accepts raw NOTA `DaemonConfiguration` or a path to a NOTA configuration file as its single argument. | `persona_spirit_daemon_accepts_configuration_file_path_argument` writes a configuration file and checks `DaemonRuntime::from_argument` loads it. |
-| The CLI routes request heads through generated working/owner contract metadata before full decode. | `persona_spirit_generated_dispatch_routes_working_and_owner_heads` and `persona_spirit_request_head_uses_generated_dispatch_before_full_decode` check the generated table. |
-| The CLI type-checks one selected contract request. | `tests/boundary.rs` checks valid working `State`, `Record`, and `Observe` requests and owner `Register` requests before daemon submission. |
-| The CLI requires the selected daemon socket instead of using an in-process store fallback. | `persona_spirit_binary_requires_socket_environment` runs a working request without `PERSONA_SPIRIT_SOCKET`; `persona_spirit_binary_requires_owner_socket_for_owner_requests` runs a meta policy request without `PERSONA_SPIRIT_META_SOCKET`. |
+| The CLI routes request heads through generated working/meta contract metadata before full decode. | `persona_spirit_generated_dispatch_routes_working_and_meta_heads` and `persona_spirit_request_head_uses_generated_dispatch_before_full_decode` check the generated table. |
+| The CLI type-checks one selected contract request. | `tests/boundary.rs` checks valid working `State`, `Record`, and `Observe` requests and meta `Register` requests before daemon submission. |
+| The CLI requires the selected daemon socket instead of using an in-process store fallback. | `persona_spirit_binary_requires_socket_environment` runs a working request without `PERSONA_SPIRIT_SOCKET`; `persona_spirit_binary_requires_meta_socket_for_meta_requests` runs a meta policy request without `PERSONA_SPIRIT_META_SOCKET`. |
 | The CLI path only translates NOTA to Signal frames and Signal replies to NOTA. | `persona_spirit_command_line_path_does_not_use_actor_runtime_directly` checks `src/bin/spirit.rs` is a one-line `signal_frame::signal_cli!` invocation and does not mention `SpiritActorRuntime` or `StoreLocation`. |
 | The CLI accepts a path to a NOTA request file. | `persona_spirit_client_accepts_request_file_path_argument` writes a request file, invokes the same client path, and checks daemon-backed persistence. |
 | Spirit-local commands project to payloadless Sema operation labels. | `tests/sema_projection.rs` checks `Command::from_request` and `ToSemaOperation` through real actor-runtime requests. |
@@ -462,30 +462,30 @@ work today against the hand-written types.
 | Valid unimplemented requests do not touch the store. | `persona_spirit_unimplemented_observer_request_uses_reply_shaper_not_store` checks `ReplyShaper` and absence of `RecordStore`, `SemaWriter`, and `SemaReader`. |
 | Invalid NOTA keeps a typed decode error through the actor path. | `persona_spirit_invalid_text_keeps_typed_decode_error` checks `Error::InvalidSpiritRequest`. |
 | Shutdown releases the store so a later runtime can reopen the same path. | `persona_spirit_shutdown_releases_store_for_restart` writes, stops, restarts, and reads. |
-| Owner lifecycle requests route through `OwnerPlane`, not the ordinary dispatch path. | `persona_spirit_owner_lifecycle_orders_use_owner_plane` checks `Started` / `DrainedAndStopped` replies and no dispatch/store trace. |
-| Owner identity requests route through `OwnerPlane`. | `persona_spirit_owner_identity_orders_use_owner_plane` checks register/retire replies. |
-| Bootstrap-policy reload uses the policy plane. | `persona_spirit_bootstrap_policy_reload_uses_policy_plane` returns `BootstrapPolicyReloaded` and checks the `OwnerPlane` → `PolicyPlane` route. |
-| Daemon configuration selects the bootstrap-policy source. | `persona_spirit_daemon_configuration_controls_bootstrap_policy_source` starts a daemon with an explicit policy path and reloads through the owner socket. |
+| Meta lifecycle requests route through `MetaPlane`, not the ordinary dispatch path. | `persona_spirit_meta_lifecycle_orders_use_meta_plane` checks `Started` / `DrainedAndStopped` replies and no dispatch/store trace. |
+| Meta identity requests route through `MetaPlane`. | `persona_spirit_meta_identity_orders_use_meta_plane` checks register/retire replies. |
+| Bootstrap-policy reload uses the policy plane. | `persona_spirit_bootstrap_policy_reload_uses_policy_plane` returns `BootstrapPolicyReloaded` and checks the `MetaPlane` → `PolicyPlane` route. |
+| Daemon configuration selects the bootstrap-policy source. | `persona_spirit_daemon_configuration_controls_bootstrap_policy_source` starts a daemon with an explicit policy path and reloads through the meta socket. |
 | The daemon configuration is a single untagged NOTA struct record. | `persona_spirit_daemon_configuration_is_one_nota_record` round-trips the config and rejects a variant wrapper shape. |
 | The daemon serves ordinary length-prefixed Signal frames through the actor root. | `persona_spirit_daemon_serves_signal_frames_through_actor_root` writes and reads through the ordinary Unix socket. |
 | The daemon can serve public Signal frames from a Persona-handed-off file descriptor. | `persona_spirit_daemon_serves_signal_frames_from_handed_off_file_descriptor` sends an accepted client stream over a handoff-control socket with `SCM_RIGHTS` and receives the ordinary reply directly from the daemon. |
 | The Spirit CLI can use a Persona-owned public socket while the daemon receives the descriptor over the private control socket. | `persona_spirit_cli_reaches_daemon_through_persona_handoff_router` starts Persona's handoff router, starts Spirit with a handoff-control connection, routes `spirit` `Record` and `Observe` CLI calls through the Persona-owned public socket, and proves the daemon replies directly after descriptor handoff. |
 | Persona can flip the active version selector while old handed-off Spirit clients drain. | `persona_handoff_router_routes_new_connections_after_selector_flip_and_old_connections_drain` seeds v0.1.0, copies the store to v0.1.1, routes an old pre-flip descriptor to v0.1.0, drives `AttemptHandover` through real upgrade sockets, then proves a new `spirit` CLI call on the same Persona public socket routes to v0.1.1. |
-| The daemon serves owner length-prefixed Signal frames through `OwnerPlane`. | `persona_spirit_daemon_serves_owner_signal_frames_through_owner_plane` writes and reads through the owner Unix socket. |
+| The daemon serves meta length-prefixed Signal frames through `MetaPlane`. | `persona_spirit_daemon_serves_meta_signal_frames_through_meta_plane` writes and reads through the meta Unix socket. |
 | The daemon can expose the manager lifecycle socket when supervised by `persona`. | `persona_spirit_daemon_serves_engine_management_socket_for_supervision` verifies `Announce`, readiness, and health replies over `signal-engine-management::EngineManagement`. |
-| The ordinary socket rejects owner Signal frames. | `persona_spirit_ordinary_socket_rejects_owner_signal_frames` writes an owner frame to the ordinary socket and expects decode rejection. |
-| The owner socket rejects ordinary Signal frames. | `persona_spirit_owner_socket_rejects_ordinary_signal_frames` writes an ordinary frame to the owner socket and expects decode rejection. |
+| The ordinary socket rejects meta Signal frames. | `persona_spirit_ordinary_socket_rejects_meta_signal_frames` writes an meta frame to the ordinary socket and expects decode rejection. |
+| The meta socket rejects ordinary Signal frames. | `persona_spirit_meta_socket_rejects_ordinary_signal_frames` writes an ordinary frame to the meta socket and expects decode rejection. |
 | The daemon serves private upgrade length-prefixed Signal frames through the actor root and store plane. | `persona_spirit_daemon_serves_version_handover_frames_through_upgrade_socket` asks for a handover marker, performs readiness, and completes handover through the upgrade socket. |
 | Handover completion requires prior accepted readiness. | `persona_spirit_upgrade_completion_requires_accepted_readiness` sends `HandoverCompleted` before `ReadyToHandover` and receives `HandoverRejected(NotReady)` while public sockets remain open. |
 | Handover readiness rejects marker drift. | `persona_spirit_upgrade_readiness_rejects_commit_sequence_drift` reads marker N, accepts a public write, then receives `HandoverRejected(CommitSequenceAdvanced)` when it tries to enter handover mode from stale marker N. |
-| Handover readiness freezes public writes until completion. | `persona_spirit_upgrade_readiness_freezes_public_writes_until_completion` accepts readiness, rejects an ordinary `Record` write while still allowing an ordinary `Observe` read, then closes ordinary and owner socket paths after `HandoverCompleted`. |
+| Handover readiness freezes public writes until completion. | `persona_spirit_upgrade_readiness_freezes_public_writes_until_completion` accepts readiness, rejects an ordinary `Record` write while still allowing an ordinary `Observe` read, then closes ordinary and meta socket paths after `HandoverCompleted`. |
 | Handover recovery reopens public writes after a failed readiness window. | `persona_spirit_upgrade_recovery_reopens_public_writes_after_readiness` accepts readiness, rejects a write while frozen, applies `RecoverFromFailure`, then accepts ordinary writes again. |
 | Private-upgrade mirror can apply a component-private stamped entry after completion. | `persona_spirit_upgrade_mirror_applies_stamped_entry_after_completion` completes handover, sends `Mirror(RecordKind("StampedEntry"), bytes)`, receives `MirrorAcknowledged`, and verifies the marker advances while public sockets stay closed. |
-| Handover completion removes the ordinary and owner socket paths. | `persona_spirit_daemon_serves_version_handover_frames_through_upgrade_socket` completes handover and then verifies public socket paths are gone. |
-| Daemon shutdown removes all socket paths. | `persona_spirit_daemon_serves_signal_frames_through_actor_root` checks ordinary, owner, and upgrade sockets are removed after bounded serving. |
+| Handover completion removes the ordinary and meta socket paths. | `persona_spirit_daemon_serves_version_handover_frames_through_upgrade_socket` completes handover and then verifies public socket paths are gone. |
+| Daemon shutdown removes all socket paths. | `persona_spirit_daemon_serves_signal_frames_through_actor_root` checks ordinary, meta, and upgrade sockets are removed after bounded serving. |
 | Signal-frame daemon ingress does not route through the NOTA decoder. | `persona_spirit_daemon_source_does_not_route_signal_frames_through_nota_decoder` checks the socket boundary calls `SubmitRequest`. |
 | The CLI acts as a daemon client without bypassing Signal. | `persona_spirit_client_can_send_nota_request_to_running_daemon` decodes NOTA then sends a Signal frame to the socket. |
-| The CLI can reach meta policy contract behavior through the policy socket. | `spirit_binary_routes_owner_request_to_owner_socket` sends `(Register (operator))` through `spirit` with only `PERSONA_SPIRIT_META_SOCKET` configured. |
+| The CLI can reach meta policy contract behavior through the policy socket. | `spirit_binary_routes_meta_request_to_meta_socket` sends `(Register (operator))` through `spirit` with only `PERSONA_SPIRIT_META_SOCKET` configured. |
 | The flake exposes installable CLI and daemon packages separately. | `test-split-packages` checks `packages.spirit` contains only `spirit` and `packages.persona-spirit-daemon` contains only `persona-spirit-daemon`. |
 | No LLM classifier or mind-forwarding behavior exists until its intent is clear. | Status section says this explicitly. |
 
@@ -493,14 +493,14 @@ work today against the hand-written types.
 
 ```text
 src/lib.rs                         — module entry
-src/daemon.rs                      — daemon configuration, bootstrap-policy source selection, socket binding, ordinary/owner/upgrade frame codecs, Design D handoff-control receive path, signal clients
+src/daemon.rs                      — daemon configuration, bootstrap-policy source selection, socket binding, ordinary/meta/upgrade frame codecs, Design D handoff-control receive path, signal clients
 src/error.rs                       — typed error
 src/observation.rs                 — Spirit-local Command/Effect to payloadless signal-sema observation projection
 src/migration.rs                   — explicit prior-version database migration bridges
 src/store.rs                       — sema-engine backed entry store and record queries
 src/actors/root.rs                 — Kameo root and blocking actor-runtime helper
 src/actors/ingress.rs              — text ingress phase
-src/actors/owner.rs                — owner-signal lifecycle and identity actor
+src/actors/meta.rs                — meta-signal lifecycle and identity actor
 src/actors/policy.rs               — bootstrap-policy parsing and reload actor
 src/actors/decoder.rs              — strict NOTA request decoder actor
 src/actors/classifier.rs           — conservative statement-to-record classifier actor
@@ -531,21 +531,21 @@ Implemented now:
 - daemon binary and `spirit` CLI binary names;
 - shared `signal-frame::SingleArgument` one-argument boundary parser;
 - one-line generated CLI head dispatch from the working and meta policy signal
-  contracts through `signal_frame::signal_cli!(spirit, signal_persona_spirit)`;
-- typed CLI request decoding for `signal-persona-spirit::Operation` and
-  `owner-signal-persona-spirit::Operation` from a raw NOTA argument or a NOTA
+  contracts through `signal_frame::signal_cli!(spirit, signal_spirit)`;
+- typed CLI request decoding for `signal-spirit::Operation` and
+  `meta-signal-spirit::Operation` from a raw NOTA argument or a NOTA
   request file path, using the shared signal-frame client;
 - CLI daemon-client mode that requires the selected working or meta policy socket,
   injects advisory `Caller` context, and performs only NOTA request decoding,
   signal-frame submission, and NOTA reply encoding;
 - provisional classifier for `State` statements that stores the text as one
   minimum-certainty clarified description under topic `unclassified`;
-- `persona-spirit-daemon` typed configuration and ordinary/owner Unix socket
+- `persona-spirit-daemon` typed configuration and ordinary/meta Unix socket
   binding;
 - private upgrade Unix socket binding for `signal-version-handover`;
 - length-prefixed RKYV ordinary Signal frame request/reply path over the
   ordinary daemon socket;
-- length-prefixed RKYV owner Signal frame request/reply path over the owner
+- length-prefixed RKYV meta Signal frame request/reply path over the meta
   daemon socket;
 - length-prefixed RKYV upgrade Signal frame request/reply path over the
   private upgrade socket for handover marker, readiness, and completion;
@@ -563,12 +563,12 @@ Implemented now:
 - `Observe(Questions(...))` with an empty pending-question set;
 - `Watch(State(...))` and `Watch(Records(...))` with snapshot-open replies;
 - `Unwatch(State(...))` and `Unwatch(Records(...))` with typed close acknowledgements;
-- owner-signal start, drain/stop, register identity, and retire identity
+- meta-signal start, drain/stop, register identity, and retire identity
   handling inside the actor tree;
 - bootstrap-policy source selection from daemon configuration, parsing, and
-  owner-signal reload acknowledgement through `PolicyPlane`;
+  meta-signal reload acknowledgement through `PolicyPlane`;
 - typed `RequestUnimplemented` NOTA replies for behavior not built yet;
-- dependency on the ordinary and owner spirit contracts.
+- dependency on the ordinary and meta spirit contracts.
 - local `Command` / `Effect` projection into payloadless
   `signal-sema::SemaObservation` labels, tested through the actor runtime;
 - ordinary request execution through `signal-executor::Executor`, with the
@@ -581,7 +581,7 @@ Implemented now:
 Not implemented:
 
 - LLM-backed intent classification;
-- owner-Mutate forwarding to mind;
+- meta-Mutate forwarding to mind;
 - subscription event delivery;
 - mirrored write replay through the private upgrade socket;
 - non-degenerate atomic execution for multi-operation ordinary batches or
@@ -597,5 +597,5 @@ in a separate throwaway tool or in manual relogging through Spirit's normal
 CLI path.
 
 The next implementation step is subscription event delivery or spirit-to-mind
-owner-Mutate forwarding. Spirit-to-mind owner variants are not needed for the
+meta-Mutate forwarding. Spirit-to-mind meta variants are not needed for the
 current raw CLI/storage/socket slice.

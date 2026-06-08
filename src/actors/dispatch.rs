@@ -8,7 +8,7 @@ use signal_executor::{
     ObserverSet, OperationEffects, OperationPlan,
 };
 use signal_frame::{NonEmpty, Request};
-use signal_persona_spirit::{
+use signal_spirit::{
     EffectEmitted, Operation as WorkingOperation, OperationKind, OperationReceived,
     RecordObservation, Reply as WorkingReply, RequestUnimplemented, UnimplementedReason,
 };
@@ -271,12 +271,12 @@ impl SpiritCommandExecutor {
         Ok(CommandEffect::new(command, Effect::from_reply(reply)))
     }
 
-    async fn capture_entry(&self, entry: signal_persona_spirit::Entry) -> Result<WorkingReply> {
+    async fn capture_entry(&self, entry: signal_spirit::Entry) -> Result<WorkingReply> {
         let entry = self.stamp_entry(entry).await?;
         self.capture_stamped_entry(entry).await
     }
 
-    async fn stamp_entry(&self, entry: signal_persona_spirit::Entry) -> Result<StampedEntry> {
+    async fn stamp_entry(&self, entry: signal_spirit::Entry) -> Result<StampedEntry> {
         let trace = self.trace.snapshot();
         let stamped = self
             .clock
@@ -301,7 +301,7 @@ impl SpiritCommandExecutor {
 
     async fn remove_entry(
         &self,
-        identifier: signal_persona_spirit::RecordIdentifier,
+        identifier: signal_spirit::RecordIdentifier,
     ) -> Result<WorkingReply> {
         let trace = self.trace.snapshot();
         let pipeline = self
@@ -316,7 +316,7 @@ impl SpiritCommandExecutor {
 
     async fn change_certainty(
         &self,
-        change: signal_persona_spirit::CertaintyChange,
+        change: signal_spirit::CertaintyChange,
     ) -> Result<WorkingReply> {
         let trace = self.trace.snapshot();
         let pipeline = self
@@ -329,10 +329,7 @@ impl SpiritCommandExecutor {
         Ok(reply)
     }
 
-    async fn change_record(
-        &self,
-        change: signal_persona_spirit::RecordChange,
-    ) -> Result<WorkingReply> {
+    async fn change_record(&self, change: signal_spirit::RecordChange) -> Result<WorkingReply> {
         let trace = self.trace.snapshot();
         let pipeline = self
             .store
@@ -346,7 +343,7 @@ impl SpiritCommandExecutor {
 
     async fn collect_removal_candidates(
         &self,
-        collection: signal_persona_spirit::RemovalCandidateCollection,
+        collection: signal_spirit::RemovalCandidateCollection,
     ) -> Result<WorkingReply> {
         let trace = self.trace.snapshot();
         let pipeline = self
@@ -361,7 +358,7 @@ impl SpiritCommandExecutor {
 
     async fn classify_statement(
         &self,
-        statement: signal_persona_spirit::Statement,
+        statement: signal_spirit::Statement,
     ) -> Result<WorkingReply> {
         let trace = self.trace.snapshot();
         let classified = self
@@ -487,7 +484,7 @@ impl SpiritCommandExecutor {
 
     async fn retract_state_subscription(
         &self,
-        token: signal_persona_spirit::StateSubscriptionToken,
+        token: signal_spirit::StateSubscriptionToken,
     ) -> Result<WorkingReply> {
         let trace = self.trace.snapshot();
         let pipeline = self
@@ -502,7 +499,7 @@ impl SpiritCommandExecutor {
 
     async fn retract_record_subscription(
         &self,
-        token: signal_persona_spirit::RecordSubscriptionToken,
+        token: signal_spirit::RecordSubscriptionToken,
     ) -> Result<WorkingReply> {
         let trace = self.trace.snapshot();
         let pipeline = self

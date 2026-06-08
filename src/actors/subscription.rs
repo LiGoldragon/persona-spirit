@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use kameo::actor::{Actor, ActorRef};
 use kameo::message::{Context, Message};
-use signal_persona_spirit::{
+use signal_spirit::{
     PresenceView, RecordSubscription, RecordSubscriptionToken, RecordSummary,
     Reply as WorkingReply, StateSubscriptionToken, SubscriptionOpened, SubscriptionRetracted,
     SubscriptionSnapshot, SubscriptionToken,

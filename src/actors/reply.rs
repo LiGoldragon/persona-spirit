@@ -2,7 +2,7 @@ use kameo::actor::{Actor, ActorRef};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
 use nota_next::NotaEncode;
-use signal_persona_spirit::{
+use signal_spirit::{
     OperationKind, Reply as WorkingReply, RequestUnimplemented, UnimplementedReason,
 };
 

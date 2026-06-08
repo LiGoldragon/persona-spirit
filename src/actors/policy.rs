@@ -3,10 +3,10 @@ use std::path::PathBuf;
 use kameo::actor::{Actor, ActorRef};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
-use nota_next::{NotaDecode, NotaEncode, NotaSource};
-use owner_signal_persona_spirit::{
-    BootstrapPolicyReloaded, Reply as OwnerReply, RequestUnimplemented, UnimplementedReason,
+use meta_signal_spirit::{
+    BootstrapPolicyReloaded, Reply as MetaReply, RequestUnimplemented, UnimplementedReason,
 };
+use nota_next::{NotaDecode, NotaEncode, NotaSource};
 
 use super::trace::{ActorTrace, TraceAction, TraceNode};
 
@@ -37,7 +37,7 @@ pub struct ReloadBootstrapPolicy {
 
 #[derive(Debug, Clone, PartialEq, Eq, kameo::Reply)]
 pub struct PolicyPipelineReply {
-    pub reply: OwnerReply,
+    pub reply: MetaReply,
     pub trace: ActorTrace,
 }
 
@@ -52,9 +52,9 @@ impl PolicyPlane {
         let reply = match BootstrapPolicy::from_source(&self.source) {
             Ok(policy) => {
                 self.policy = Some(policy);
-                OwnerReply::BootstrapPolicyReloaded(BootstrapPolicyReloaded {})
+                MetaReply::BootstrapPolicyReloaded(BootstrapPolicyReloaded {})
             }
-            Err(_reason) => OwnerReply::RequestUnimplemented(RequestUnimplemented {
+            Err(_reason) => MetaReply::RequestUnimplemented(RequestUnimplemented {
                 reason: UnimplementedReason::DependencyNotReady,
             }),
         };

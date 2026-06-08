@@ -4,13 +4,13 @@ use signal_frame::{
     ClientShape, CommandLineError, CommandLineSocket, Request, RequestHead, RequestInput,
     RequestText, SingleArgument,
 };
-use signal_persona_spirit::{Operation, OutputStream, OutputTarget};
+use signal_spirit::{Operation, OutputStream, OutputTarget};
 
-type WorkingFrame = signal_persona_spirit::Frame;
-type OwnerFrame = owner_signal_persona_spirit::Frame;
+type WorkingFrame = signal_spirit::Frame;
+type MetaFrame = meta_signal_spirit::Frame;
 
 pub struct CommandLine {
-    client: ClientShape<WorkingFrame, OwnerFrame>,
+    client: ClientShape<WorkingFrame, MetaFrame>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,12 +25,12 @@ struct RequestOutputStream {
 
 impl CommandLine {
     pub fn from_binary_name(binary_name: &str) -> Self {
-        Self::new(ClientShape::<WorkingFrame, OwnerFrame>::from_binary_name(
+        Self::new(ClientShape::<WorkingFrame, MetaFrame>::from_binary_name(
             binary_name,
         ))
     }
 
-    pub fn new(client: ClientShape<WorkingFrame, OwnerFrame>) -> Self {
+    pub fn new(client: ClientShape<WorkingFrame, MetaFrame>) -> Self {
         Self { client }
     }
 
@@ -71,7 +71,7 @@ impl CommandLine {
     ) -> Result<OutputStream, CommandLineError> {
         let text = RequestInput::new(argument.clone()).text()?;
         let head = RequestHead::from_text(&text)?;
-        match head.route::<Operation, owner_signal_persona_spirit::Operation>()? {
+        match head.route::<Operation, meta_signal_spirit::Operation>()? {
             CommandLineSocket::Working => {
                 let request = RequestText::<Operation>::new(text).decode_request()?;
                 Ok(RequestOutputStream::from_working_request(&request).into_stream())

@@ -29,7 +29,7 @@ direction.
 ## Spirit owns mind
 
 Spirit owns `persona-mind` in the authority graph: spirit
-issues owner-Mutate against `owner-signal-persona-mind`. *"Yes,
+issues meta-Mutate against `meta-signal-mind`. *"Yes,
 of course spirit owns mind. … We'll have to develop and flesh
 it out as it develops."* The apex relationship is settled; the
 concrete verb set develops with implementation. Spirit-to-mind
@@ -154,7 +154,7 @@ schemas-warrant-per-channel discipline. The recorder, observer,
 supervisor, reading-actor, storage table set, and upgrade log each
 get their own `.schema` file in the daemon crate. Storage and
 internal channels live in `persona-spirit`; wire channels live in
-`signal-persona-spirit` and `owner-signal-persona-spirit` as
+`signal-spirit` and `meta-signal-spirit` as
 before. *"When the psyche describes a major part of the system,
 that description IS a warrant to create a schema for that part."*
 Per record 668.
@@ -339,7 +339,7 @@ test surfaces, not production defaults.
 ## Daemon configuration — 9-field positional argument
 
 The daemon binary takes one NOTA argument: a positional 9-field
-record naming three Unix sockets (ordinary, owner, upgrade), one
+record naming three Unix sockets (ordinary, meta, upgrade), one
 sema database path, one magnitude limit, and four `None`-slot
 extension points reserved for future configuration fields. The
 CriomOS-home module is what authors this tuple per release; the

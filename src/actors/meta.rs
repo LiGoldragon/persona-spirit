@@ -1,16 +1,16 @@
 use kameo::actor::{Actor, ActorRef};
 use kameo::error::{Infallible, SendError};
 use kameo::message::{Context, Message};
-use owner_signal_persona_spirit::{
+use meta_signal_spirit::{
     Drain, DrainedAndStopped, Generation, IdentityName, IdentityRegistered, IdentityRetired,
-    Operation as OwnerOperation, Registration, Reply as OwnerReply, RequestUnimplemented,
-    Retirement, Started, UnimplementedReason,
+    Operation as MetaOperation, Registration, Reply as MetaReply, RequestUnimplemented, Retirement,
+    Started, UnimplementedReason,
 };
 
 use super::policy;
 use super::trace::{ActorTrace, TraceAction, TraceNode};
 
-pub struct OwnerPlane {
+pub struct MetaPlane {
     lifecycle: LifecycleState,
     identities: Vec<IdentityName>,
     policy: ActorRef<policy::PolicyPlane>,
@@ -27,18 +27,18 @@ pub struct Arguments {
     pub policy: ActorRef<policy::PolicyPlane>,
 }
 
-pub struct RouteOwnerRequest {
-    pub request: OwnerOperation,
+pub struct RouteMetaRequest {
+    pub request: MetaOperation,
     pub trace: ActorTrace,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, kameo::Reply)]
-pub struct OwnerPipelineReply {
-    pub reply: OwnerReply,
+pub struct MetaPipelineReply {
+    pub reply: MetaReply,
     pub trace: ActorTrace,
 }
 
-impl OwnerPlane {
+impl MetaPlane {
     fn new(lifecycle: LifecycleState, policy: ActorRef<policy::PolicyPlane>) -> Self {
         Self {
             lifecycle,
@@ -47,36 +47,32 @@ impl OwnerPlane {
         }
     }
 
-    async fn route(
-        &mut self,
-        request: OwnerOperation,
-        mut trace: ActorTrace,
-    ) -> OwnerPipelineReply {
-        trace.record(TraceNode::OWNER_PLANE, TraceAction::MessageReceived);
+    async fn route(&mut self, request: MetaOperation, mut trace: ActorTrace) -> MetaPipelineReply {
+        trace.record(TraceNode::META_PLANE, TraceAction::MessageReceived);
         let reply = match request {
-            OwnerOperation::Start(order) => self.start(order.generation),
-            OwnerOperation::Drain(order) => self.drain(order),
-            OwnerOperation::Reload(_order) => {
+            MetaOperation::Start(order) => self.start(order.generation),
+            MetaOperation::Drain(order) => self.drain(order),
+            MetaOperation::Reload(_order) => {
                 return self.reload_policy(trace).await;
             }
-            OwnerOperation::Register(order) => self.register_identity(order),
-            OwnerOperation::Retire(order) => self.retire_identity(order),
+            MetaOperation::Register(order) => self.register_identity(order),
+            MetaOperation::Retire(order) => self.retire_identity(order),
         };
-        trace.record(TraceNode::OWNER_PLANE, TraceAction::MessageReplied);
-        OwnerPipelineReply { reply, trace }
+        trace.record(TraceNode::META_PLANE, TraceAction::MessageReplied);
+        MetaPipelineReply { reply, trace }
     }
 
-    fn start(&mut self, generation: Generation) -> OwnerReply {
+    fn start(&mut self, generation: Generation) -> MetaReply {
         self.lifecycle.generation = Some(generation);
-        OwnerReply::Started(Started { generation })
+        MetaReply::Started(Started { generation })
     }
 
-    fn drain(&mut self, _order: Drain) -> OwnerReply {
+    fn drain(&mut self, _order: Drain) -> MetaReply {
         self.lifecycle.generation = None;
-        OwnerReply::DrainedAndStopped(DrainedAndStopped {})
+        MetaReply::DrainedAndStopped(DrainedAndStopped {})
     }
 
-    async fn reload_policy(&self, trace: ActorTrace) -> OwnerPipelineReply {
+    async fn reload_policy(&self, trace: ActorTrace) -> MetaPipelineReply {
         match self
             .policy
             .ask(policy::ReloadBootstrapPolicy { trace })
@@ -85,8 +81,8 @@ impl OwnerPlane {
             Ok(mut policy) => {
                 policy
                     .trace
-                    .record(TraceNode::OWNER_PLANE, TraceAction::MessageReplied);
-                OwnerPipelineReply {
+                    .record(TraceNode::META_PLANE, TraceAction::MessageReplied);
+                MetaPipelineReply {
                     reply: policy.reply,
                     trace: policy.trace,
                 }
@@ -95,20 +91,20 @@ impl OwnerPlane {
         }
     }
 
-    fn register_identity(&mut self, order: Registration) -> OwnerReply {
+    fn register_identity(&mut self, order: Registration) -> MetaReply {
         if !self.identities.contains(&order.name) {
             self.identities.push(order.name.clone());
         }
-        OwnerReply::IdentityRegistered(IdentityRegistered { name: order.name })
+        MetaReply::IdentityRegistered(IdentityRegistered { name: order.name })
     }
 
-    fn retire_identity(&mut self, order: Retirement) -> OwnerReply {
+    fn retire_identity(&mut self, order: Retirement) -> MetaReply {
         self.identities.retain(|name| name != &order.name);
-        OwnerReply::IdentityRetired(IdentityRetired { name: order.name })
+        MetaReply::IdentityRetired(IdentityRetired { name: order.name })
     }
 }
 
-impl Actor for OwnerPlane {
+impl Actor for MetaPlane {
     type Args = Arguments;
     type Error = Infallible;
 
@@ -120,24 +116,24 @@ impl Actor for OwnerPlane {
     }
 }
 
-impl Message<RouteOwnerRequest> for OwnerPlane {
-    type Reply = OwnerPipelineReply;
+impl Message<RouteMetaRequest> for MetaPlane {
+    type Reply = MetaPipelineReply;
 
     async fn handle(
         &mut self,
-        message: RouteOwnerRequest,
+        message: RouteMetaRequest,
         _context: &mut Context<Self, Self::Reply>,
     ) -> Self::Reply {
         self.route(message.request, message.trace).await
     }
 }
 
-impl OwnerPlane {
-    fn policy_send_error<Message>(_error: SendError<Message, Infallible>) -> OwnerPipelineReply {
+impl MetaPlane {
+    fn policy_send_error<Message>(_error: SendError<Message, Infallible>) -> MetaPipelineReply {
         let mut trace = ActorTrace::new();
-        trace.record(TraceNode::OWNER_PLANE, TraceAction::MessageReplied);
-        OwnerPipelineReply {
-            reply: OwnerReply::RequestUnimplemented(RequestUnimplemented {
+        trace.record(TraceNode::META_PLANE, TraceAction::MessageReplied);
+        MetaPipelineReply {
+            reply: MetaReply::RequestUnimplemented(RequestUnimplemented {
                 reason: UnimplementedReason::DependencyNotReady,
             }),
             trace,

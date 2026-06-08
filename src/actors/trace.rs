@@ -10,7 +10,7 @@ impl TraceNode {
     pub const CLASSIFIER_PLANE: Self = Self::new("ClassifierPlane");
     pub const CLOCK_PLANE: Self = Self::new("ClockPlane");
     pub const DISPATCH_PHASE: Self = Self::new("DispatchPhase");
-    pub const OWNER_PLANE: Self = Self::new("OwnerPlane");
+    pub const META_PLANE: Self = Self::new("MetaPlane");
     pub const POLICY_PLANE: Self = Self::new("PolicyPlane");
     pub const STATE_PLANE: Self = Self::new("StatePlane");
     pub const SUBSCRIPTION_PLANE: Self = Self::new("SubscriptionPlane");

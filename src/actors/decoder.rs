@@ -2,7 +2,7 @@ use kameo::actor::{Actor, ActorRef};
 use kameo::error::Infallible;
 use kameo::message::{Context, Message};
 use nota_next::NotaSource;
-use signal_persona_spirit::Operation as WorkingOperation;
+use signal_spirit::Operation as WorkingOperation;
 
 use crate::{Error, Result};
 

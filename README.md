@@ -3,9 +3,8 @@
 Persona component for the psyche ↔ mind interface.
 
 Current status: typed daemon foundation. The ordinary socket accepts
-length-prefixed `signal-persona-spirit` frames over `signal-frame`; the meta
-policy socket accepts the current `owner-signal-persona-spirit` frames until
-that contract repository is renamed; the private upgrade socket accepts
+length-prefixed `signal-spirit` frames over `signal-frame`; the meta
+policy socket accepts `meta-signal-spirit` frames; the private upgrade socket accepts
 `signal-version-handover` frames for handover marker, readiness, and
 completion.
 The `spirit` CLI is a one-line `signal_frame::signal_cli!` client: it resolves
@@ -21,12 +20,12 @@ and exposes that time only in provenance replies.
 The daemon actor tree persists `Record` operations, serves `Observe` reads
 for records and the topic catalog, opens/retracts `Watch` subscriptions,
 provisionally classifies raw `State`
-statements into minimum-certainty records, and handles owner
+statements into minimum-certainty records, and handles meta
 lifecycle/bootstrap-policy requests.
 
 The CLI can already capture and query daemon-backed typed intent records
 when the caller supplies typed `Entry` records. Not implemented yet:
-LLM-backed classification of raw psyche statements, spirit-to-mind owner
+LLM-backed classification of raw psyche statements, spirit-to-mind meta
 forwarding, live subscription event delivery, import of existing
 `intent/*.nota` records, mirrored write replay on the upgrade socket, and the
 workspace cutover that makes spirit storage canonical.

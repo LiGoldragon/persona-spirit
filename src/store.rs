@@ -7,7 +7,7 @@ use sema_engine::{
     Assertion, CommitLogEntry, Engine, EngineOpen, EngineRecord, Mutation, QueryPlan, RecordKey,
     Retraction, TableDescriptor, TableName, TableReference,
 };
-use signal_persona_spirit::{
+use signal_spirit::{
     ArchiveDatabaseTarget, Certainty, CertaintyChange, CertaintyChanged, CertaintySelection, Date,
     Entry, Kind, ObservationMode, OutputTarget, PrivacySelection, RecordAccepted, RecordChange,
     RecordIdentifier, RecordMutationApplied, RecordObservation, RecordProvenance,
@@ -877,7 +877,7 @@ impl RecordIdentifierCodeRange {
 
 #[cfg(test)]
 mod tests {
-    use signal_persona_spirit::{
+    use signal_spirit::{
         Description, Kind, Magnitude, OutputTarget, RecordChange, RecordedTimeRange,
         RemovalCandidateCollection,
     };

@@ -1,6 +1,6 @@
 use kameo::actor::{Actor, ActorRef};
 use kameo::message::{Context, Message};
-use signal_persona_spirit::{
+use signal_spirit::{
     CertaintyChange as CertaintyChangePayload, RecordChange as RecordChangePayload,
     RecordIdentifier, RecordObservation, RecordSummary, RemovalCandidateCollection,
     Reply as WorkingReply,

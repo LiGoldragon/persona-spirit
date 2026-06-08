@@ -1,17 +1,17 @@
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use nota_next::{NotaEncode, NotaSource};
-use owner_signal_persona_spirit::{
+use meta_signal_spirit::{
     BootstrapPolicy, BootstrapPolicyReloaded, Drain, DrainedAndStopped, Generation, IdentityName,
-    IdentityRegistered, IdentityRetired, Operation as OwnerOperation, Registration,
-    Reply as OwnerReply, RequestUnimplemented, Retirement, Start, Started, UnimplementedReason,
+    IdentityRegistered, IdentityRetired, Operation as MetaOperation, Registration,
+    Reply as MetaReply, RequestUnimplemented, Retirement, Start, Started, UnimplementedReason,
 };
+use nota_next::{NotaEncode, NotaSource};
 use persona_spirit::{
     BootstrapPolicySource, Error, SpiritActorRuntime, StoreLocation, TraceAction, TraceNode,
 };
 use signal_frame::{Caller, ProcessIdentifier, Request};
-use signal_persona_spirit::{
+use signal_spirit::{
     ObserverFilter, Operation as WorkingOperation, RecordIdentifier, Reply as WorkingReply,
     RequestUnimplemented as SpiritRequestUnimplemented,
     UnimplementedReason as SpiritUnimplementedReason,
@@ -118,14 +118,12 @@ async fn persona_spirit_ordinary_request_path_uses_signal_executor_and_sema_obse
     let runtime = fixture.runtime().await;
 
     let reply = runtime
-        .submit_request(WorkingOperation::Record(signal_persona_spirit::Entry {
-            topics: signal_persona_spirit::Topics::single(signal_persona_spirit::Topic::new(
-                "workspace",
-            )),
-            kind: signal_persona_spirit::Kind::Decision,
-            description: signal_persona_spirit::Description::new("executor path"),
-            certainty: signal_persona_spirit::Magnitude::Maximum,
-            privacy: signal_persona_spirit::Magnitude::Zero,
+        .submit_request(WorkingOperation::Record(signal_spirit::Entry {
+            topics: signal_spirit::Topics::single(signal_spirit::Topic::new("workspace")),
+            kind: signal_spirit::Kind::Decision,
+            description: signal_spirit::Description::new("executor path"),
+            certainty: signal_spirit::Magnitude::Maximum,
+            privacy: signal_spirit::Magnitude::Zero,
         }))
         .await
         .expect("entry accepted");
@@ -162,14 +160,12 @@ async fn persona_spirit_ordinary_request_path_uses_signal_executor_and_sema_obse
 async fn persona_spirit_frame_request_observes_non_init_caller() {
     let fixture = SpiritRuntimeFixture::new("caller");
     let runtime = fixture.runtime().await;
-    let request = Request::from_payload(WorkingOperation::Record(signal_persona_spirit::Entry {
-        topics: signal_persona_spirit::Topics::single(signal_persona_spirit::Topic::new(
-            "workspace",
-        )),
-        kind: signal_persona_spirit::Kind::Decision,
-        description: signal_persona_spirit::Description::new("caller witness"),
-        certainty: signal_persona_spirit::Magnitude::Maximum,
-        privacy: signal_persona_spirit::Magnitude::Zero,
+    let request = Request::from_payload(WorkingOperation::Record(signal_spirit::Entry {
+        topics: signal_spirit::Topics::single(signal_spirit::Topic::new("workspace")),
+        kind: signal_spirit::Kind::Decision,
+        description: signal_spirit::Description::new("caller witness"),
+        certainty: signal_spirit::Magnitude::Maximum,
+        privacy: signal_spirit::Magnitude::Zero,
     }))
     .with_caller(Some(Caller::new(ProcessIdentifier::new(42), None, None)));
 
@@ -622,34 +618,34 @@ async fn persona_spirit_subscription_retractions_use_subscription_plane() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn persona_spirit_owner_lifecycle_orders_use_owner_plane() {
-    let fixture = SpiritRuntimeFixture::new("owner-lifecycle");
+async fn persona_spirit_meta_lifecycle_orders_use_meta_plane() {
+    let fixture = SpiritRuntimeFixture::new("meta-lifecycle");
     let runtime = fixture.runtime().await;
 
     let started = runtime
-        .submit_owner_request(OwnerOperation::Start(Start {
+        .submit_meta_request(MetaOperation::Start(Start {
             generation: Generation::new(7),
         }))
         .await
-        .expect("owner start accepted");
+        .expect("meta start accepted");
     let stopped = runtime
-        .submit_owner_request(OwnerOperation::Drain(Drain {}))
+        .submit_meta_request(MetaOperation::Drain(Drain {}))
         .await
-        .expect("owner drain accepted");
+        .expect("meta drain accepted");
 
     assert_eq!(
         started.reply(),
-        &OwnerReply::Started(Started {
+        &MetaReply::Started(Started {
             generation: Generation::new(7),
         })
     );
     assert_eq!(
         stopped.reply(),
-        &OwnerReply::DrainedAndStopped(DrainedAndStopped {})
+        &MetaReply::DrainedAndStopped(DrainedAndStopped {})
     );
     assert!(started.trace().contains_ordered(&[
         TraceNode::SPIRIT_ROOT,
-        TraceNode::OWNER_PLANE,
+        TraceNode::META_PLANE,
         TraceNode::SPIRIT_ROOT,
     ]));
     assert!(!started.trace().contains(TraceNode::DISPATCH_PHASE));
@@ -659,18 +655,18 @@ async fn persona_spirit_owner_lifecycle_orders_use_owner_plane() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn persona_spirit_owner_identity_orders_use_owner_plane() {
-    let fixture = SpiritRuntimeFixture::new("owner-identity");
+async fn persona_spirit_meta_identity_orders_use_meta_plane() {
+    let fixture = SpiritRuntimeFixture::new("meta-identity");
     let runtime = fixture.runtime().await;
 
     let registered = runtime
-        .submit_owner_request(OwnerOperation::Register(Registration {
+        .submit_meta_request(MetaOperation::Register(Registration {
             name: IdentityName::new("author"),
         }))
         .await
         .expect("identity registered");
     let retired = runtime
-        .submit_owner_request(OwnerOperation::Retire(Retirement {
+        .submit_meta_request(MetaOperation::Retire(Retirement {
             name: IdentityName::new("author"),
         }))
         .await
@@ -678,40 +674,40 @@ async fn persona_spirit_owner_identity_orders_use_owner_plane() {
 
     assert_eq!(
         registered.reply(),
-        &OwnerReply::IdentityRegistered(IdentityRegistered {
+        &MetaReply::IdentityRegistered(IdentityRegistered {
             name: IdentityName::new("author"),
         })
     );
     assert_eq!(
         retired.reply(),
-        &OwnerReply::IdentityRetired(IdentityRetired {
+        &MetaReply::IdentityRetired(IdentityRetired {
             name: IdentityName::new("author"),
         })
     );
-    assert!(registered.trace().contains(TraceNode::OWNER_PLANE));
-    assert!(retired.trace().contains(TraceNode::OWNER_PLANE));
+    assert!(registered.trace().contains(TraceNode::META_PLANE));
+    assert!(retired.trace().contains(TraceNode::META_PLANE));
 
     runtime.stop().await.expect("runtime stops");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn persona_spirit_bootstrap_policy_reload_uses_policy_plane() {
-    let fixture = SpiritRuntimeFixture::new("owner-policy");
+    let fixture = SpiritRuntimeFixture::new("meta-policy");
     let runtime = fixture.runtime().await;
 
     let reply = runtime
-        .submit_owner_request(OwnerOperation::Reload(BootstrapPolicy {}))
+        .submit_meta_request(MetaOperation::Reload(BootstrapPolicy {}))
         .await
         .expect("policy reload type checked");
 
     assert_eq!(
         reply.reply(),
-        &OwnerReply::BootstrapPolicyReloaded(BootstrapPolicyReloaded {})
+        &MetaReply::BootstrapPolicyReloaded(BootstrapPolicyReloaded {})
     );
     assert!(reply.trace().contains_ordered(&[
-        TraceNode::OWNER_PLANE,
+        TraceNode::META_PLANE,
         TraceNode::POLICY_PLANE,
-        TraceNode::OWNER_PLANE,
+        TraceNode::META_PLANE,
     ]));
     assert!(!reply.trace().contains(TraceNode::DISPATCH_PHASE));
 
@@ -728,13 +724,13 @@ async fn persona_spirit_bootstrap_policy_reload_reports_missing_policy_source() 
         .await;
 
     let reply = runtime
-        .submit_owner_request(OwnerOperation::Reload(BootstrapPolicy {}))
+        .submit_meta_request(MetaOperation::Reload(BootstrapPolicy {}))
         .await
         .expect("policy reload type checked");
 
     assert_eq!(
         reply.reply(),
-        &OwnerReply::RequestUnimplemented(RequestUnimplemented {
+        &MetaReply::RequestUnimplemented(RequestUnimplemented {
             reason: UnimplementedReason::DependencyNotReady,
         })
     );
@@ -837,16 +833,16 @@ fn persona_spirit_public_surface_uses_side_modules_instead_of_spirit_prefixes() 
         .expect("lib source is readable");
 
     assert!(source.contains("pub mod ordinary"));
-    assert!(source.contains("pub mod owner"));
+    assert!(source.contains("pub mod meta"));
     assert!(!source.contains("SpiritClient"));
     assert!(!source.contains("SpiritFrameCodec"));
     assert!(!source.contains("SpiritSignalClient"));
-    assert!(!source.contains("OwnerSignalClient"));
+    assert!(!source.contains("MetaSignalClient"));
     assert!(!source.contains("SpiritCommandLine"));
     assert!(!source.contains("SpiritRequestText"));
     assert!(!source.contains("SpiritReplyText"));
-    assert!(!source.contains("OwnerSpiritRequestText"));
-    assert!(!source.contains("OwnerSpiritReplyText"));
+    assert!(!source.contains("MetaSpiritRequestText"));
+    assert!(!source.contains("MetaSpiritReplyText"));
 }
 
 #[test]
@@ -883,7 +879,7 @@ fn persona_spirit_actor_types_are_data_bearing() {
         ("src/actors/classifier.rs", "pub struct ClassifierPlane {"),
         ("src/actors/dispatch.rs", "pub struct DispatchPhase {"),
         ("src/actors/ingress.rs", "pub struct IngressPhase {"),
-        ("src/actors/owner.rs", "pub struct OwnerPlane {"),
+        ("src/actors/meta.rs", "pub struct MetaPlane {"),
         ("src/actors/policy.rs", "pub struct PolicyPlane {"),
         ("src/actors/reply.rs", "pub struct ReplyShaper {"),
         ("src/actors/reply.rs", "pub struct ReplyTextEncoder {"),

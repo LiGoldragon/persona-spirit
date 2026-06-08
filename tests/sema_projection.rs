@@ -2,7 +2,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use persona_spirit::{Command, Effect, SpiritActorRuntime, StoreLocation};
 use signal_frame::SubscriptionTokenInner;
-use signal_persona_spirit::{
+use signal_sema::{SemaObservation, SemaOperation, SemaOutcome};
+use signal_spirit::{
     CertaintyChange, CertaintySelection, Description, EffectEmitted, EffectOutcome, Entry, Kind,
     Magnitude, Observation, ObservationMode, ObserverFilter, ObserverSubscriptionToken,
     Operation as WorkingOperation, OperationKind, PublicRecordQuery, RecordAccepted, RecordChange,
@@ -10,7 +11,6 @@ use signal_persona_spirit::{
     RemovalCandidateCollection, Reply as WorkingReply, StateSubscriptionToken, Statement,
     StatementText, Subscription, SubscriptionToken, Topic, TopicSelection, Topics,
 };
-use signal_sema::{SemaObservation, SemaOperation, SemaOutcome};
 
 #[derive(Debug, Clone)]
 struct RuntimeFixture {

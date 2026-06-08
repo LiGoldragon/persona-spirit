@@ -3,7 +3,7 @@ pub mod clock;
 pub mod decoder;
 pub mod dispatch;
 pub mod ingress;
-pub mod owner;
+pub mod meta;
 pub mod pipeline;
 pub mod policy;
 pub mod reply;

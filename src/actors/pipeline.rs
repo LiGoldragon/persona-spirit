@@ -1,5 +1,5 @@
 use signal_frame::{Reply, SubReply};
-use signal_persona_spirit::{Operation as WorkingOperation, Reply as WorkingReply};
+use signal_spirit::{Operation as WorkingOperation, Reply as WorkingReply};
 
 use super::trace::ActorTrace;
 use crate::{Error, Result, error::RequestRejectionReason};

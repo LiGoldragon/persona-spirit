@@ -12,7 +12,7 @@ use sema::SchemaVersion;
 use sema_engine::{
     Assertion, Engine, EngineOpen, EngineRecord, RecordKey, TableDescriptor, TableName,
 };
-use signal_persona_spirit::{
+use signal_spirit::{
     CertaintySelection, Date, Description, Entry, Kind, Magnitude, ObservationMode,
     PrivacySelection, RecordIdentifier, RecordObservation, RecordQuery, RecordedTimeSelection,
     Reply as WorkingReply, Time, Topic, TopicSelection, Topics,
@@ -882,7 +882,7 @@ fn old_record(input: OldRecordInput<'_>) -> V010StoredRecord {
     }
 }
 
-fn target_provenances(target: &StorePath) -> Vec<signal_persona_spirit::RecordProvenance> {
+fn target_provenances(target: &StorePath) -> Vec<signal_spirit::RecordProvenance> {
     let store = SpiritStore::open(&StoreLocation::new(target.as_path())).expect("target opens");
     let reply = store
         .observe_records(RecordObservation {

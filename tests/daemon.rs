@@ -6,15 +6,15 @@ use std::process::Command;
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use nota_next::NotaEncode;
-use owner_signal_persona_spirit::{
-    BootstrapPolicy, BootstrapPolicyReloaded, Frame as OwnerFrame, FrameBody as OwnerFrameBody,
-    Generation, IdentityName, IdentityRegistered, Operation as OwnerOperation, Registration,
-    Reply as OwnerReply, Start, Started,
+use meta_signal_spirit::{
+    BootstrapPolicy, BootstrapPolicyReloaded, Frame as MetaFrame, FrameBody as MetaFrameBody,
+    Generation, IdentityName, IdentityRegistered, Operation as MetaOperation, Registration,
+    Reply as MetaReply, Start, Started,
 };
+use nota_next::NotaEncode;
 use persona_spirit::{
     BootstrapPolicyPath, DaemonConfiguration, DaemonRuntime, SingleArgument, SocketMode,
-    SocketPath, StoreLocation, StorePath, ordinary, owner, store::SpiritStore, store::StampedEntry,
+    SocketPath, StoreLocation, StorePath, meta, ordinary, store::SpiritStore, store::StampedEntry,
     upgrade,
 };
 use signal_engine_management::{
@@ -28,7 +28,7 @@ use signal_frame::{
     ExchangeIdentifier, ExchangeLane, LaneSequence, NonEmpty, Reply, Request, RequestBuilder,
     RequestPayload, RetryClassification, SessionEpoch, SubReply,
 };
-use signal_persona_spirit::{
+use signal_spirit::{
     CertaintySelection, Date, Description, Entry, Frame, FrameBody, Kind, Magnitude, Observation,
     ObservationMode, Operation as WorkingOperation, PublicRecordQuery, RecordIdentifier,
     Reply as WorkingReply, Statement, StatementText, Time, Topic, TopicSelection, Topics,
@@ -52,7 +52,7 @@ fn assert_short_identifier(identifier: RecordIdentifier) {
 #[derive(Debug, Clone)]
 struct DaemonFixture {
     ordinary_socket: SocketPath,
-    owner_socket: SocketPath,
+    meta_socket: SocketPath,
     upgrade_socket: SocketPath,
     engine_management_socket: SocketPath,
     handoff_control_socket: SocketPath,
@@ -70,8 +70,8 @@ impl DaemonFixture {
         let stem = format!("ps-{:x}-{nanos:x}", hasher.finish());
         let mut socket = std::env::temp_dir();
         socket.push(format!("{stem}-ordinary.sock"));
-        let mut owner_socket = std::env::temp_dir();
-        owner_socket.push(format!("{stem}-owner.sock"));
+        let mut meta_socket = std::env::temp_dir();
+        meta_socket.push(format!("{stem}-meta.sock"));
         let mut upgrade_socket = std::env::temp_dir();
         upgrade_socket.push(format!("{stem}-upgrade.sock"));
         let mut engine_management_socket = std::env::temp_dir();
@@ -82,7 +82,7 @@ impl DaemonFixture {
         store.push(format!("{stem}.sema"));
         Self {
             ordinary_socket: SocketPath::new(socket.to_string_lossy().into_owned()),
-            owner_socket: SocketPath::new(owner_socket.to_string_lossy().into_owned()),
+            meta_socket: SocketPath::new(meta_socket.to_string_lossy().into_owned()),
             upgrade_socket: SocketPath::new(upgrade_socket.to_string_lossy().into_owned()),
             engine_management_socket: SocketPath::new(
                 engine_management_socket.to_string_lossy().into_owned(),
@@ -97,7 +97,7 @@ impl DaemonFixture {
     fn configuration(&self) -> DaemonConfiguration {
         DaemonConfiguration::new(
             self.ordinary_socket.clone(),
-            self.owner_socket.clone(),
+            self.meta_socket.clone(),
             self.upgrade_socket.clone(),
             self.store.clone(),
             SocketMode::from_octal(0o600),
@@ -115,8 +115,8 @@ impl DaemonFixture {
         ordinary::SignalClient::new(self.ordinary_socket.clone())
     }
 
-    fn owner_client(&self) -> owner::SignalClient {
-        owner::SignalClient::new(self.owner_socket.clone())
+    fn meta_client(&self) -> meta::SignalClient {
+        meta::SignalClient::new(self.meta_socket.clone())
     }
 
     fn upgrade_client(&self) -> upgrade::SignalClient {
@@ -139,7 +139,7 @@ fn entry(description: &str) -> Entry {
     }
 }
 
-fn accepted_identifier(reply: &WorkingReply) -> signal_persona_spirit::RecordIdentifier {
+fn accepted_identifier(reply: &WorkingReply) -> signal_spirit::RecordIdentifier {
     let WorkingReply::RecordAccepted(accepted) = reply else {
         panic!("expected RecordAccepted reply, got {reply:?}");
     };
@@ -163,7 +163,7 @@ fn observe_all() -> WorkingOperation {
         topic_selection: TopicSelection::any(),
         kind: None,
         certainty_selection: CertaintySelection::Any,
-        recorded_time_selection: signal_persona_spirit::RecordedTimeSelection::Any,
+        recorded_time_selection: signal_spirit::RecordedTimeSelection::Any,
         mode: ObservationMode::SummaryOnly,
     }))
 }
@@ -358,7 +358,7 @@ fn persona_spirit_daemon_serves_signal_frames_through_actor_root() {
         .bind()
         .expect("daemon binds");
     let ordinary_socket = fixture.ordinary_socket.clone();
-    let owner_socket = fixture.owner_socket.clone();
+    let meta_socket = fixture.meta_socket.clone();
     let upgrade_socket = fixture.upgrade_socket.clone();
     let handle = thread::spawn(move || daemon.serve_count(2));
 
@@ -371,8 +371,8 @@ fn persona_spirit_daemon_serves_signal_frames_through_actor_root() {
     let observed = client.submit(observe_all()).expect("records observed");
     assert_eq!(
         observed,
-        WorkingReply::RecordsObserved(signal_persona_spirit::RecordsObserved::new(vec![
-            signal_persona_spirit::RecordSummary {
+        WorkingReply::RecordsObserved(signal_spirit::RecordsObserved::new(vec![
+            signal_spirit::RecordSummary {
                 identifier,
                 topics: Topics::single(Topic::new("workspace")),
                 kind: Kind::Decision,
@@ -393,8 +393,8 @@ fn persona_spirit_daemon_serves_signal_frames_through_actor_root() {
         "daemon shutdown removes the ordinary socket path"
     );
     assert!(
-        !owner_socket.as_path().exists(),
-        "daemon shutdown removes the owner socket path"
+        !meta_socket.as_path().exists(),
+        "daemon shutdown removes the meta socket path"
     );
     assert!(
         !upgrade_socket.as_path().exists(),
@@ -498,7 +498,7 @@ fn persona_spirit_daemon_rejects_multi_operation_batches_before_any_commit() {
         .expect("records observed");
     assert_eq!(
         observed,
-        WorkingReply::RecordsObserved(signal_persona_spirit::RecordsObserved::new(Vec::new()))
+        WorkingReply::RecordsObserved(signal_spirit::RecordsObserved::new(Vec::new()))
     );
 
     handle
@@ -549,7 +549,7 @@ fn persona_spirit_daemon_rejects_mismatched_short_header_before_dispatch() {
         .expect("store opens after rejected request");
     assert_eq!(
         store.observe_topics().expect("topics observed"),
-        WorkingReply::TopicsObserved(signal_persona_spirit::TopicsObserved::new(vec![]))
+        WorkingReply::TopicsObserved(signal_spirit::TopicsObserved::new(vec![]))
     );
 }
 
@@ -572,8 +572,8 @@ fn persona_spirit_daemon_classifies_state_frames_through_actor_root() {
     let observed = client.submit(observe_all()).expect("records observed");
     assert_eq!(
         observed,
-        WorkingReply::RecordsObserved(signal_persona_spirit::RecordsObserved::new(vec![
-            signal_persona_spirit::RecordSummary {
+        WorkingReply::RecordsObserved(signal_spirit::RecordsObserved::new(vec![
+            signal_spirit::RecordSummary {
                 identifier,
                 topics: Topics::single(Topic::new("unclassified")),
                 kind: Kind::Clarification,
@@ -618,12 +618,12 @@ fn persona_spirit_daemon_serves_topic_catalog_through_signal_frames() {
     let observed = client.submit(observe_topics()).expect("topics observed");
     assert_eq!(
         observed,
-        WorkingReply::TopicsObserved(signal_persona_spirit::TopicsObserved::new(vec![
-            signal_persona_spirit::TopicCount {
+        WorkingReply::TopicsObserved(signal_spirit::TopicsObserved::new(vec![
+            signal_spirit::TopicCount {
                 topic: Topic::new("naming"),
                 entries: 1,
             },
-            signal_persona_spirit::TopicCount {
+            signal_spirit::TopicCount {
                 topic: Topic::new("workspace"),
                 entries: 2,
             },
@@ -637,34 +637,34 @@ fn persona_spirit_daemon_serves_topic_catalog_through_signal_frames() {
 }
 
 #[test]
-fn persona_spirit_daemon_serves_owner_signal_frames_through_owner_plane() {
-    let fixture = DaemonFixture::new("owner-signal-frame");
+fn persona_spirit_daemon_serves_meta_signal_frames_through_meta_plane() {
+    let fixture = DaemonFixture::new("meta-signal-frame");
     let daemon = DaemonRuntime::from_configuration(fixture.configuration())
         .bind()
         .expect("daemon binds");
-    let handle = thread::spawn(move || daemon.serve_owner_count(2));
+    let handle = thread::spawn(move || daemon.serve_meta_count(2));
 
-    let client = fixture.owner_client();
+    let client = fixture.meta_client();
     let started = client
-        .submit(OwnerOperation::Start(Start {
+        .submit(MetaOperation::Start(Start {
             generation: Generation::new(7),
         }))
-        .expect("owner start accepted through owner socket");
+        .expect("meta start accepted through meta socket");
     assert_eq!(
         started,
-        OwnerReply::Started(Started {
+        MetaReply::Started(Started {
             generation: Generation::new(7),
         })
     );
 
     let registered = client
-        .submit(OwnerOperation::Register(Registration {
+        .submit(MetaOperation::Register(Registration {
             name: IdentityName::new("operator"),
         }))
-        .expect("owner identity accepted through owner socket");
+        .expect("meta identity accepted through meta socket");
     assert_eq!(
         registered,
-        OwnerReply::IdentityRegistered(IdentityRegistered {
+        MetaReply::IdentityRegistered(IdentityRegistered {
             name: IdentityName::new("operator"),
         })
     );
@@ -672,7 +672,7 @@ fn persona_spirit_daemon_serves_owner_signal_frames_through_owner_plane() {
     let served = handle
         .join()
         .expect("daemon thread exits")
-        .expect("daemon served two owner exchanges");
+        .expect("daemon served two meta exchanges");
     assert_eq!(served.len(), 2);
 }
 
@@ -771,8 +771,8 @@ fn persona_spirit_daemon_serves_version_handover_frames_through_upgrade_socket()
         "ordinary socket path is removed after handover completion"
     );
     assert!(
-        !fixture.owner_socket.as_path().exists(),
-        "owner socket path is removed after handover completion"
+        !fixture.meta_socket.as_path().exists(),
+        "meta socket path is removed after handover completion"
     );
     let ordinary_error = fixture
         .client()
@@ -1012,7 +1012,7 @@ fn persona_spirit_upgrade_readiness_freezes_public_writes_until_completion() {
         .expect("ordinary read remains available during handover mode");
     assert_eq!(
         read_reply,
-        WorkingReply::TopicsObserved(signal_persona_spirit::TopicsObserved::new(vec![]))
+        WorkingReply::TopicsObserved(signal_spirit::TopicsObserved::new(vec![]))
     );
 
     let completion_client = client.clone();
@@ -1045,8 +1045,8 @@ fn persona_spirit_upgrade_readiness_freezes_public_writes_until_completion() {
         "ordinary socket path is removed after handover completion"
     );
     assert!(
-        !fixture.owner_socket.as_path().exists(),
-        "owner socket path is removed after handover completion"
+        !fixture.meta_socket.as_path().exists(),
+        "meta socket path is removed after handover completion"
     );
 
     daemon.shutdown().expect("daemon shuts down");
@@ -1438,27 +1438,27 @@ fn persona_spirit_daemon_configuration_controls_bootstrap_policy_source() {
     let daemon = DaemonRuntime::from_configuration(configuration)
         .bind()
         .expect("daemon binds");
-    let handle = thread::spawn(move || daemon.serve_owner_count(1));
+    let handle = thread::spawn(move || daemon.serve_meta_count(1));
 
     let reply = fixture
-        .owner_client()
-        .submit(OwnerOperation::Reload(BootstrapPolicy {}))
-        .expect("configured policy reloads through owner socket");
+        .meta_client()
+        .submit(MetaOperation::Reload(BootstrapPolicy {}))
+        .expect("configured policy reloads through meta socket");
 
     assert_eq!(
         reply,
-        OwnerReply::BootstrapPolicyReloaded(BootstrapPolicyReloaded {})
+        MetaReply::BootstrapPolicyReloaded(BootstrapPolicyReloaded {})
     );
     handle
         .join()
         .expect("daemon thread exits")
-        .expect("daemon served owner reload");
+        .expect("daemon served meta reload");
     std::fs::remove_file(policy_path).expect("policy fixture removed");
 }
 
 #[test]
-fn persona_spirit_ordinary_socket_rejects_owner_signal_frames() {
-    let fixture = DaemonFixture::new("ordinary-rejects-owner");
+fn persona_spirit_ordinary_socket_rejects_meta_signal_frames() {
+    let fixture = DaemonFixture::new("ordinary-rejects-meta");
     let mut daemon = DaemonRuntime::from_configuration(fixture.configuration())
         .bind()
         .expect("daemon binds");
@@ -1469,38 +1469,38 @@ fn persona_spirit_ordinary_socket_rejects_owner_signal_frames() {
         served
     });
 
-    let codec = owner::FrameCodec::default();
+    let codec = meta::FrameCodec::default();
     let mut stream = UnixStream::connect(socket.as_path()).expect("client connects");
-    let frame = OwnerFrame::new(OwnerFrameBody::Request {
+    let frame = MetaFrame::new(MetaFrameBody::Request {
         exchange: exchange(),
-        request: OwnerOperation::Start(Start {
+        request: MetaOperation::Start(Start {
             generation: Generation::new(1),
         })
         .into_request(),
     });
     codec
         .write_frame(&mut stream, &frame)
-        .expect("owner request frame writes to ordinary socket");
+        .expect("meta request frame writes to ordinary socket");
 
     assert!(
         handle
             .join()
             .expect("daemon thread exits")
-            .expect_err("ordinary socket rejects owner frame")
+            .expect_err("ordinary socket rejects meta frame")
             .to_string()
             .contains("persona-spirit signal frame error")
     );
 }
 
 #[test]
-fn persona_spirit_owner_socket_rejects_ordinary_signal_frames() {
-    let fixture = DaemonFixture::new("owner-rejects-ordinary");
+fn persona_spirit_meta_socket_rejects_ordinary_signal_frames() {
+    let fixture = DaemonFixture::new("meta-rejects-ordinary");
     let mut daemon = DaemonRuntime::from_configuration(fixture.configuration())
         .bind()
         .expect("daemon binds");
-    let socket = fixture.owner_socket.clone();
+    let socket = fixture.meta_socket.clone();
     let handle = thread::spawn(move || {
-        let served = daemon.serve_owner_one();
+        let served = daemon.serve_meta_one();
         daemon.shutdown().expect("daemon shuts down");
         served
     });
@@ -1513,16 +1513,16 @@ fn persona_spirit_owner_socket_rejects_ordinary_signal_frames() {
     });
     codec
         .write_frame(&mut stream, &frame)
-        .expect("ordinary request frame writes to owner socket");
+        .expect("ordinary request frame writes to meta socket");
 
     let error = handle
         .join()
         .expect("daemon thread exits")
-        .expect_err("owner socket rejects ordinary frame")
+        .expect_err("meta socket rejects ordinary frame")
         .to_string();
     assert!(
-        error.contains("unexpected persona-spirit signal frame: expected owner request"),
-        "unexpected owner-socket rejection error: {error}"
+        error.contains("unexpected persona-spirit signal frame: expected meta request"),
+        "unexpected meta-socket rejection error: {error}"
     );
 }
 
@@ -1548,7 +1548,7 @@ fn persona_spirit_client_can_send_nota_request_to_running_daemon() {
     ])
     .expect("single request argument");
 
-    let client = ClientShape::<Frame, owner_signal_persona_spirit::Frame>::new(
+    let client = ClientShape::<Frame, meta_signal_spirit::Frame>::new(
         CommandLineSockets::working_only(fixture.ordinary_socket.as_path().to_path_buf()),
     );
     let reply = client.reply_text(argument).expect("client sends to daemon");
@@ -1602,15 +1602,15 @@ fn spirit_binary_can_send_request_file_to_running_daemon() {
 }
 
 #[test]
-fn spirit_binary_routes_owner_request_to_owner_socket() {
-    let fixture = DaemonFixture::new("spirit-binary-owner");
+fn spirit_binary_routes_meta_request_to_meta_socket() {
+    let fixture = DaemonFixture::new("spirit-binary-meta");
     let daemon = DaemonRuntime::from_configuration(fixture.configuration())
         .bind()
         .expect("daemon binds");
-    let handle = thread::spawn(move || daemon.serve_owner_count(1));
+    let handle = thread::spawn(move || daemon.serve_meta_count(1));
 
     let output = Command::new(env!("CARGO_BIN_EXE_spirit"))
-        .env("PERSONA_SPIRIT_META_SOCKET", fixture.owner_socket.as_path())
+        .env("PERSONA_SPIRIT_META_SOCKET", fixture.meta_socket.as_path())
         .env_remove("PERSONA_SPIRIT_SOCKET")
         .arg("(Register (operator))")
         .output()
@@ -1619,7 +1619,7 @@ fn spirit_binary_routes_owner_request_to_owner_socket() {
     handle
         .join()
         .expect("daemon thread exits")
-        .expect("daemon served owner client request");
+        .expect("daemon served meta client request");
     assert!(
         output.status.success(),
         "spirit stderr: {}",
