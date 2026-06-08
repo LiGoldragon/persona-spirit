@@ -444,16 +444,14 @@ dependencies = [
 [[package]]
 name = "meta-signal-upgrade"
 version = "0.2.2"
-source = "git+https://github.com/LiGoldragon/meta-signal-upgrade.git?branch=main#570e610f969439d7ed13e33195f0ad0a0572b9c7"
+source = "git+https://github.com/LiGoldragon/meta-signal-upgrade.git?branch=main#24f9af8d2d70e989858108013bcf95741995227d"
 dependencies = [
  "nota-next",
  "rkyv",
  "schema-next",
  "schema-rust-next",
  "signal-frame",
- "signal-upgrade",
  "thiserror",
- "version-projection",
 ]
 
 [[package]]
@@ -748,7 +746,7 @@ dependencies = [
 [[package]]
 name = "schema-rust-next"
 version = "0.5.1"
-source = "git+https://github.com/LiGoldragon/schema-rust-next.git?branch=main#aa4b80e1509f2ba6d344f8ead523b32675b21f21"
+source = "git+https://github.com/LiGoldragon/schema-rust-next.git?branch=main#6530f77b50721e631df1770fbe13659e881d2eaa"
 dependencies = [
  "prettyplease",
  "proc-macro2",
@@ -989,15 +987,13 @@ dependencies = [
 [[package]]
 name = "signal-upgrade"
 version = "0.2.2"
-source = "git+https://github.com/LiGoldragon/signal-upgrade.git?branch=main#a8a66bb0a0e45e50337ebd19241aa79300475b62"
+source = "git+https://github.com/LiGoldragon/signal-upgrade.git?branch=main#5b9393a1d128a3473a91cb23233a777bce692256"
 dependencies = [
- "nota-next",
  "rkyv",
  "schema-next",
  "schema-rust-next",
  "signal-frame",
  "thiserror",
- "version-projection",
 ]
 
 [[package]]
@@ -1244,7 +1240,7 @@ dependencies = [
 [[package]]
 name = "upgrade"
 version = "0.1.1"
-source = "git+https://github.com/LiGoldragon/upgrade.git?branch=main#8f2768d3033f52d816887f8ca6e94edaf9fc5ba7"
+source = "git+https://github.com/LiGoldragon/upgrade.git?branch=main#93b130a5b41c4eed9a322e425048e32841e80468"
 dependencies = [
  "meta-signal-upgrade",
  "rkyv",

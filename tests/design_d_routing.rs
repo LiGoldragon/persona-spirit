@@ -5,8 +5,8 @@ use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use meta_signal_upgrade::{
-    ForceFlip as SelectorForceFlip, ForceReason as SelectorForceReason, SelectorVersion,
-    VersionLabel as SelectorVersionLabel,
+    ContractVersion as SelectorContractVersion, ForceFlip as SelectorForceFlip,
+    ForceReason as SelectorForceReason, SelectorVersion,
 };
 use persona::engine::SocketMode as PersonaSocketMode;
 use persona::engine_event::{
@@ -30,7 +30,7 @@ use signal_version_handover::{
     CompletionReport, HandoverAcceptance, HandoverFinalization, HandoverMarker, MarkerRequest,
     Operation as UpgradeOperation, ReadinessReport, Reply as UpgradeReply,
 };
-use version_projection::{ComponentName as ProjectionComponentName, ContractVersion};
+use version_projection::ComponentName as ProjectionComponentName;
 
 struct RouteFixture {
     root: PathBuf,
@@ -184,10 +184,10 @@ fn observe_records() -> SpiritOperation {
 }
 
 fn selector_version(label: &str, byte: u8) -> SelectorVersion {
-    SelectorVersion::new(
-        SelectorVersionLabel::new(label),
-        ContractVersion::new([byte; 32]),
-    )
+    SelectorVersion {
+        label: String::from(label),
+        contract_version: SelectorContractVersion::new(vec![u64::from(byte); 32]),
+    }
 }
 
 fn selector_flip(
@@ -197,7 +197,7 @@ fn selector_flip(
     target_byte: u8,
 ) -> SelectorForceFlip {
     SelectorForceFlip {
-        component: ProjectionComponentName::new("persona-spirit"),
+        component: String::from("persona-spirit"),
         current_version: selector_version(current_label, current_byte),
         target_version: selector_version(target_label, target_byte),
         reason: SelectorForceReason::OperatorOverride,
